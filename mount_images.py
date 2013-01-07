@@ -11,8 +11,12 @@ import os
 
 
 def main():
+    if os.geteuid():  # Not run as root
+        print u'This script needs to be ran as root!'
+        sys.exit(1)
     if not sys.argv[1:]:
         print u'Usage:\n{0} path_to_encase_image..'.format(sys.argv[0])
+        sys.exit(1)
     images = sys.argv[1:]
     for num, image in enumerate(images):
         if not os.path.exists(image):
@@ -56,7 +60,7 @@ class ImageParser(object):
         '''
         Mount the image at a remporary path for analysis
         '''
-        self.basemountpoint = tempfile.mkdtemp(prefix=u'bredolab_')
+        self.basemountpoint = tempfile.mkdtemp(prefix=u'ewf_mounter_')
 
         def _mount_base(paths):
             try:
@@ -96,7 +100,7 @@ class ImageParser(object):
             try:
                 d = pytsk3.FS_Info(self.image, offset=p.start * 512)
                 offset = p.start * 512
-                mountpoint = tempfile.mkdtemp(prefix=u'bredolab_' + str(offset)
+                mountpoint = tempfile.mkdtemp(prefix=u'ewf_mounter_' + str(offset)
                                               + u'_')
 
                 #mount -t ext4 -o loop,ro,noexec,noload,offset=241790330880 \
