@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import subprocess
 import tempfile
-import logging
 import pytsk3
 import util
 import glob
@@ -12,7 +11,7 @@ import os
 
 def main():
     if os.geteuid():  # Not run as root
-        print u'This script needs to be ran as root!'
+        print u'[-] This script needs to be ran as root!'
         sys.exit(1)
     if not sys.argv[1:]:
         print u'Usage:\n{0} path_to_encase_image..'.format(sys.argv[0])
@@ -20,7 +19,7 @@ def main():
     images = sys.argv[1:]
     for num, image in enumerate(images):
         if not os.path.exists(image):
-            logging.error("Image {0} does not exist, aborting!".format(image))
+            print "[-] Image {0} does not exist, aborting!".format(image)
             break
         try:
             p = ImageParser(image)
@@ -28,22 +27,22 @@ def main():
             if not p.mount_base():
                 continue
 
-            logging.info(u'Mounted raw image [{num}/{total}], now mounting partitions...'.format(num=num + 1, total=len(images)))
+            print u'[+] Mounted raw image [{num}/{total}], now mounting partitions...'.format(num=num + 1, total=len(images))
             for mountpoint in p.mount_partitions():
-                    raw_input('Press a key to unmount the image...')
-                    util.unmount([u'umount'], mountpoint)
-                    p.partition_mountpoints.remove(mountpoint)
-                    continue
+                raw_input('>>> Press a key to unmount the image...')
+                util.unmount([u'umount'], mountpoint)
+                p.partition_mountpoints.remove(mountpoint)
+                continue
 
-            logging.info(u'Parsed all partitions for this image!')
+            print u'[+] Parsed all partitions for this image!'
             # write results
         except KeyboardInterrupt:
-            logging.info(u'User pressed ^C, aborting...')
+            print u'[+] User pressed ^C, aborting...'
             return None
         finally:
             p.clean()
         # All done with this image, unmount it
-        logging.info(u'Image processed, proceding with next image.')
+        print u'[+] Image processed, proceding with next image.'
 
 
 class ImageParser(object):
@@ -64,18 +63,16 @@ class ImageParser(object):
 
         def _mount_base(paths):
             try:
-                logging.info(u'Mounting image {0}'.format(paths[0]))
+                print u'[+] Mounting image {0}'.format(paths[0])
                 #cmd = [u'/home/peter/src/libewf-20120715/ewftools/ewfmount']
                 cmd = [u'xmount', '--in', 'ewf']  # <-- use _only_ with all .E?? paths
                 cmd.extend(paths)
                 cmd.append(self.basemountpoint)
-                logging.debug(u'Calling command "{0}"'.format(
-                    u' '.join(cmd)[:150] + '...'))
                 subprocess.check_call(cmd)
                 return True
             except Exception:
-                logging.exception((u'Could not mount {0} (see below), will try '
-                                  'multi-file method').format(paths[0]))
+                print (u'[-] Could not mount {0} (see below), will try '
+                                  'multi-file method').format(paths[0])
                 return False
         return _mount_base(self.paths) or _mount_base(self.paths[:1])
 
@@ -93,7 +90,7 @@ class ImageParser(object):
             self.image = pytsk3.Img_Info(raw_path)
             self.volumes = pytsk3.Volume_Info(self.image)
         except:
-            logging.warning(u'Could not determine volume information, returning')
+            print u'[?] Could not determine volume information, possible empty image?'
             return
 
         for p in self.volumes:
@@ -111,8 +108,8 @@ class ImageParser(object):
                     cmd = [u'mount', raw_path,
                            mountpoint, u'-t', u'ext4', u'-o',
                            u'loop,ro,noexec,noload,offset=' + str(offset)]
-                    logging.info(u'Mounting ext volume on {0}.'.format(
-                        mountpoint))
+                    print u'[+] Mounting ext volume on {0}.'.format(
+                        mountpoint)
                 elif u'bsd' in p.desc.lower():
                     # ufs
                     #mount -t ufs -o ufstype=ufs2,loop,ro,offset=4294967296 \
@@ -120,42 +117,41 @@ class ImageParser(object):
                     cmd = [u'mount', raw_path,
                            mountpoint, u'-t', u'ufs', u'-o',
                            u'ufstype=ufs2,loop,ro,offset=' + str(offset)]
-                    logging.info(u'Mounting UFS volume on {0}.'.format(
-                        mountpoint))
+                    print u'[+] Mounting UFS volume on {0}.'.format(
+                        mountpoint)
                 elif u'0xFD' in p.desc.lower():
                     # ext
                     cmd = [u'mount', raw_path,
                            mountpoint, u'-t', u'ext4', u'-o',
                            u'loop,ro,noexec,noload,offset=' + str(offset)]
-                    logging.info(u'Mounting ext volume on {0}.'.format(
-                        mountpoint))
+                    print u'[+] Mounting ext volume on {0}.'.format(
+                        mountpoint)
                 elif u'0x07' in p.desc.lower():
                     # NTFS
                     cmd = [u'mount', raw_path,
                            mountpoint, u'-t', u'ntfs', u'-o',
                            u'loop,ro,noexec,noload,offset=' + str(offset)]
-                    logging.info(u'Mounting ntfs volume on {0}.'.format(
-                        mountpoint))
+                    print u'[+] Mounting ntfs volume on {0}.'.format(
+                        mountpoint)
                 else:
-                    logging.warning(u'Unknown filesystem encountered: ' + p.desc)
+                    print u'[-] Unknown filesystem encountered: ' + p.desc
                 if not cmd:
                     os.rmdir(mountpoint)
                     continue
 
-                logging.debug(u'Calling command "{0}"'.format(u' '.join(cmd)))
                 subprocess.check_call(cmd, stdout=subprocess.PIPE)
                 self.partition_mountpoints.append(mountpoint)
                 yield mountpoint
                 del d
             except IOError:
-                logging.debug(u'Could not load partition {0}:{1}'.format(p.addr, p.desc))
+                print u'[-] Could not load partition {0}:{1}'.format(p.addr, p.desc)
 
     def clean(self):
         '''
         Helper method that removes all ties to the filesystem, so the image can
         be unmounted successfully
         '''
-        logging.info(u'Analysis complete, unmounting...')
+        print u'[+] Analysis complete, unmounting...'
 
         if self.image:
             self.image.close()
@@ -167,7 +163,7 @@ class ImageParser(object):
 
         if not util.unmount([u'fusermount', u'-u'], self.basemountpoint):
             pdb.set_trace()
-        logging.info(u'All cleaned up.')
+        print u'[+] All cleaned up.'
 
 if __name__ == '__main__':
     main()
