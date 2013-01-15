@@ -14,7 +14,7 @@ def main():
         print u'[-] This script needs to be ran as root!'
         sys.exit(1)
     if not sys.argv[1:]:
-        print u'Usage:\n{0} path_to_encase_image..'.format(sys.argv[0])
+        print u'Usage:\n{0} path_to_image..'.format(sys.argv[0])
         sys.exit(1)
     images = sys.argv[1:]
     for num, image in enumerate(images):
@@ -48,7 +48,11 @@ def main():
 class ImageParser(object):
     def __init__(self, path):
         path = os.path.expandvars(os.path.expanduser(path))
-        self.paths = sorted(util.encase_path_expand(path))
+        if util.is_encase(path):
+            self.type = 'encase'
+        else:
+            self.type = 'dd'
+        self.paths = sorted(util.expand_path(path))
         self.name = os.path.split(path)[1]
         self.basemountpoint = u''
         self.partition_mountpoints = []
@@ -59,13 +63,12 @@ class ImageParser(object):
         '''
         Mount the image at a remporary path for analysis
         '''
-        self.basemountpoint = tempfile.mkdtemp(prefix=u'ewf_mounter_')
+        self.basemountpoint = tempfile.mkdtemp(prefix=u'image_mounter_')
 
         def _mount_base(paths):
             try:
                 print u'[+] Mounting image {0}'.format(paths[0])
-                #cmd = [u'/home/peter/src/libewf-20120715/ewftools/ewfmount']
-                cmd = [u'xmount', '--in', 'ewf']  # <-- use _only_ with all .E?? paths
+                cmd = [u'xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']
                 cmd.extend(paths)
                 cmd.append(self.basemountpoint)
                 subprocess.check_call(cmd)
@@ -97,7 +100,7 @@ class ImageParser(object):
             try:
                 d = pytsk3.FS_Info(self.image, offset=p.start * 512)
                 offset = p.start * 512
-                mountpoint = tempfile.mkdtemp(prefix=u'ewf_mounter_' + str(offset)
+                mountpoint = tempfile.mkdtemp(prefix=u'image_mounter_' + str(offset)
                                               + u'_')
 
                 #mount -t ext4 -o loop,ro,noexec,noload,offset=241790330880 \
@@ -143,7 +146,7 @@ class ImageParser(object):
                 self.partition_mountpoints.append(mountpoint)
                 yield mountpoint
                 del d
-            except IOError:
+            except:
                 print u'[-] Could not load partition {0}:{1}'.format(p.addr, p.desc)
 
     def clean(self):

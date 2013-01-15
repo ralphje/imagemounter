@@ -47,13 +47,21 @@ def try_persistent(cmd, tries=20, wait=1):
             pdb.set_trace()
 
 
-def encase_path_expand(path):
+def is_encase(path):
+    return re.match(r'^.*\.E\w\w$', path)
+
+
+def expand_path(path):
     '''
-    Expand the given path to an Encase image.
+    Expand the given path to either an Encase image or a dd image
     i.e. if path is '/path/to/image.E01' then the result of this method will be
     /path/to/image.E*'
+    and if path is '/path/to/image.001' then the result of this method will be 
+    '/path/to/image.[0-9][0-9]?'
     '''
-    if not re.match(r'^.*\.E\w\w$', path):
-        raise Exception
-
-    return glob.glob(path[:-2] + '??')
+    if is_encase(path):
+        return glob.glob(path[:-2] + '??')
+    elif re.match(r'^.*\.\d{2,3}$', path):
+        return glob.glob(path[:path.rfind('.')] + '.[0-9][0-9]?')
+    else:
+        return path
