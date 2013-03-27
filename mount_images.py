@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import subprocess
 import tempfile
+import argparse
 import pytsk3
 import util
 import glob
@@ -13,21 +14,23 @@ def main():
     if os.geteuid():  # Not run as root
         print u'[-] This script needs to be ran as root!'
         sys.exit(1)
-    if not sys.argv[1:]:
-        print u'Usage:\n{0} path_to_image..'.format(sys.argv[0])
-        sys.exit(1)
-    images = sys.argv[1:]
-    for num, image in enumerate(images):
+    parser = argparse.ArgumentParser(usage=u'A program to mount partitions in Encase and dd images locally')
+    parser.add_argument('-rw', '--read-write', default=False, help='Mount image read-write by creating a local write-cache file in a temp directory. WARNING: The user is responsible for deleting these temp files if they are non-empty!!')
+    parser.add_argument('images', nargs='+', help='Path(s) to the image(s) that you want to mount. In case the image is split up in multiple files, just use the first file (e.g. the .E01 or .001 file).')
+    args = parser.parse_args()
+    for num, image in enumerate(args.images):
         if not os.path.exists(image):
             print "[-] Image {0} does not exist, aborting!".format(image)
             break
         try:
-            p = ImageParser(image)
+            p = ImageParser(image, args)
             # Mount the base image using ewfmount
             if not p.mount_base():
                 continue
 
-            print u'[+] Mounted raw image [{num}/{total}], now mounting partitions...'.format(num=num + 1, total=len(images))
+            if args.read_write:
+                print u'[+] Created read-write cache at {0}'.format(p.rwpath)
+            print u'[+] Mounted raw image [{num}/{total}], now mounting partitions...'.format(num=num + 1, total=len(args.images))
             for mountpoint in p.mount_partitions():
                 raw_input('>>> Press a key to unmount the image...')
                 util.unmount([u'umount'], mountpoint)
@@ -46,13 +49,15 @@ def main():
 
 
 class ImageParser(object):
-    def __init__(self, path):
+    def __init__(self, path, args):
         path = os.path.expandvars(os.path.expanduser(path))
         if util.is_encase(path):
             self.type = 'encase'
         else:
             self.type = 'dd'
         self.paths = sorted(util.expand_path(path))
+        self.args = args
+        self.rwpath = tempfile.mkstemp(prefix="image_mounter_rw_cache_")[1]
         self.name = os.path.split(path)[1]
         self.basemountpoint = u''
         self.partition_mountpoints = []
@@ -68,14 +73,18 @@ class ImageParser(object):
         def _mount_base(paths):
             try:
                 print u'[+] Mounting image {0}'.format(paths[0])
-                cmd = [u'xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']
+                if self.args.read_write:
+                    cmd = [u'xmount', '--rw', self.rwpath, '--in', 'ewf' if self.type == 'encase' else 'dd']
+                else:
+                    cmd = [u'xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']
                 cmd.extend(paths)
                 cmd.append(self.basemountpoint)
                 subprocess.check_call(cmd)
                 return True
-            except Exception:
+            except Exception as e:
                 print (u'[-] Could not mount {0} (see below), will try '
                                   'multi-file method').format(paths[0])
+                print e
                 return False
         return _mount_base(self.paths) or _mount_base(self.paths[:1])
 
@@ -110,7 +119,7 @@ class ImageParser(object):
                     # ext
                     cmd = [u'mount', raw_path,
                            mountpoint, u'-t', u'ext4', u'-o',
-                           u'loop,ro,noexec,noload,offset=' + str(offset)]
+                           u'loop,noexec,offset=' + str(offset)]
                     print u'[+] Mounting ext volume on {0}.'.format(
                         mountpoint)
                 elif u'bsd' in p.desc.lower():
@@ -119,25 +128,27 @@ class ImageParser(object):
                     #/tmp/image/ewf1 /media/a
                     cmd = [u'mount', raw_path,
                            mountpoint, u'-t', u'ufs', u'-o',
-                           u'ufstype=ufs2,loop,ro,offset=' + str(offset)]
+                           u'ufstype=ufs2,loop,offset=' + str(offset)]
                     print u'[+] Mounting UFS volume on {0}.'.format(
                         mountpoint)
                 elif u'0xFD' in p.desc.lower():
                     # ext
                     cmd = [u'mount', raw_path,
                            mountpoint, u'-t', u'ext4', u'-o',
-                           u'loop,ro,noexec,noload,offset=' + str(offset)]
+                           u'loop,noexec,noload,offset=' + str(offset)]
                     print u'[+] Mounting ext volume on {0}.'.format(
                         mountpoint)
                 elif u'0x07' in p.desc.lower():
                     # NTFS
                     cmd = [u'mount', raw_path,
                            mountpoint, u'-t', u'ntfs', u'-o',
-                           u'loop,ro,noexec,noload,offset=' + str(offset)]
+                           u'loop,noexec,noload,offset=' + str(offset)]
                     print u'[+] Mounting ntfs volume on {0}.'.format(
                         mountpoint)
                 else:
                     print u'[-] Unknown filesystem encountered: ' + p.desc
+                if not self.args.read_write:
+                    cmd[-1] += ',ro'
                 if not cmd:
                     os.rmdir(mountpoint)
                     continue
@@ -160,6 +171,11 @@ class ImageParser(object):
             self.image.close()
         del self.image
         del self.volumes
+        try:
+            if not os.path.getsize(self.rwpath) or 'y' in raw_input('Would you like to delete the rw cache file? [y/N] ').lower():
+                os.remove(self.rwpath)
+        except KeyboardInterrupt:
+            pass
         for m in self.partition_mountpoints:
             if not util.unmount([u'umount'], m):
                 pdb.set_trace()
