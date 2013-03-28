@@ -15,7 +15,7 @@ def main():
         print u'[-] This script needs to be ran as root!'
         sys.exit(1)
     parser = argparse.ArgumentParser(usage=u'A program to mount partitions in Encase and dd images locally')
-    parser.add_argument('-rw', '--read-write', default=False, help='Mount image read-write by creating a local write-cache file in a temp directory. WARNING: The user is responsible for deleting these temp files if they are non-empty!!')
+    parser.add_argument('-rw', '--read-write', action='store_true', default=False, help='Mount image read-write by creating a local write-cache file in a temp directory. WARNING: The user is responsible for deleting these temp files if they are non-empty!!')
     parser.add_argument('images', nargs='+', help='Path(s) to the image(s) that you want to mount. In case the image is split up in multiple files, just use the first file (e.g. the .E01 or .001 file).')
     args = parser.parse_args()
     for num, image in enumerate(args.images):
