@@ -21,8 +21,14 @@ def main():
             sys.exit(2)
     parser = MyParser(usage=u'A program to mount partitions in Encase and dd images locally')
     parser.add_argument('-rw', '--read-write', action='store_true', default=False, help='Mount image read-write by creating a local write-cache file in a temp directory.')
+    parser.add_argument('-m', '--method', choices=['xmount', 'affuse'], default='xmount', help='Use either "xmount" or "affuse" to mount the initial images. Results may vary between both methods, if something doesn\'t work, try the other method. Default=xmount')
     parser.add_argument('images', nargs='+', help='Path(s) to the image(s) that you want to mount. In case the image is split up in multiple files, just use the first file (e.g. the .E01 or .001 file).')
     args = parser.parse_args()
+
+    if args.method == 'affuse' and args.read_write:
+        print "[-] affuse does not support mounting read-write! Will mount read-only."
+        args.read_write = False
+
     for num, image in enumerate(args.images):
         if not os.path.exists(image):
             print "[-] Image {0} does not exist, aborting!".format(image)
@@ -77,21 +83,23 @@ class ImageParser(object):
 
         def _mount_base(paths):
             try:
-                print u'[+] Mounting image {0}'.format(paths[0])
-                if self.args.read_write:
-                    cmd = [u'xmount', '--rw', self.rwpath, '--in', 'ewf' if self.type == 'encase' else 'dd']
+                print u'[+] Mounting image {0} using {1}'.format(paths[0], self.args.method)
+                if self.args.method == 'xmount':
+                    if self.args.read_write:
+                        cmd = [u'xmount', '--rw', self.rwpath, '--in', 'ewf' if self.type == 'encase' else 'dd']
+                    else:
+                        cmd = [u'xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']
                 else:
-                    cmd = [u'xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']
+                    cmd = [u'affuse']
                 cmd.extend(paths)
                 cmd.append(self.basemountpoint)
                 subprocess.check_call(cmd)
                 return True
             except Exception as e:
-                print (u'[-] Could not mount {0} (see below), will try '
-                                  'multi-file method').format(paths[0])
+                print (u'[-] Could not mount {0} (see below), will try multi-file method').format(paths[0])
                 print e
                 return False
-        return _mount_base(self.paths) or _mount_base(self.paths[:1])
+        return _mount_base(self.paths[:1]) or _mount_base(self.paths)
 
     def mount_partitions(self):
         '''
@@ -100,8 +108,8 @@ class ImageParser(object):
         '''
         # ewf raw image is now available on basemountpoint
         # either as ewf1 file or as .dd file
-        raw_path = glob.glob(os.path.join(self.basemountpoint, u'ewf1'))
-        raw_path.extend(glob.glob(os.path.join(self.basemountpoint, u'*.dd')))
+        raw_path = glob.glob(os.path.join(self.basemountpoint, u'*.dd'))
+        raw_path.extend(glob.glob(os.path.join(self.basemountpoint, u'*.raw')))
         raw_path = raw_path[0]
         try:
             self.image = pytsk3.Img_Info(raw_path)
