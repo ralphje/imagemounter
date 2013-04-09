@@ -157,8 +157,11 @@ class ImageParser(object):
                 self.partition_mountpoints.append(mountpoint)
                 yield mountpoint
                 del d
-            except:
+            except Exception as e:
                 print u'[-] Could not load partition {0}:{1}'.format(p.addr, p.desc)
+                if isinstance(e, subprocess.CalledProcessError):
+                    print e
+                    raw_input('Press [enter] to continue...')
 
     def clean(self):
         '''
