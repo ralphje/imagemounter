@@ -148,7 +148,7 @@ class ImageParser(object):
                 else:
                     print u'[-] Unknown filesystem encountered: ' + p.desc
                 if not self.args.read_write:
-                    cmd[-1] += ',ro'
+                    cmd[-1] += ',noload,ro'
                 if not cmd:
                     os.rmdir(mountpoint)
                     continue
