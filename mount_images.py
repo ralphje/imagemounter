@@ -22,6 +22,8 @@ def main():
     parser = MyParser(usage=u'A program to mount partitions in Encase and dd images locally')
     parser.add_argument('-rw', '--read-write', action='store_true', default=False, help='Mount image read-write by creating a local write-cache file in a temp directory.')
     parser.add_argument('-m', '--method', choices=['xmount', 'affuse'], default='xmount', help='Use either "xmount" or "affuse" to mount the initial images. Results may vary between both methods, if something doesn\'t work, try the other method. Default=xmount')
+    parser.add_argument('-s', '--stats', action='store_true', default=False, help='Show limited information from fsstat.')
+    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Verbose output')
     parser.add_argument('images', nargs='+', help='Path(s) to the image(s) that you want to mount. In case the image is split up in multiple files, just use the first file (e.g. the .E01 or .001 file).')
     args = parser.parse_args()
 
@@ -93,6 +95,8 @@ class ImageParser(object):
                     cmd = [u'affuse']
                 cmd.extend(paths)
                 cmd.append(self.basemountpoint)
+                if self.args.verbose:
+                    print '    {0}'.format(' '.join(cmd))
                 subprocess.check_call(cmd)
                 return True
             except Exception as e:
@@ -122,49 +126,63 @@ class ImageParser(object):
             try:
                 d = pytsk3.FS_Info(self.image, offset=p.start * 512)
                 offset = p.start * 512
-                mountpoint = tempfile.mkdtemp(prefix=u'image_mounter_' + str(offset)
-                                              + u'_')
-
+                mountpoint = tempfile.mkdtemp(prefix=u'image_mounter_' + str(offset) + u'_')
                 #mount -t ext4 -o loop,ro,noexec,noload,offset=241790330880 \
                 #/media/image/ewf1 /media/a
-                cmd = None
+                cmd = fstype = None
                 if u'0x83' in p.desc.lower():
                     # ext
-                    cmd = [u'mount', raw_path,
-                           mountpoint, u'-t', u'ext4', u'-o',
-                           u'loop,noexec,offset=' + str(offset)]
-                    print u'[+] Mounting ext volume on {0}.'.format(
-                        mountpoint)
+                    cmd = [u'mount', raw_path, mountpoint, u'-t', u'ext4', u'-o', u'loop,noexec,noload,offset=' + str(offset)]
+                    fstype = 'ext'
                 elif u'bsd' in p.desc.lower():
                     # ufs
                     #mount -t ufs -o ufstype=ufs2,loop,ro,offset=4294967296 \
                     #/tmp/image/ewf1 /media/a
-                    cmd = [u'mount', raw_path,
-                           mountpoint, u'-t', u'ufs', u'-o',
-                           u'ufstype=ufs2,loop,offset=' + str(offset)]
-                    print u'[+] Mounting UFS volume on {0}.'.format(
-                        mountpoint)
+                    cmd = [u'mount', raw_path, mountpoint, u'-t', u'ufs', u'-o', u'ufstype=ufs2,loop,offset=' + str(offset)]
+                    fstype = 'UFS'
                 elif u'0xFD' in p.desc.lower():
                     # ext
-                    cmd = [u'mount', raw_path,
-                           mountpoint, u'-t', u'ext4', u'-o',
-                           u'loop,noexec,noload,offset=' + str(offset)]
-                    print u'[+] Mounting ext volume on {0}.'.format(
-                        mountpoint)
+                    cmd = [u'mount', raw_path, mountpoint, u'-t', u'ext4', u'-o', u'loop,noexec,noload,offset=' + str(offset)]
+                    fstype = 'ext'
                 elif u'0x07' in p.desc.lower():
                     # NTFS
-                    cmd = [u'mount', raw_path,
-                           mountpoint, u'-t', u'ntfs', u'-o',
-                           u'loop,noexec,noload,offset=' + str(offset)]
-                    print u'[+] Mounting ntfs volume on {0}.'.format(
-                        mountpoint)
+                    cmd = [u'mount', raw_path, mountpoint, u'-t', u'ntfs', u'-o', u'loop,noexec,offset=' + str(offset)]
+                    fstype = 'NTFS'
                 else:
                     print u'[-] Unknown filesystem encountered: ' + p.desc
-                if not self.args.read_write:
-                    cmd[-1] += ',noload,ro'
-                if not cmd:
                     os.rmdir(mountpoint)
                     continue
+
+                if not self.args.read_write:
+                    cmd[-1] += ',ro'
+
+                if self.args.verbose:
+                    print '    {0}'.format(' '.join(cmd))
+
+                if self.args.stats:
+                    try:
+                        stat = subprocess.Popen([u'fsstat', raw_path, u'-o', str(p.start)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        stdout, stderr = stat.communicate()
+                        last_mount = label = ''
+                        for line in stdout.splitlines():
+                             if line.startswith("File System Type:"):
+                                 fstype = line[line.index(':')+2:]
+                             if line.startswith("Last Mount Point:") or line.startswith("Last mounted on:"):
+                                 last_mount = line[line.index(':')+2:]
+                             if line.startswith("Volume Name:"):
+                                 label = line[line.index(':')+2:]
+                             if line == 'CYLINDER GROUP INFORMATION':
+                                 break
+                        
+                        if label and last_mount:
+                           last_mount = ' ({0})'.format(last_mount)                        
+
+                        print u'[+] Mounting {0} volume {1}{2} on {3}.'.format(fstype, label, last_mount, mountpoint)
+                    except Exception as e:
+                        print u'[+] Mounting {0} volume on {1}.'.format(fstype, mountpoint)
+                else:
+                    print u'[+] Mounting {0} volume on {1}.'.format(fstype, mountpoint)
+
 
                 subprocess.check_call(cmd, stdout=subprocess.PIPE)
                 self.partition_mountpoints.append(mountpoint)
