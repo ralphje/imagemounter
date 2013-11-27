@@ -59,13 +59,18 @@ def main():
     else:
         col = colored
 
-    if not args.method not in ('xmount', 'auto') and args.read_write:
+    if args.method not in ('xmount', 'auto') and args.read_write:
         print "[-] {0} does not support mounting read-write! Will mount read-only.".format(args.method)
         args.read_write = False
 
     # Reconstruct implies use of fsstat
     if args.reconstruct:
         args.stats = True
+
+    if args.stats and not util.command_exists('fsstat'):
+        print "[-] To obtain stats, the fsstat command is used (part of sleuthkit package), but is not installed. " \
+              "Stats will not be obtained during this session."
+        args.stats = False
 
     for num, image in enumerate(args.images):
         if not os.path.exists(image):
@@ -409,7 +414,7 @@ class ImageParser(object):
 
                 # Prepare mount command
                 if self.fstype:
-                    fsdesc = ''
+                    fsdesc = ''  # prevent fsdesc below from doing something
                 else:
                     fsdesc = partition.fsdescription.lower()
 
@@ -598,17 +603,25 @@ class StatRetriever(object):
         self.raw_path = raw_path
         self.offset = offset
         self.process = None
+        self.analyser = analyser
         self._debug = analyser._debug
+
+        self.stdout = ''
+        self.stderr = ''
 
     def run(self):
         def target():
             try:
-                self.process = subprocess.Popen([u'fsstat', self.raw_path, u'-o', str(self.offset)],
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                stdout, stderr = self.process.communicate()
+                cmd = [u'fsstat', self.raw_path, u'-o', str(self.offset)]
+                if self.analyser.addsudo:
+                    cmd.insert(0, 'sudo')
+
+                self._debug('    {0}'.format(' '.join(cmd)))
+                self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                self.stdout, self.stderr = self.process.communicate()
 
                 frag_size = frag_range = block_size = block_range = 0
-                for line in stdout.splitlines(False):
+                for line in self.stdout.splitlines(False):
                     if line.startswith("File System Type:"):
                         self.partition.fstype = line[line.index(':') + 2:]
                     if line.startswith("Last Mount Point:") or line.startswith("Last mounted on:"):
@@ -643,10 +656,12 @@ class StatRetriever(object):
 
         thread = threading.Thread(target=target)
         thread.start()
-        thread.join(0.25)  # should be enough to retrieve basic information
+
+        thread.join(0.75)
         if thread.is_alive():
             self.process.terminate()
             thread.join()
+            self._debug("    Killed fsstat after .75s")
 
 if __name__ == '__main__':
     main()
