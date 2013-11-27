@@ -7,7 +7,7 @@ import glob
 import os
 
 
-def clean_unmount(cmd, mountpoint, tries=20, addsudo=False):
+def clean_unmount(cmd, mountpoint, tries=20, addsudo=False, rmdir=True):
     if addsudo:
         cmd.insert(0, 'sudo')
     cmd.append(mountpoint)
@@ -18,7 +18,10 @@ def clean_unmount(cmd, mountpoint, tries=20, addsudo=False):
     except:
         return False
 
-    # Remove mountpoint
+    # Remove mountpoint only if needed
+    if not rmdir:
+        return True
+
     for _ in range(tries):
         if not os.listdir(mountpoint):
             # Unmount was successful, remove mountpoint
