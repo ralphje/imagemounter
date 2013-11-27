@@ -43,8 +43,10 @@ def main():
     parser.add_argument('-vs', '--vstype', choices=['detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller'],
                         default="detect", help='Specify type of volume system (partition table). Default=detect')
     parser.add_argument('-fs', '--fstype', choices=['ext', 'ufs', 'ntfs', 'lvm'], default=None,
-                        help="Specify the type of the filesystem. Used when automatic detection fails.")
+                        help="Specify the type of the filesystem. Used to override automatic detection.")
     parser.add_argument('-w', '--wait', action='store_true', default=False, help='Pause on some additional warnings.')
+    parser.add_argument('-r', '--reconstruct', action='store_true', default=False, help='Try to reconstruct the full '
+                                                                                        'filesystem tree. Implies -s.')
     parser.add_argument('images', nargs='+',
                         help='Path(s) to the image(s) that you want to mount. In case the image is '
                              'split up in multiple files, just use the first file (e.g. the .E01 or .001 file).')
@@ -61,6 +63,10 @@ def main():
         print "[-] {0} does not support mounting read-write! Will mount read-only.".format(args.method)
         args.read_write = False
 
+    # Reconstruct implies use of fsstat
+    if args.reconstruct:
+        args.stats = True
+
     for num, image in enumerate(args.images):
         if not os.path.exists(image):
             print col("[-] Image {0} does not exist, aborting!".format(image), "red")
@@ -70,7 +76,7 @@ def main():
             p = ImageParser(image, **vars(args))
             print u'[+] Mounting image {0} using {1}...'.format(p.paths[0], p.method)
 
-            # Mount the base image using ewfmount
+            # Mount the base image using the preferred method
             if not p.mount_base():
                 print col("[-] Failed mounting base image.", "red")
                 continue
@@ -109,6 +115,10 @@ def main():
                         print u'[+] Additional partitions may be available from this loopback device. These are not ' \
                               u'managed by this utility and you must unmount these manually before continuing.'
 
+                    if args.reconstruct:
+                        has_left_mounted = True
+                        continue
+
                     raw_input(col('>>> Press [enter] to unmount the partition, or ^C to keep mounted... ', attrs=['dark']))
 
                     # Case where image should be unmounted, but has failed to do so. Keep asking whether the user wants
@@ -135,6 +145,15 @@ def main():
                     raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
             print u'[+] Parsed all partitions for this image!'
+
+            # Perform reconstruct if required
+            if args.reconstruct:
+                # Reverse order so '/' get's unmounted last
+                p.partitions = list(reversed(sorted(p.partitions)))
+                print "[+] Performing reconstruct... "
+                root = p.reconstruct()
+                print "[+] You can find the whole filesystem in {0}".format(col(root, "green", attrs=["bold"]))
+
             if has_left_mounted:
                 raw_input(col(">>> Some partitions were left open. Press [enter] to unmount all... ", attrs=['dark']))
 
@@ -179,7 +198,8 @@ class ImagePartition(object):
     """
 
     def __init__(self, parser=None, mountpoint=None, offset=None, fstype=None, fsdescription=None, index=None,
-                 label=None, exception=None, size=None, loopback=None, volume_group=None):
+                 label=None, lastmountpoint=None, bindmount=None, exception=None, size=None, loopback=None,
+                 volume_group=None):
         self.parser = parser
         self.mountpoint = mountpoint
         self.offset = offset
@@ -187,11 +207,13 @@ class ImagePartition(object):
         self.fsdescription = fsdescription
         self.index = index
         self.label = label
+        self.lastmountpoint = lastmountpoint
         self.exception = exception
         self.size = size
         self.loopback = loopback
         self.volume_group = volume_group
         self.volumes = []
+        self.bindmount = bindmount
 
     def unmount(self):
         for volume in self.volumes:
@@ -212,6 +234,12 @@ class ImagePartition(object):
                 return False
 
             self.loopback = None
+
+        if self.bindmount:
+            if not util.clean_unmount([u'umount'], self.bindmount, addsudo=self.parser.addsudo, rmdir=False):
+                return False
+
+            self.bindmount = None
 
         if self.mountpoint:
             if not util.clean_unmount([u'umount'], self.mountpoint, addsudo=self.parser.addsudo):
@@ -245,6 +273,9 @@ class ImagePartition(object):
             return u"{0} GiB".format(round(self.size / 1024.0 ** 3, 2))
         else:
             return self.size
+
+    def __cmp__(self, other):
+        return cmp(self.lastmountpoint, other.lastmountpoint)
 
 
 class ImageParser(object):
@@ -540,6 +571,26 @@ class ImageParser(object):
             return False
         return True
 
+    def reconstruct(self):
+        mounted_partitions = filter(lambda x: x.mountpoint, self.partitions)
+        viable_for_reconstruct = sorted(filter(lambda x: x.lastmountpoint, mounted_partitions))
+
+        try:
+            root = filter(lambda x: x.lastmountpoint == '/', viable_for_reconstruct)[0]
+        except IndexError:
+            self._debug(u"Could not find / while reconstructing, aborting!")
+            return False
+
+        viable_for_reconstruct.remove(root)
+
+        for v in viable_for_reconstruct:
+            subdir = v.lastmountpoint[1:]
+            dest = os.path.join(root.mountpoint, subdir)
+            cmd = ['mount', '--bind', v.mountpoint, dest]
+            util.check_call_(cmd, self, stdout=subprocess.PIPE)
+            v.bindmount = dest
+        return root.mountpoint
+
 
 class StatRetriever(object):
     def __init__(self, analyser, partition, raw_path, offset):
@@ -556,12 +607,12 @@ class StatRetriever(object):
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 stdout, stderr = self.process.communicate()
 
-                lastmountpoint = frag_size = frag_range = block_size = block_range = 0
+                frag_size = frag_range = block_size = block_range = 0
                 for line in stdout.splitlines(False):
                     if line.startswith("File System Type:"):
                         self.partition.fstype = line[line.index(':') + 2:]
                     if line.startswith("Last Mount Point:") or line.startswith("Last mounted on:"):
-                        lastmountpoint = line[line.index(':') + 2:]
+                        self.partition.lastmountpoint = line[line.index(':') + 2:]
                     if line.startswith("Volume Name:"):
                         self.partition.label = line[line.index(':') + 2:]
                     # Used for calculating disk size
@@ -576,10 +627,10 @@ class StatRetriever(object):
                     if line == 'CYLINDER GROUP INFORMATION':
                         break
 
-                if lastmountpoint and self.partition.label:
-                    self.partition.label = "{0} ({1})".format(lastmountpoint, self.partition.label)
-                elif lastmountpoint and not self.partition.label:
-                    self.partition.label = lastmountpoint
+                if self.partition.lastmountpoint and self.partition.label:
+                    self.partition.label = "{0} ({1})".format(self.partition.lastmountpoint, self.partition.label)
+                elif self.partition.lastmountpoint and not self.partition.label:
+                    self.partition.label = self.partition.lastmountpoint
 
                 if frag_size and frag_range:
                     self.partition.size = frag_size * frag_range
