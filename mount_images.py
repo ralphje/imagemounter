@@ -567,16 +567,16 @@ class StatRetriever(object):
 
                 self._debug('    {0}'.format(' '.join(cmd)))
                 self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                self.stdout, self.stderr = self.process.communicate()
+                #self.stdout, self.stderr = self.process.communicate()
 
                 lastmountpoint = frag_size = frag_range = block_size = block_range = 0
-                for line in self.stdout.splitlines(False):
+                for line in iter(self.process.stdout.readline, b''):
                     if line.startswith("File System Type:"):
-                        self.partition.fstype = line[line.index(':') + 2:]
+                        self.partition.fstype = line[line.index(':') + 2:].strip()
                     if line.startswith("Last Mount Point:") or line.startswith("Last mounted on:"):
-                        lastmountpoint = line[line.index(':') + 2:]
+                        lastmountpoint = line[line.index(':') + 2:].strip()
                     if line.startswith("Volume Name:"):
-                        self.partition.label = line[line.index(':') + 2:]
+                        self.partition.label = line[line.index(':') + 2:].strip()
                     # Used for calculating disk size
                     if line.startswith("Fragment Range:"):
                         frag_range = int(line[line.index('-') + 2:]) - int(line[line.index(':') + 2:line.index('-') - 1])
@@ -586,7 +586,8 @@ class StatRetriever(object):
                         frag_size = int(line[line.index(':') + 2:])
                     if line.startswith("Block Size:"):
                         block_size = int(line[line.index(':') + 2:])
-                    if line == 'CYLINDER GROUP INFORMATION':
+                    if 'CYLINDER GROUP INFORMATION' in line:
+                        self.process.terminate()  # some attempt
                         break
 
                 if lastmountpoint and self.partition.label:
@@ -606,11 +607,12 @@ class StatRetriever(object):
         thread = threading.Thread(target=target)
         thread.start()
 
-        thread.join(0.75)
+        duration = 5  # longest possible duration for fsstat.
+        thread.join(duration)
         if thread.is_alive():
             self.process.terminate()
             thread.join()
-            self._debug("    Killed fsstat after .75s")
+            self._debug("    Killed fsstat after {0}s".format(duration))
 
 if __name__ == '__main__':
     main()
