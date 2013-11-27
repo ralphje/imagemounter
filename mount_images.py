@@ -25,31 +25,33 @@ def main():
             sys.exit(2)
 
     parser = MyParser(usage=u'A program to mount partitions in Encase and dd images locally.')
+    parser.add_argument('images', nargs='+',
+                        help='Path(s) to the image(s) that you want to mount. In case the image is '
+                             'split up in multiple files, just use the first file (e.g. the .E01 or .001 file).')
+    parser.add_argument('-c', '--color', action='store_true', default=False, help='Colorize the output.')
+    parser.add_argument('-w', '--wait', action='store_true', default=False, help='Pause on some additional warnings.')
+    parser.add_argument('-r', '--reconstruct', action='store_true', default=False,
+                        help='Attempt to reconstruct the full filesystem tree. Implies -s and mounts all partitions '
+                             'at once.')
     parser.add_argument('-rw', '--read-write', action='store_true', default=False,
-                        help='Mount image read-write by creating a local write-cache file in a temp directory.')
+                        help='Mount image read-write by creating a local write-cache file in a temp directory. '
+                             'Implies --method=xmount.')
+    parser.add_argument('-s', '--stats', action='store_true', default=False,
+                        help='Show limited information from fsstat. Will slow down mounting and may cause random '
+                             'issues such as partitions being unreadable.')
     parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'auto'], default='auto',
                         help='Use "xmount", "ewfmount" or "affuse" to mount the initial images. Results may vary '
                              'between methods, if something doesn\'t work, try another method. Pick the best '
                              'automatically with "auto". Default=auto')
-    parser.add_argument('-s', '--stats', action='store_true', default=False,
-                        help='Show limited information from fsstat. Will slow down mounting and may cause random '
-                             'issues such as partitions being unreadable.')
-    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Enable verbose output.')
-    parser.add_argument('-c', '--color', action='store_true', default=False, help='Colorize the output.')
-    parser.add_argument('-l', '--loopback', default='/dev/loop0', help='Specify loopback device for LVM partitions. '
-                                                                       'Default=/dev/loop0')
-    parser.add_argument('-md', '--mountdir', default=None, help='Specify directory for partition mountpoints. '
-                                                                'Default=temporary directory')
+    parser.add_argument('-md', '--mountdir', default=None,
+                        help='Specify directory for partition mountpoints. Default=temporary directory')
+    parser.add_argument('-l', '--loopback', default='/dev/loop0',
+                        help='Specify loopback device for LVM partitions. Default=/dev/loop0')
     parser.add_argument('-vs', '--vstype', choices=['detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller'],
                         default="detect", help='Specify type of volume system (partition table). Default=detect')
     parser.add_argument('-fs', '--fstype', choices=['ext', 'ufs', 'ntfs', 'lvm'], default=None,
                         help="Specify the type of the filesystem. Used to override automatic detection.")
-    parser.add_argument('-w', '--wait', action='store_true', default=False, help='Pause on some additional warnings.')
-    parser.add_argument('-r', '--reconstruct', action='store_true', default=False, help='Try to reconstruct the full '
-                                                                                        'filesystem tree. Implies -s.')
-    parser.add_argument('images', nargs='+',
-                        help='Path(s) to the image(s) that you want to mount. In case the image is '
-                             'split up in multiple files, just use the first file (e.g. the .E01 or .001 file).')
+    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Enable verbose output.')
     args = parser.parse_args()
 
     if not args.color:
@@ -71,6 +73,10 @@ def main():
         print "[-] To obtain stats, the fsstat command is used (part of sleuthkit package), but is not installed. " \
               "Stats will not be obtained during this session."
         args.stats = False
+
+        if args.reconstruct:
+            print "[-] Reconstruction is now impossible!"
+            sys.exit(1)
 
     for num, image in enumerate(args.images):
         if not os.path.exists(image):
@@ -114,12 +120,13 @@ def main():
                     if partition.mountpoint:
                         print u'[+] Mounted partition {0} on {1}.'.format(col(partition.get_description(), attrs=['bold']),
                                                                           col(partition.mountpoint, 'green', attrs=['bold']))
-                    elif partition.loopback:
-                        print u'[+] Mounted partition {0} as loopback on {1}.'.format(col(partition.get_description(),  attrs=['bold']),
+                    elif partition.loopback:  # fallback, generally indicates error.
+                        print u'[+] Mounted partition {0} as loopback on {1}.'.format(col(partition.get_description(), attrs=['bold']),
                                                                                       col(partition.loopback, 'green', attrs=['bold']))
                         print u'[+] Additional partitions may be available from this loopback device. These are not ' \
                               u'managed by this utility and you must unmount these manually before continuing.'
 
+                    # Do not offer unmount when reconstructing
                     if args.reconstruct:
                         has_left_mounted = True
                         continue
@@ -153,14 +160,20 @@ def main():
 
             # Perform reconstruct if required
             if args.reconstruct:
-                # Reverse order so '/' get's unmounted last
+                # Reverse order so '/' gets unmounted last
                 p.partitions = list(reversed(sorted(p.partitions)))
                 print "[+] Performing reconstruct... "
                 root = p.reconstruct()
-                print "[+] You can find the whole filesystem in {0}".format(col(root, "green", attrs=["bold"]))
+                if not root:
+                    print col("[-] Failed reconstructing filesystem: could not find root directory.", 'red')
+                else:
+                    print "[+] The entire filesystem is reconstructed in {0}.".format(col(root.mountpoint, "green", attrs=["bold"]))
+                    for m in filter(lambda x: not x.bindmount and x.mountpoint and x != root, p.partitions):
+                        print "    {0} was not reconstructed".format(m.mountpoint)
 
-            if has_left_mounted:
-                raw_input(col(">>> Some partitions were left open. Press [enter] to unmount all... ", attrs=['dark']))
+                raw_input(col(">>> Press [enter] to unmount all partitions... ", attrs=['dark']))
+            elif has_left_mounted:
+                raw_input(col(">>> Some partitions were left mounted. Press [enter] to unmount all... ", attrs=['dark']))
 
         except KeyboardInterrupt:
             print u'\n[+] User pressed ^C, aborting...'
@@ -187,7 +200,7 @@ def main():
                         print col("[-] Error unmounting base image. Perhaps partitions are still open?", 'red')
                         raw_input(col('>>> Press [enter] to retry unmounting, or ^C to cancel... ', attrs=['dark']))
                     except KeyboardInterrupt:
-                        print ""
+                        print ""  # ^C does not print \n
                         break
             print u"[+] All cleaned up"
 
@@ -221,6 +234,8 @@ class ImagePartition(object):
         self.bindmount = bindmount
 
     def unmount(self):
+        """Unounts the partition from the filesystem."""
+
         for volume in self.volumes:
             volume.unmount()
 
@@ -577,14 +592,17 @@ class ImageParser(object):
         return True
 
     def reconstruct(self):
+        """Reconstructs the filesystem of all currently mounted partitions by inspecting the last mount point and
+        bind mounting everything.
+        """
         mounted_partitions = filter(lambda x: x.mountpoint, self.partitions)
         viable_for_reconstruct = sorted(filter(lambda x: x.lastmountpoint, mounted_partitions))
 
         try:
             root = filter(lambda x: x.lastmountpoint == '/', viable_for_reconstruct)[0]
         except IndexError:
-            self._debug(u"Could not find / while reconstructing, aborting!")
-            return False
+            self._debug(u"[-] Could not find / while reconstructing, aborting!")
+            return None
 
         viable_for_reconstruct.remove(root)
 
@@ -594,7 +612,7 @@ class ImageParser(object):
             cmd = ['mount', '--bind', v.mountpoint, dest]
             util.check_call_(cmd, self, stdout=subprocess.PIPE)
             v.bindmount = dest
-        return root.mountpoint
+        return root
 
 
 class StatRetriever(object):
