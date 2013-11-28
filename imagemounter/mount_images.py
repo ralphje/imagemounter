@@ -171,9 +171,13 @@ def main():
                 if not root:
                     print col("[-] Failed reconstructing filesystem: could not find root directory.", 'red')
                 else:
-                    print "[+] The entire filesystem is reconstructed in {0}.".format(col(root.mountpoint, "green", attrs=["bold"]))
-                    for m in filter(lambda x: not x.bindmount and x.mountpoint and x != root, p.partitions):
-                        print "    {0} was not reconstructed".format(m.mountpoint)
+                    failed = filter(lambda x: not x.bindmount and x.mountpoint and x != root, p.partitions)
+                    if failed:
+                        print "[+] Parts of the filesystem are reconstructed in {0}.".format(col(root.mountpoint, "green", attrs=["bold"]))
+                        for m in failed:
+                            print "    {0} was not reconstructed".format(m.mountpoint)
+                    else:
+                        print "[+] The entire filesystem is reconstructed in {0}.".format(col(root.mountpoint, "green", attrs=["bold"]))
 
                 raw_input(col(">>> Press [enter] to unmount all partitions... ", attrs=['dark']))
             elif has_left_mounted:

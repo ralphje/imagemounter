@@ -12,7 +12,7 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['ImagePartition', 'ImageParser']
-__version__ = '1.0.1'
+__version__ = '1.0.2'
 
 
 class ImagePartition(object):
@@ -21,8 +21,8 @@ class ImagePartition(object):
     """
 
     def __init__(self, parser=None, mountpoint=None, offset=None, fstype=None, fsdescription=None, index=None,
-                 label=None, lastmountpoint=None, bindmount=None, exception=None, size=None, loopback=None,
-                 volume_group=None):
+                 label=None, lastmountpoint=None, version=None, bindmount=None, exception=None, size=None,
+                 loopback=None, volume_group=None):
         self.parser = parser
         self.mountpoint = mountpoint
         self.offset = offset
@@ -30,6 +30,7 @@ class ImagePartition(object):
         self.fsdescription = fsdescription
         self.index = index
         self.label = label
+        self.version = version
         self.lastmountpoint = lastmountpoint
         self.exception = exception
         self.size = size
@@ -38,6 +39,7 @@ class ImagePartition(object):
         self.volumes = []
         self.bindmount = bindmount
 
+    #noinspection PyBroadException
     def unmount(self):
         """Unounts the partition from the filesystem."""
 
@@ -90,6 +92,9 @@ class ImagePartition(object):
 
         if self.label:
             desc += u' {0}'.format(self.label)
+
+        if self.version:  # NTFS
+            desc += u' [{0}]'.format(self.version)
 
         return desc
 
@@ -431,9 +436,6 @@ class StatRetriever(object):
         self.analyser = analyser
         self._debug = analyser._debug
 
-        self.stdout = ''
-        self.stderr = ''
-
     def run(self):
         def target():
             try:
@@ -443,7 +445,6 @@ class StatRetriever(object):
 
                 self._debug('    {0}'.format(' '.join(cmd)))
                 self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                #self.stdout, self.stderr = self.process.communicate()
 
                 frag_size = frag_range = block_size = block_range = 0
                 for line in iter(self.process.stdout.readline, b''):
@@ -453,14 +454,16 @@ class StatRetriever(object):
                         self.partition.lastmountpoint = line[line.index(':') + 2:].strip()
                     if line.startswith("Volume Name:"):
                         self.partition.label = line[line.index(':') + 2:].strip()
+                    if line.startswith("Version:"):
+                        self.partition.version = line[line.index(':') + 2:].strip()
                     # Used for calculating disk size
                     if line.startswith("Fragment Range:"):
                         frag_range = int(line[line.index('-') + 2:]) - int(line[line.index(':') + 2:line.index('-') - 1])
-                    if line.startswith("Block Range:"):
+                    if line.startswith("Block Range:") or line.startswith("Total Cluster Range:"):
                         block_range = int(line[line.index('-') + 2:]) - int(line[line.index(':') + 2:line.index('-') - 1])
                     if line.startswith("Fragment Size:"):
                         frag_size = int(line[line.index(':') + 2:])
-                    if line.startswith("Block Size:"):
+                    if line.startswith("Block Size:") or line.startswith("Cluster Size:"):
                         block_size = int(line[line.index(':') + 2:])
                     if 'CYLINDER GROUP INFORMATION' in line:
                         try:
