@@ -1,10 +1,8 @@
 from setuptools import setup
 
-print "Note: install/install.sh is also provided."
-
 setup(
     name='image_mounter',
-    version='1.0.0',
+    version='1.0.1',
     packages=['imagemounter'],
     author='Peter Wagenaar, Ralph Broenink',
     description='Utility to mount partitions in Encase and dd images locally on Linux operating systems.',

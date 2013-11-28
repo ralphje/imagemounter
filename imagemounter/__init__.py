@@ -12,7 +12,7 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['ImagePartition', 'ImageParser']
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 
 
 class ImagePartition(object):

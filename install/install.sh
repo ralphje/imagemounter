@@ -4,6 +4,9 @@ if [[ $EUID -ne 0 ]]; then
 	exit 1
 fi
 
+echo Script to install the mount_images command line utility and imagemounter Python module and most importantly, its dependencies
+echo
+
 echo Installing dependencies...
 
 # Install libtsk-dev, xmount
@@ -26,16 +29,24 @@ cd ./termcolor-1.1.0
 cd ..
 rm -Rf ./termcolor-1.1.0
 
+echo
 echo All dependencies installed!
-echo Installing utility...
-
+echo Installing module and utility...
+echo
 
 cd ..
 
 /usr/bin/python ./setup.py install
+rm -Rf build
+rm -Rf dist
+rm -Rf image_mounter.egg-info
 
-echo You may also want to install:  afflib-tools  ewf-tools
 echo
-echo Note: if ewf-tools does not include ewfmount, go to the following url to obtain recent working (deb) packages:
+echo All done!
+echo
+echo
+echo You may also want to install:   afflib-tools  ewf-tools
+echo
+echo Note: if ewf-tools does not include ewfmount, go to the following url to obtain recent working deb packages:
 echo https://launchpad.net/ubuntu/+source/libewf
 echo Binary packages from 20130416-2ubuntu1 are known to provide ewfmount

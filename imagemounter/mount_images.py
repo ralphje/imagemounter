@@ -44,6 +44,7 @@ def main():
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Enable verbose output.')
     args = parser.parse_args()
 
+    # Check some prerequisites
     if os.geteuid():  # Not run as root
         print u'[-] This program needs to be ran as root! Requesting elevation... '
         os.execvp('sudo', ['sudo'] + sys.argv)
@@ -60,8 +61,15 @@ def main():
         print "[-] {0} does not support mounting read-write! Will mount read-only.".format(args.method)
         args.read_write = False
 
-    # Reconstruct implies use of fsstat
-    if args.reconstruct:
+    if args.method != 'auto' and not util.command_exists(args.method):
+        print "[-] {0} is not installed!".format(args.method)
+        sys.exit(1)
+
+    if args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount'))):
+        print "[-] No tools installed to mount the base partition!"
+        sys.exit(1)
+
+    if args.reconstruct:  # Reconstruct implies use of fsstat
         args.stats = True
 
     if args.stats and not util.command_exists('fsstat'):
@@ -73,6 +81,7 @@ def main():
             print "[-] Reconstruction is now impossible!"
             sys.exit(1)
 
+    # Enumerate over all images in the CLI
     for num, image in enumerate(args.images):
         if not os.path.exists(image):
             print col("[-] Image {0} does not exist, aborting!".format(image), "red")

@@ -55,11 +55,17 @@ def expand_path(path):
 
 
 def command_exists(cmd):
-    try:
-        subprocess.call(["which", cmd], stdout=subprocess.PIPE)
-        return True
-    except:
-        return False
+    fpath, fname = os.path.split(cmd)
+    if fpath:
+        return os.path.isfile(cmd) and os.access(cmd, os.X_OK)
+    else:
+        for p in os.environ['PATH'].split(os.pathsep):
+            p = p.strip('"')
+            fp = os.path.join(p, cmd)
+            if os.path.isfile(fp) and os.access(fp, os.X_OK):
+                return True
+
+    return False
 
 
 def check_call_(cmd, parser, *args, **kwargs):
