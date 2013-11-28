@@ -3,7 +3,7 @@ import argparse
 import sys
 import os
 
-from imagemounter import util, ImageParser
+from imagemounter import util, ImageParser, __version__
 from termcolor import colored
 
 
@@ -18,6 +18,7 @@ def main():
     parser.add_argument('images', nargs='+',
                         help='Path(s) to the image(s) that you want to mount. In case the image is '
                              'split up in multiple files, just use the first file (e.g. the .E01 or .001 file).')
+    parser.add_argument('--version', action='version', version=__version__, help='display version and exit')
     parser.add_argument('-c', '--color', action='store_true', default=False, help='Colorize the output.')
     parser.add_argument('-w', '--wait', action='store_true', default=False, help='Pause on some additional warnings.')
     parser.add_argument('-r', '--reconstruct', action='store_true', default=False,
