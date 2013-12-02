@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='image_mounter',
-    version='1.0.2',
+    version='1.0.3',
     packages=['imagemounter'],
     author='Peter Wagenaar, Ralph Broenink',
     description='Utility to mount partitions in Encase and dd images locally on Linux operating systems.',
