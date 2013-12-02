@@ -12,7 +12,7 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['ImagePartition', 'ImageParser']
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 
 
 class ImagePartition(object):
@@ -113,7 +113,8 @@ class ImageParser(object):
 
     #noinspection PyUnusedLocal
     def __init__(self, path, out=sys.stdout, addsudo=False, loopback="/dev/loop0", mountdir=None, vstype='detect',
-                 fstype=None, read_write=False, verbose=False, color=False, stats=False, method='auto', **args):
+                 fstype=None, fsforce=False, read_write=False, verbose=False, color=False, stats=False, method='auto',
+                 **args):
         path = os.path.expandvars(os.path.expanduser(path))
         if util.is_encase(path):
             self.type = 'encase'
@@ -155,6 +156,7 @@ class ImageParser(object):
 
         self.vstype = getattr(pytsk3, 'TSK_VS_TYPE_' + vstype.upper())
         self.fstype = fstype
+        self.fsforce = fsforce
 
     def _debug(self, val):
         if self.verbose:
@@ -237,22 +239,34 @@ class ImageParser(object):
                 #mount -t ext4 -o loop,ro,noexec,noload,offset=241790330880 \
                 #/media/image/ewf1 /media/a
 
-                # Prepare mount command
-                if self.fstype:
-                    fsdesc = ''  # prevent fsdesc below from doing something
+                # Determine fs type. If forced, always use provided type.
+                if self.fsforce:
+                    fstype = self.fstype
                 else:
                     fsdesc = partition.fsdescription.lower()
+                    if u'0x83' in fsdesc or '0xfd' in fsdesc:
+                        fstype = 'ext'
+                    elif u'bsd' in fsdesc:
+                        fstype = 'bsd'
+                    elif u'0x07' in fsdesc:
+                        fstype = 'ntfs'
+                    elif u'0x8e' in fsdesc or 'lvm' in fsdesc:
+                        fstype = 'lvm'
+                    else:
+                        fstype = self.fstype
 
-                if u'0x83' in fsdesc or '0xfd' in fsdesc or self.fstype == 'ext':
+                # Prepare mount command
+                if fstype == 'ext':
                     # ext
                     cmd = [u'mount', raw_path, partition.mountpoint, u'-t', u'ext4', u'-o',
                            u'loop,noexec,noload,offset=' + str(partition.offset)]
                     if not self.read_write:
                         cmd[-1] += ',ro'
 
-                    partition.fstype = 'Ext'
+                    if not partition.fstype:
+                        partition.fstype = 'Ext'
 
-                elif u'bsd' in fsdesc or self.fstype == 'bsd':
+                elif fstype == 'bsd':
                     # ufs
                     #mount -t ufs -o ufstype=ufs2,loop,ro,offset=4294967296 /tmp/image/ewf1 /media/a
                     cmd = [u'mount', raw_path, partition.mountpoint, u'-t', u'ufs', u'-o',
@@ -260,18 +274,20 @@ class ImageParser(object):
                     if not self.read_write:
                         cmd[-1] += ',ro'
 
-                    partition.fstype = 'UFS'
+                    if not partition.fstype:
+                        partition.fstype = 'UFS'
 
-                elif u'0x07' in fsdesc or self.fstype == 'ntfs':
+                elif fstype == 'ntfs':
                     # NTFS
                     cmd = [u'mount', raw_path, partition.mountpoint, u'-t', u'ntfs', u'-o',
                            u'loop,noexec,offset=' + str(partition.offset)]
                     if not self.read_write:
                         cmd[-1] += ',ro'
 
-                    partition.fstype = 'NTFS'
+                    if not partition.fstype:
+                        partition.fstype = 'NTFS'
 
-                elif u'0x8e' in fsdesc or self.fstype == 'lvm':
+                elif fstype == 'lvm':
                     # LVM
                     os.environ['LVM_SUPPRESS_FD_WARNINGS'] = '1'
 
@@ -286,7 +302,8 @@ class ImageParser(object):
                     if not self.read_write:
                         cmd.insert(1, '-r')
 
-                    partition.fstype = 'LVM'
+                    if not partition.fstype:
+                        partition.fstype = 'LVM'
 
                 else:
                     self._debug("[-] Unknown filesystem {0}".format(partition))
@@ -347,6 +364,12 @@ class ImageParser(object):
                 partition.volumes[-1].size = l.replace("LV Size", "").strip()
             if "LV Path" in l:
                 partition.volumes[-1].lv_path = l.replace("LV Path", "").strip()
+
+        self._debug("    {0} volumes found".format(len(partition.volumes)))
+
+        if not partition.volumes:
+            yield partition
+            return
 
         # Mount all volumes as ext
         for volume in partition.volumes:

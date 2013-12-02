@@ -19,8 +19,8 @@ def main():
                         help='Path(s) to the image(s) that you want to mount. In case the image is '
                              'split up in multiple files, just use the first file (e.g. the .E01 or .001 file).')
     parser.add_argument('--version', action='version', version=__version__, help='display version and exit')
-    parser.add_argument('-c', '--color', action='store_true', default=False, help='Colorize the output.')
-    parser.add_argument('-w', '--wait', action='store_true', default=False, help='Pause on some additional warnings.')
+    parser.add_argument('-c', '--color', action='store_true', default=False, help='colorize the output')
+    parser.add_argument('-w', '--wait', action='store_true', default=False, help='pause on some additional warnings')
     parser.add_argument('-r', '--reconstruct', action='store_true', default=False,
                         help='Attempt to reconstruct the full filesystem tree. Implies -s and mounts all partitions '
                              'at once.')
@@ -41,7 +41,9 @@ def main():
     parser.add_argument('-vs', '--vstype', choices=['detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller'],
                         default="detect", help='Specify type of volume system (partition table). Default=detect')
     parser.add_argument('-fs', '--fstype', choices=['ext', 'ufs', 'ntfs', 'lvm'], default=None,
-                        help="Specify the type of the filesystem. Used to override automatic detection.")
+                        help="Specify the type of the filesystem if it could not be detected.")
+    parser.add_argument('-fsf', '--fsforce', action='store_true', default=False,
+                        help="Use the type specified with --fstype also for known filesystems.")
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Enable verbose output.')
     args = parser.parse_args()
 
@@ -81,6 +83,15 @@ def main():
         if args.reconstruct:
             print "[-] Reconstruction is now impossible!"
             sys.exit(1)
+
+    if args.fstype and not args.fsforce:
+        print "[!] You are using the file system type {0} as fallback. This may cause random errors.".format(args.fstype)
+    elif args.fstype and args.fsforce:
+        print "[!] You are forcing the file system type to {0}. This may cause random errors.".format(args.fstype)
+    elif not args.fstype and args.fsforce:
+        print "[-] You are forcing a file system type, but have not specified the type to use. Ignoring force."
+        args.fsforce = False
+
 
     # Enumerate over all images in the CLI
     for num, image in enumerate(args.images):
@@ -128,8 +139,7 @@ def main():
                     elif partition.loopback:  # fallback, generally indicates error.
                         print u'[+] Mounted partition {0} as loopback on {1}.'.format(col(partition.get_description(), attrs=['bold']),
                                                                                       col(partition.loopback, 'green', attrs=['bold']))
-                        print u'[+] Additional partitions may be available from this loopback device. These are not ' \
-                              u'managed by this utility and you must unmount these manually before continuing.'
+                        print col(u'[-] Could not detect further partitions in the loopback device.', 'red')
 
                     # Do not offer unmount when reconstructing
                     if args.reconstruct:
@@ -157,7 +167,13 @@ def main():
                 sys.stdout.write("[+] Mounting partition {0}{1}\r".format(i, col("...", attrs=['blink'])))
                 sys.stdout.flush()
             if i == 0:
-                print col(u'[?] Could not determine volume information, possible empty image?', 'yellow')
+                if args.vstype != 'detect':
+                    print col(u'[?] Could not determine volume information. Image may be empty, or volume system type '
+                              u'{0} was incorrect.'.format(col(args.vstype.upper(), attrs=['bold'])), 'yellow')
+                else:
+                    print col(u'[?] Could not determine volume information. Image may be empty, or volume system type '
+                              u'could not be detected. Try explicitly providing the volume system type with --vstype.',
+                              'yellow')
                 if args.wait:
                     raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
