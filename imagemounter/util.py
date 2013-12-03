@@ -5,9 +5,7 @@ import glob
 import os
 
 
-def clean_unmount(cmd, mountpoint, tries=20, addsudo=False, rmdir=True):
-    if addsudo:
-        cmd.insert(0, 'sudo')
+def clean_unmount(cmd, mountpoint, tries=20, rmdir=True):
     cmd.append(mountpoint)
 
     # Perform unmount
@@ -69,14 +67,10 @@ def command_exists(cmd):
 
 
 def check_call_(cmd, parser, *args, **kwargs):
-    if parser.addsudo:
-        cmd.insert(0, 'sudo')
     parser._debug('    {0}'.format(' '.join(cmd)))
     return subprocess.check_call(cmd, *args, **kwargs)
 
 
 def check_output_(cmd, parser, *args, **kwargs):
-    if parser.addsudo:
-        cmd.insert(0, 'sudo')
     parser._debug('    {0}'.format(' '.join(cmd)))
     return subprocess.check_output(cmd, *args, **kwargs)
