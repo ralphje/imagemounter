@@ -22,29 +22,32 @@ def main():
     parser.add_argument('-c', '--color', action='store_true', default=False, help='colorize the output')
     parser.add_argument('-w', '--wait', action='store_true', default=False, help='pause on some additional warnings')
     parser.add_argument('-r', '--reconstruct', action='store_true', default=False,
-                        help='Attempt to reconstruct the full filesystem tree. Implies -s and mounts all partitions '
-                             'at once.')
+                        help='attempt to reconstruct the full filesystem tree; implies -s and mounts all partitions '
+                             'at once')
     parser.add_argument('-rw', '--read-write', action='store_true', default=False,
-                        help='Mount image read-write by creating a local write-cache file in a temp directory. '
-                             'Implies --method=xmount.')
+                        help='mount image read-write by creating a local write-cache file in a temp directory; '
+                             'implies --method=xmount')
     parser.add_argument('-s', '--stats', action='store_true', default=False,
-                        help='Show limited information from fsstat. Will slow down mounting and may cause random '
-                             'issues such as partitions being unreadable.')
+                        help='show limited information from fsstat, which will slow down mounting and may cause '
+                             'random issues such as partitions being unreadable')
     parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'auto'], default='auto',
-                        help='Use "xmount", "ewfmount" or "affuse" to mount the initial images. Results may vary '
-                             'between methods, if something doesn\'t work, try another method. Pick the best '
-                             'automatically with "auto". Default=auto')
+                        help='use other tool to mount the initial images; results may vary between methods and if '
+                             'something doesn\'t work, try another method (default: auto)')
     parser.add_argument('-md', '--mountdir', default=None,
-                        help='Specify directory for partition mountpoints. Default=temporary directory')
+                        help='specify other directory for partition mountpoints')
     parser.add_argument('-l', '--loopback', default='/dev/loop0',
-                        help='Specify loopback device for LVM partitions. Default=/dev/loop0')
-    parser.add_argument('-vs', '--vstype', choices=['detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller'],
-                        default="detect", help='Specify type of volume system (partition table). Default=detect')
+                        help='specify loopback device for LVM partitions (default: /dev/loop0)')
+    parser.add_argument('-vs', '--vstype', choices=['detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller', 'any'],
+                        default="detect", help='specify type of volume system (partition table); if you don\'t know, '
+                                               'use "detect" to try to detect, or "any" to loop over all VS types and '
+                                               'use whatever works, which may produce unexpected results (default: '
+                                               'detect)')
     parser.add_argument('-fs', '--fstype', choices=['ext', 'ufs', 'ntfs', 'lvm'], default=None,
-                        help="Specify the type of the filesystem if it could not be detected.")
+                        help="specify fallback type of the filesystem, which is used when it could not be detected or "
+                             "is unsupported")
     parser.add_argument('-fsf', '--fsforce', action='store_true', default=False,
-                        help="Use the type specified with --fstype also for known filesystems.")
-    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='Enable verbose output.')
+                        help="force the use of the filesystem type specified with --fstype for all partitions")
+    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose output')
     args = parser.parse_args()
 
     # Check some prerequisites
@@ -85,13 +88,18 @@ def main():
             sys.exit(1)
 
     if args.fstype and not args.fsforce:
-        print "[!] You are using the file system type {0} as fallback. This may cause random errors.".format(args.fstype)
+        print "[!] You are using the file system type {0} as fallback. This may cause unexpected results."\
+            .format(args.fstype)
     elif args.fstype and args.fsforce:
-        print "[!] You are forcing the file system type to {0}. This may cause random errors.".format(args.fstype)
+        print "[!] You are forcing the file system type to {0}. This may cause unexpected results.".format(args.fstype)
     elif not args.fstype and args.fsforce:
         print "[-] You are forcing a file system type, but have not specified the type to use. Ignoring force."
         args.fsforce = False
 
+    if args.vstype == 'any':
+        print "[!] You are using the 'any' volume system type. This may cause unexpected results. It is recommended " \
+              "to use either 'detect' or explicitly specify the correct volume system. However, 'any' may provide " \
+              "some hints on the volume system to use (e.g. GPT mounted as DOS lists a GPT safety partition)."
 
     # Enumerate over all images in the CLI
     for num, image in enumerate(args.images):

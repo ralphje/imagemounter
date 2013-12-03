@@ -1,8 +1,16 @@
 from setuptools import setup
 
+
+def get_metadata():
+    import re
+    with open("imagemounter/__init__.py") as f:
+        return dict(re.findall("__([a-z]+)__ = ['\"]([^'\"]+)['\"]", f.read()))
+
+metadata = get_metadata()
+
 setup(
     name='image_mounter',
-    version='1.0.3',
+    version=metadata['version'],
     packages=['imagemounter'],
     author='Peter Wagenaar, Ralph Broenink',
     description='Utility to mount partitions in Encase and dd images locally on Linux operating systems.',

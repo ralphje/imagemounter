@@ -12,7 +12,7 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['ImagePartition', 'ImageParser']
-__version__ = '1.0.3'
+__version__ = '1.0.4'
 
 
 class ImagePartition(object):
@@ -111,6 +111,8 @@ class ImagePartition(object):
 class ImageParser(object):
     """Parses an image and mounts it."""
 
+    VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
+
     #noinspection PyUnusedLocal
     def __init__(self, path, out=sys.stdout, addsudo=False, loopback="/dev/loop0", mountdir=None, vstype='detect',
                  fstype=None, fsforce=False, read_write=False, verbose=False, color=False, stats=False, method='auto',
@@ -154,7 +156,10 @@ class ImageParser(object):
         self.loopback = loopback
         self.mountdir = mountdir
 
-        self.vstype = getattr(pytsk3, 'TSK_VS_TYPE_' + vstype.upper())
+        if vstype == 'any':
+            self.vstype = 'any'
+        else:
+            self.vstype = getattr(pytsk3, 'TSK_VS_TYPE_' + vstype.upper())
         self.fstype = fstype
         self.fsforce = fsforce
 
@@ -209,12 +214,31 @@ class ImageParser(object):
         raw_path = raw_path[0]
         try:
             self.baseimage = pytsk3.Img_Info(raw_path)
-            self.volumes = pytsk3.Volume_Info(self.baseimage, self.vstype)
-
         except Exception as e:
-            self._debug(u"[-] Failed retrieving image or volume info (possible empty image).")
+            self._debug(u"[-] Failed retrieving image info (possible empty image).")
             self._debug(e)
             return
+
+        # any loops over all vstypes
+        if self.vstype == 'any':
+            for vs in ImageParser.VOLUME_SYSTEM_TYPES:
+                try:
+                    vst = getattr(pytsk3, 'TSK_VS_TYPE_' + vs.upper())
+                    self.volumes = pytsk3.Volume_Info(self.baseimage, vst)
+                    self._debug(u"[+] Using VS type {0}".format(vs))
+                    break
+                except Exception as e:
+                    self._debug(u"    VS type {0} did not work".format(vs))
+            else:
+                self._debug(u"[-] Failed retrieving volume info")
+                return
+        else:
+            try:
+                self.volumes = pytsk3.Volume_Info(self.baseimage, self.vstype)
+            except Exception as e:
+                self._debug(u"[-] Failed retrieving volume info (possible empty image).")
+                self._debug(e)
+                return
 
         # Loop over all volumes in image.
         for p in self.volumes:
