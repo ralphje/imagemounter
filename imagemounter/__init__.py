@@ -63,13 +63,13 @@ class ImagePartition(object):
             self.loopback = None
 
         if self.bindmount:
-            if not util.clean_unmount([u'umount'], self.bindmount, addsudo=self.parser.addsudo, rmdir=False):
+            if not util.clean_unmount([u'umount'], self.bindmount, rmdir=False):
                 return False
 
             self.bindmount = None
 
         if self.mountpoint:
-            if not util.clean_unmount([u'umount'], self.mountpoint, addsudo=self.parser.addsudo):
+            if not util.clean_unmount([u'umount'], self.mountpoint):
                 return False
 
             self.mountpoint = None
@@ -114,7 +114,7 @@ class ImageParser(object):
     VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
 
     #noinspection PyUnusedLocal
-    def __init__(self, path, out=sys.stdout, addsudo=False, loopback="/dev/loop0", mountdir=None, vstype='detect',
+    def __init__(self, path, out=sys.stdout, loopback="/dev/loop0", mountdir=None, vstype='detect',
                  fstype=None, fsforce=False, read_write=False, verbose=False, color=False, stats=False, method='auto',
                  **args):
         path = os.path.expandvars(os.path.expanduser(path))
@@ -142,7 +142,6 @@ class ImageParser(object):
             self.method = method
 
         self.out = out
-        self.addsudo = addsudo
 
         if read_write:
             self.rwpath = tempfile.mkstemp(prefix="image_mounter_rw_cache_")[1]
@@ -443,7 +442,7 @@ class ImageParser(object):
             if not m.unmount():
                 self._debug(u"[-] Error unmounting partition {0}".format(m.mountpoint))
 
-        if self.basemountpoint and not util.clean_unmount([u'fusermount', u'-u'], self.basemountpoint, addsudo=self.addsudo):
+        if self.basemountpoint and not util.clean_unmount([u'fusermount', u'-u'], self.basemountpoint):
             self._debug(u"[-] Error unmounting base partition {0}".format(self.basemountpoint))
             return False
         return True
@@ -487,8 +486,6 @@ class StatRetriever(object):
         def target():
             try:
                 cmd = [u'fsstat', self.raw_path, u'-o', str(self.offset)]
-                if self.analyser.addsudo:
-                    cmd.insert(0, 'sudo')
 
                 self._debug('    {0}'.format(' '.join(cmd)))
                 self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
