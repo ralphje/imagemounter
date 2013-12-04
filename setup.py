@@ -1,9 +1,11 @@
+#!/usr/bin/env python
+import os
 from setuptools import setup
 
 
 def get_metadata():
     import re
-    with open("imagemounter/__init__.py") as f:
+    with open(os.path.join("imagemounter", "__init__.py")) as f:
         return dict(re.findall("__([a-z]+)__ = ['\"]([^'\"]+)['\"]", f.read()))
 
 metadata = get_metadata()
