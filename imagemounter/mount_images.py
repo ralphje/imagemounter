@@ -16,11 +16,17 @@ def main():
 
     class CleanAction(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
+            commands = ImageParser.force_clean(False)
+            if not commands:
+                print "[+] Nothing to do"
+                parser.exit()
             print "[!] --clean will rigorously clean anything that looks like a mount or volume group originating " \
                   "from this utility. You may regret using this if you have other mounts or volume groups that are " \
-                  "similarly named."
+                  "similarly named. The following commands will be executed:"
+            for c in commands:
+                print "    {0}".format(c)
             try:
-                raw_input(">>> Press [enter] to continue... ")
+                raw_input(">>> Press [enter] to continue or ^C to cancel... ")
                 ImageParser.force_clean()
             except KeyboardInterrupt:
                 print "\n[-] Aborted."

@@ -12,7 +12,7 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['ImagePartition', 'ImageParser']
-__version__ = '1.1'
+__version__ = '1.1.1'
 
 
 class ImagePartition(object):
@@ -454,7 +454,7 @@ class ImageParser(object):
 
     #noinspection PyBroadException
     @staticmethod
-    def force_clean():
+    def force_clean(execute=True):
         """Cleans previous mount points without knowing which is mounted. It assumes proper naming of mountpoints.
 
         1. Unmounts all bind mounted folders in folders with a name of the form /im_0_
@@ -463,7 +463,11 @@ class ImageParser(object):
         4. ... and unmounts their related loopback devices
         5. Unmounts all /image_mounter_ folders
         6. Removes all /tmp/image_mounter folders
+
+        Performs only a dry run when execute==False
         """
+
+        commands = []
 
         # find all mountponits
         mountpoints = {}
@@ -479,11 +483,16 @@ class ImageParser(object):
         # start by unmounting all bind mounts
         for mountpoint, (orig, fs, opts) in mountpoints.items():
             if 'bind' in opts and re.match(r".*/im_[0-9.]+_.+", mountpoint):
-                util.clean_unmount(['umount'], mountpoint, rmdir=False)
+                commands.append('umount {0}'.format(mountpoint))
+                if execute:
+                    util.clean_unmount(['umount'], mountpoint, rmdir=False)
         # now unmount all mounts originating from an image_mounter
         for mountpoint, (orig, fs, opts) in mountpoints.items():
-            if '/image_mounter_' in orig or re.match(r".*/im_[0-9.]+_.+", mountpoint):
-                util.clean_unmount(['umount'], mountpoint)
+            if 'bind' not in opts and ('/image_mounter_' in orig or re.match(r".*/im_[0-9.]+_.+", mountpoint)):
+                commands.append('umount {0}'.format(mountpoint))
+                commands.append('rm -Rf {0}'.format(mountpoint))
+                if execute:
+                    util.clean_unmount(['umount'], mountpoint)
 
         # find all loopback devices
         loopbacks = {}
@@ -512,8 +521,11 @@ class ImageParser(object):
                     try:
                         # unmount volume groups with a physical volume originating from a disk image
                         if '/image_mounter_' in loopbacks[pvname]:
-                            util.check_output_(['lvchange', '-a', 'n', vgname])
-                            util.check_output_(['losetup', '-d', pvname])
+                            commands.append('lvchange -a n {0}'.format(vgname))
+                            commands.append('losetup -d {0}'.format(pvname))
+                            if execute:
+                                util.check_output_(['lvchange', '-a', 'n', vgname])
+                                util.check_output_(['losetup', '-d', pvname])
                     except Exception:
                         pass
                     pvname = vgname = None
@@ -524,14 +536,33 @@ class ImageParser(object):
         # unmount base image
         for mountpoint, _ in mountpoints.items():
             if '/image_mounter_' in mountpoint:
-                util.clean_unmount(['fusermount', '-u'], mountpoint)
+                commands.append('fusermount -u {0}'.format(mountpoint))
+                commands.append('rm -Rf {0}'.format(mountpoint))
+                if execute:
+                    util.clean_unmount(['fusermount', '-u'], mountpoint)
 
         # finalize by cleaning /tmp
         for folder in glob.glob("/tmp/im_*"):
             if re.match(r".*/im_[0-9.]+_.+", folder):
-                os.rmdir(folder)
+                cmd = 'rm -Rf {0}'.format(folder)
+                if cmd not in commands:
+                    commands.append(cmd)
+                if execute:
+                    try:
+                        os.rmdir(folder)
+                    except Exception:
+                        pass
         for folder in glob.glob("/tmp/image_mounter_*"):
-            os.rmdir(folder)
+            cmd = 'rm -Rf {0}'.format(folder)
+            if cmd not in commands:
+                commands.append(cmd)
+            if execute:
+                try:
+                    os.rmdir(folder)
+                except Exception:
+                    pass
+
+        return commands
 
     def reconstruct(self):
         """Reconstructs the filesystem of all currently mounted partitions by inspecting the last mount point and
