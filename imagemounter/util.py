@@ -31,7 +31,6 @@ def clean_unmount(cmd, mountpoint, tries=20, rmdir=True):
     else:
         return True
 
-
 def is_encase(path):
     return re.match(r'^.*\.E\w\w$', path)
 
@@ -66,11 +65,13 @@ def command_exists(cmd):
     return False
 
 
-def check_call_(cmd, parser, *args, **kwargs):
-    parser._debug('    {0}'.format(' '.join(cmd)))
+def check_call_(cmd, parser=None, *args, **kwargs):
+    if parser:
+        parser._debug('    {0}'.format(' '.join(cmd)))
     return subprocess.check_call(cmd, *args, **kwargs)
 
 
-def check_output_(cmd, parser, *args, **kwargs):
-    parser._debug('    {0}'.format(' '.join(cmd)))
+def check_output_(cmd, parser=None, *args, **kwargs):
+    if parser:
+        parser._debug('    {0}'.format(' '.join(cmd)))
     return subprocess.check_output(cmd, *args, **kwargs)

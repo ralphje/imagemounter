@@ -12,7 +12,7 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['ImagePartition', 'ImageParser']
-__version__ = '1.0.4'
+__version__ = '1.1'
 
 
 class ImagePartition(object):
@@ -114,7 +114,7 @@ class ImageParser(object):
     VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
 
     #noinspection PyUnusedLocal
-    def __init__(self, path, out=sys.stdout, loopback="/dev/loop0", mountdir=None, vstype='detect',
+    def __init__(self, path, out=sys.stdout, mountdir=None, vstype='detect',
                  fstype=None, fsforce=False, read_write=False, verbose=False, color=False, stats=False, method='auto',
                  **args):
         path = os.path.expandvars(os.path.expanduser(path))
@@ -152,7 +152,6 @@ class ImageParser(object):
         self.partitions = []
         self.baseimage = None
         self.volumes = None
-        self.loopback = loopback
         self.mountdir = mountdir
 
         if vstype == 'any':
@@ -221,6 +220,7 @@ class ImageParser(object):
         # any loops over all vstypes
         if self.vstype == 'any':
             for vs in ImageParser.VOLUME_SYSTEM_TYPES:
+                #noinspection PyBroadException
                 try:
                     vst = getattr(pytsk3, 'TSK_VS_TYPE_' + vs.upper())
                     self.volumes = pytsk3.Volume_Info(self.baseimage, vst)
@@ -256,7 +256,7 @@ class ImageParser(object):
                 ## Obtain information about filesystem
                 #d = pytsk3.FS_Info(self.image, offset=partition.offset)
 
-                suffix = partition.label.replace("/", "_") if partition.label else ""
+                suffix = partition.label.replace("/", "_").replace(" ", "_") if partition.label else ""
                 partition.mountpoint = tempfile.mkdtemp(prefix=u'im_' + str(partition.index) + u'_', suffix=suffix,
                                                         dir=self.mountdir)
                 #mount -t ext4 -o loop,ro,noexec,noload,offset=241790330880 \
@@ -318,8 +318,13 @@ class ImageParser(object):
                     os.rmdir(partition.mountpoint)
                     partition.mountpoint = None
 
-                    # set up loopback
-                    partition.loopback = self.loopback
+                    # find free loopback device
+                    #noinspection PyBroadException
+                    try:
+                        partition.loopback = util.check_output_(['losetup', '-f'])
+                    except Exception:
+                        self._debug("[-] No free loopback device found for LVM")
+                        yield partition
 
                     cmd = [u'losetup', u'-o', str(partition.offset), partition.loopback, raw_path]
                     if not self.read_write:
@@ -447,6 +452,87 @@ class ImageParser(object):
             return False
         return True
 
+    #noinspection PyBroadException
+    @staticmethod
+    def force_clean():
+        """Cleans previous mount points without knowing which is mounted. It assumes proper naming of mountpoints.
+
+        1. Unmounts all bind mounted folders in folders with a name of the form /im_0_
+        2. Unmounts all folders with a name of the form /im_0_ or originating from /image_mounter_
+        3. Deactivates volume groups which originate from a loopback device, which originates from /image_mounter
+        4. ... and unmounts their related loopback devices
+        5. Unmounts all /image_mounter_ folders
+        6. Removes all /tmp/image_mounter folders
+        """
+
+        # find all mountponits
+        mountpoints = {}
+        try:
+            result = util.check_output_(['mount'])
+            for line in result.splitlines():
+                m = re.match(r'(.+) on (.+) type (.+) \((.+)\)', line)
+                if m:
+                    mountpoints[m.group(2)] = (m.group(1), m.group(3), m.group(4))
+        except Exception:
+            pass
+
+        # start by unmounting all bind mounts
+        for mountpoint, (orig, fs, opts) in mountpoints.items():
+            if 'bind' in opts and re.match(r".*/im_[0-9.]+_.+", mountpoint):
+                util.clean_unmount(['umount'], mountpoint, rmdir=False)
+        # now unmount all mounts originating from an image_mounter
+        for mountpoint, (orig, fs, opts) in mountpoints.items():
+            if '/image_mounter_' in orig or re.match(r".*/im_[0-9.]+_.+", mountpoint):
+                util.clean_unmount(['umount'], mountpoint)
+
+        # find all loopback devices
+        loopbacks = {}
+        try:
+            result = util.check_output_(['losetup', '-a'])
+            for line in result.splitlines():
+                m = re.match(r'(.+): (.+) \((.+)\).*', line)
+                if m:
+                    loopbacks[m.group(1)] = m.group(3)
+        except Exception:
+            pass
+
+        # find volume groups
+        try:
+            result = util.check_output_(['pvdisplay'])
+            pvname = vgname = None
+            for line in result.splitlines():
+                if '--- Physical volume ---' in line:
+                    pvname = vgname = None
+                elif "PV Name" in line:
+                    pvname = line.replace("PV Name", "").strip()
+                elif "VG Name" in line:
+                    vgname = line.replace("VG Name", "").strip()
+
+                if pvname and vgname:
+                    try:
+                        # unmount volume groups with a physical volume originating from a disk image
+                        if '/image_mounter_' in loopbacks[pvname]:
+                            util.check_output_(['lvchange', '-a', 'n', vgname])
+                            util.check_output_(['losetup', '-d', pvname])
+                    except Exception:
+                        pass
+                    pvname = vgname = None
+
+        except Exception:
+            pass
+
+        # unmount base image
+        for mountpoint, _ in mountpoints.items():
+            if '/image_mounter_' in mountpoint:
+                util.clean_unmount(['fusermount', '-u'], mountpoint)
+
+        # finalize by cleaning /tmp
+        for folder in glob.glob("/tmp/im_*"):
+            if re.match(r".*/im_[0-9.]+_.+", folder):
+                os.rmdir(folder)
+        for folder in glob.glob("/tmp/image_mounter_*"):
+            os.rmdir(folder)
+
     def reconstruct(self):
         """Reconstructs the filesystem of all currently mounted partitions by inspecting the last mount point and
         bind mounting everything.
@@ -480,6 +566,7 @@ class StatRetriever(object):
         self.offset = offset
         self.process = None
         self.analyser = analyser
+        #noinspection PyProtectedMember
         self._debug = analyser._debug
 
     def run(self):
@@ -510,6 +597,7 @@ class StatRetriever(object):
                     if line.startswith("Block Size:") or line.startswith("Cluster Size:"):
                         block_size = int(line[line.index(':') + 2:])
                     if 'CYLINDER GROUP INFORMATION' in line:
+                        #noinspection PyBroadException
                         try:
                             self.process.terminate()  # some attempt
                         except Exception:
@@ -536,6 +624,7 @@ class StatRetriever(object):
         duration = 5  # longest possible duration for fsstat.
         thread.join(duration)
         if thread.is_alive():
+            #noinspection PyBroadException
             try:
                 self.process.terminate()
             except Exception:

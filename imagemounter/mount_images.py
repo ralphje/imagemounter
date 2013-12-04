@@ -14,11 +14,26 @@ def main():
             self.print_help()
             sys.exit(2)
 
+    class CleanAction(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            print "[!] --clean will rigorously clean anything that looks like a mount or volume group originating " \
+                  "from this utility. You may regret using this if you have other mounts or volume groups that are " \
+                  "similarly named."
+            try:
+                raw_input(">>> Press [enter] to continue... ")
+                ImageParser.force_clean()
+            except KeyboardInterrupt:
+                print "\n[-] Aborted."
+            parser.exit()
+
     parser = MyParser(description=u'Utility to mount partitions in Encase and dd images locally.')
     parser.add_argument('images', nargs='+',
                         help='Path(s) to the image(s) that you want to mount. In case the image is '
                              'split up in multiple files, just use the first file (e.g. the .E01 or .001 file).')
     parser.add_argument('--version', action='version', version=__version__, help='display version and exit')
+    parser.add_argument('--clean', action=CleanAction, nargs=0,
+                        help='try to rigorously clean anything that resembles traces from previous runs of '
+                             'this utility')
     parser.add_argument('-c', '--color', action='store_true', default=False, help='colorize the output')
     parser.add_argument('-w', '--wait', action='store_true', default=False, help='pause on some additional warnings')
     parser.add_argument('-r', '--reconstruct', action='store_true', default=False,
@@ -35,8 +50,6 @@ def main():
                              'something doesn\'t work, try another method (default: auto)')
     parser.add_argument('-md', '--mountdir', default=None,
                         help='specify other directory for partition mountpoints')
-    parser.add_argument('-l', '--loopback', default='/dev/loop0',
-                        help='specify loopback device for LVM partitions (default: /dev/loop0)')
     parser.add_argument('-vs', '--vstype', choices=['detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller', 'any'],
                         default="detect", help='specify type of volume system (partition table); if you don\'t know, '
                                                'use "detect" to try to detect, or "any" to loop over all VS types and '
