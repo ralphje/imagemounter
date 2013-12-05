@@ -12,7 +12,7 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['ImagePartition', 'ImageParser']
-__version__ = '1.1.1'
+__version__ = '1.1.2'
 
 
 class ImagePartition(object):
@@ -321,7 +321,7 @@ class ImageParser(object):
                     # find free loopback device
                     #noinspection PyBroadException
                     try:
-                        partition.loopback = util.check_output_(['losetup', '-f'])
+                        partition.loopback = util.check_output_(['losetup', '-f']).strip()
                     except Exception:
                         self._debug("[-] No free loopback device found for LVM")
                         yield partition
