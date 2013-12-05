@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import glob
 import sys
 import os
 
@@ -61,9 +62,9 @@ def main():
                                                'use "detect" to try to detect, or "any" to loop over all VS types and '
                                                'use whatever works, which may produce unexpected results (default: '
                                                'detect)')
-    parser.add_argument('-fs', '--fstype', choices=['ext', 'ufs', 'ntfs', 'lvm'], default=None,
+    parser.add_argument('-fs', '--fstype', choices=['ext', 'ufs', 'ntfs', 'lvm', 'unknown'], default=None,
                         help="specify fallback type of the filesystem, which is used when it could not be detected or "
-                             "is unsupported")
+                             "is unsupported; use unknown to mount without specifying type")
     parser.add_argument('-fsf', '--fsforce', action='store_true', default=False,
                         help="force the use of the filesystem type specified with --fstype for all partitions")
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose output')
@@ -122,7 +123,16 @@ def main():
 
     # Enumerate over all images in the CLI
     for num, image in enumerate(args.images):
-        if not os.path.exists(image):
+        # If is a directory, find a E01 file in the directory
+        if os.path.isdir(image):
+            for f in glob.glob(os.path.join(image, '*.[E0]01')):
+                image = f
+                break
+            else:
+                print col("[-] {0} is a directory, aborting!".format(image), "red")
+                break
+
+        elif not os.path.exists(image):
             print col("[-] Image {0} does not exist, aborting!".format(image), "red")
             break
 
