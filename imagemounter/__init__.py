@@ -12,7 +12,7 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['Volume', 'ImageParser']
-__version__ = '1.2.1'
+__version__ = '1.2.2'
 
 BLOCK_SIZE = 512
 
@@ -429,7 +429,7 @@ class Volume(object):
             if not fsdesc and self.fstype:
                 fsdesc = self.fstype.lower()
 
-            if u'0x83' in fsdesc or '0xfd' in fsdesc or ('ext' == fsdesc or 'ext ' in fsdesc):
+            if u'0x83' in fsdesc or '0xfd' in fsdesc or re.search(r'\bext[0-9]*\b', fsdesc):
                 fstype = 'ext'
             elif u'bsd' in fsdesc:
                 fstype = 'bsd'
@@ -439,6 +439,8 @@ class Volume(object):
                 fstype = 'lvm'
             else:
                 fstype = self.parser.fstype
+
+            self._debug("    Detected {0} as {1}".format(fsdesc,fstype))
         return fstype
 
     def get_raw_base_path(self):
