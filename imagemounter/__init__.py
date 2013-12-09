@@ -11,8 +11,8 @@ import os
 from imagemounter import util
 from termcolor import colored
 
-__ALL__ = ['ImagePartition', 'ImageParser']
-__version__ = '1.2.0'
+__ALL__ = ['Volume', 'ImageParser']
+__version__ = '1.2.1'
 
 BLOCK_SIZE = 512
 
@@ -154,7 +154,7 @@ class ImageParser(object):
         # Loop over all volumes in image.
         for p in self.volumes:
             try:
-                partition = ImagePartition(parser=self)
+                partition = Volume(parser=self)
                 self.partitions.append(partition)
                 partition.offset = p.start * BLOCK_SIZE
                 partition.fsdescription = p.desc
@@ -352,7 +352,7 @@ class ImageParser(object):
         return root
 
 
-class ImagePartition(object):
+class Volume(object):
     """Information about a partition. Note that the mountpoint may be set, or not. If it is not set, exception may be
     set. Either way, if mountpoint is set, you can use the partition. Call unmount when you're done!
     """
@@ -429,7 +429,7 @@ class ImagePartition(object):
             if not fsdesc and self.fstype:
                 fsdesc = self.fstype.lower()
 
-            if u'0x83' in fsdesc or '0xfd' in fsdesc or 'ext' in fsdesc:
+            if u'0x83' in fsdesc or '0xfd' in fsdesc or ('ext' == fsdesc or 'ext ' in fsdesc):
                 fstype = 'ext'
             elif u'bsd' in fsdesc:
                 fstype = 'bsd'
@@ -576,7 +576,7 @@ class ImagePartition(object):
         result = util.check_output_(["lvdisplay", self.volume_group], self.parser)
         for l in result.splitlines():
             if "--- Logical volume ---" in l:
-                self.volumes.append(ImagePartition(parser=self.parser))
+                self.volumes.append(Volume(parser=self.parser))
                 self.volumes[-1].index = "{0}.{1}".format(self.index, len(self.volumes) - 1)
                 self.volumes[-1].fsdescription = 'Logical Volume'
             if "LV Name" in l:
