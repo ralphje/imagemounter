@@ -33,10 +33,11 @@ def main():
                 print "\n[-] Aborted."
             parser.exit()
 
-    parser = MyParser(description=u'Utility to mount partitions in Encase and dd images locally.')
+    parser = MyParser(description=u'Utility to mount volumes in Encase and dd images locally.')
     parser.add_argument('images', nargs='+',
-                        help='Path(s) to the image(s) that you want to mount. In case the image is '
-                             'split up in multiple files, just use the first file (e.g. the .E01 or .001 file).')
+                        help='path(s) to the image(s) that you want to mount; generally just the first file (e.g. '
+                             'the .E01 or .001 file) or the folder containing the files is enough in the cast of '
+                             'split files.')
     parser.add_argument('--version', action='version', version=__version__, help='display version and exit')
     parser.add_argument('--clean', action=CleanAction, nargs=0,
                         help='try to rigorously clean anything that resembles traces from previous runs of '
@@ -56,7 +57,9 @@ def main():
                         help='use other tool to mount the initial images; results may vary between methods and if '
                              'something doesn\'t work, try another method (default: auto)')
     parser.add_argument('-md', '--mountdir', default=None,
-                        help='specify other directory for partition mountpoints')
+                        help='specify other directory for volume mountpoints')
+    parser.add_argument('-p', '--pretty', action='store_true', default=False,
+                        help='use pretty names for mount points; may provide unreliable results')
     parser.add_argument('-vs', '--vstype', choices=['detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller', 'any'],
                         default="detect", help='specify type of volume system (partition table); if you don\'t know, '
                                                'use "detect" to try to detect, or "any" to loop over all VS types and '
@@ -183,6 +186,7 @@ def main():
                         has_left_mounted = True
                         continue
 
+
                     raw_input(col('>>> Press [enter] to unmount the partition, or ^C to keep mounted... ', attrs=['dark']))
 
                     # Case where image should be unmounted, but has failed to do so. Keep asking whether the user wants
@@ -225,7 +229,7 @@ def main():
                 if not root:
                     print col("[-] Failed reconstructing filesystem: could not find root directory.", 'red')
                 else:
-                    failed = filter(lambda x: not x.bindmount and x.mountpoint and x != root, p.partitions)
+                    failed = filter(lambda x: not x.bindmountpoint and x.mountpoint and x != root, p.partitions)
                     if failed:
                         print "[+] Parts of the filesystem are reconstructed in {0}.".format(col(root.mountpoint, "green", attrs=["bold"]))
                         for m in failed:
