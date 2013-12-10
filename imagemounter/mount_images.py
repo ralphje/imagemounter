@@ -59,7 +59,8 @@ def main():
     parser.add_argument('-md', '--mountdir', default=None,
                         help='specify other directory for volume mountpoints')
     parser.add_argument('-p', '--pretty', action='store_true', default=False,
-                        help='use pretty names for mount points; may provide unreliable results')
+                        help='use pretty names for mount points; useful in combination with --mountdir and does not '
+                             'provide a fallback when the pretty mount name is unavailable')
     parser.add_argument('-vs', '--vstype', choices=['detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller', 'any'],
                         default="detect", help='specify type of volume system (partition table); if you don\'t know, '
                                                'use "detect" to try to detect, or "any" to loop over all VS types and '
