@@ -12,7 +12,7 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['Volume', 'ImageParser']
-__version__ = '1.2.2'
+__version__ = '1.2.3'
 
 BLOCK_SIZE = 512
 
@@ -23,7 +23,7 @@ class ImageParser(object):
     VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
 
     #noinspection PyUnusedLocal
-    def __init__(self, path, out=sys.stdout, mountdir=None, vstype='detect',
+    def __init__(self, path, out=sys.stdout, mountdir=None, pretty=False, vstype='detect',
                  fstype=None, fsforce=False, read_write=False, verbose=False, color=False, stats=False, method='auto',
                  **args):
         path = os.path.expandvars(os.path.expanduser(path))
@@ -62,6 +62,7 @@ class ImageParser(object):
         self.baseimage = None
         self.volumes = None
         self.mountdir = mountdir
+        self.pretty = pretty
 
         if vstype == 'any':
             self.vstype = 'any'
@@ -229,6 +230,7 @@ class ImageParser(object):
         Performs only a dry run when execute==False
         """
 
+        os.environ['LVM_SUPPRESS_FD_WARNINGS'] = '1'
         commands = []
 
         # find all mountponits
@@ -342,13 +344,7 @@ class ImageParser(object):
         viable_for_reconstruct.remove(root)
 
         for v in viable_for_reconstruct:
-            try:
-                v.bindmount = os.path.join(root.mountpoint, v.lastmountpoint[1:])
-                util.check_call_(['mount', '--bind', v.mountpoint, v.bindmount], self, stdout=subprocess.PIPE)
-            except Exception as e:
-                v.bindmount = None
-                self._debug("[-] Error bind mounting {0}.".format(v))
-                self._debug(e)
+            v.bindmount(os.path.join(root.mountpoint, v.lastmountpoint[1:]))
         return root
 
 
@@ -358,7 +354,7 @@ class Volume(object):
     """
 
     def __init__(self, parser=None, mountpoint=None, offset=0, fstype=None, fsdescription=None, index=None,
-                 label=None, lastmountpoint=None, version=None, bindmount=None, exception=None, size=None,
+                 label=None, lastmountpoint=None, version=None, bindmountpoint=None, exception=None, size=None,
                  loopback=None, volume_group=None):
         self.parser = parser
         self.mountpoint = mountpoint
@@ -377,7 +373,7 @@ class Volume(object):
         self.volumes = []
         self.lv_path = None
 
-        self.bindmount = bindmount
+        self.bindmountpoint = bindmountpoint
 
     def __unicode__(self):
         return u'{0}:{1}'.format(self.index, self.fsdescription)
@@ -440,7 +436,8 @@ class Volume(object):
             else:
                 fstype = self.parser.fstype
 
-            self._debug("    Detected {0} as {1}".format(fsdesc,fstype))
+            if fstype:
+                self._debug("    Detected {0} as {1}".format(fsdesc,fstype))
         return fstype
 
     def get_raw_base_path(self):
@@ -451,6 +448,19 @@ class Volume(object):
         else:
             return self.parser.get_raw_path()
 
+    def get_safe_label(self):
+        """Returns a label to be added to a path in the fs for this volume."""
+
+        if self.label == '/':
+            return 'root'
+
+        suffix = re.sub(r"[/ \(\)]+", "_", self.label) if self.label else ""
+        if suffix and suffix[0] == '_':
+            suffix = suffix[1:]
+        if len(suffix) > 2 and suffix[-1] == '_':
+            suffix = suffix[:-1]
+        return suffix
+
     def mount(self):
         """Mounts the partition locally."""
 
@@ -459,13 +469,21 @@ class Volume(object):
 
         # we need a mountpoint if it is not a lvm
         if fstype in ('ext', 'bsd', 'ntfs', 'unknown'):
-            suffix = re.sub(r"[/ \(\)]+", "_", self.label) if self.label else ""
-            if suffix and not suffix[0] == '_':
-                suffix = '_' + suffix
-            if len(suffix) > 2 and suffix[-1] == '_':
-                suffix = suffix[:-1]
-            self.mountpoint = tempfile.mkdtemp(prefix=u'im_' + str(self.index) + u'_', suffix=suffix,
-                                               dir=self.parser.mountdir)
+            if self.parser.pretty:
+                md = self.parser.mountdir or tempfile.tempdir
+                pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.parser.paths[0]).split('.')[0:-1]),
+                                                self.get_safe_label() or self.index)
+                path = os.path.join(md, pretty_label)
+                try:
+                    os.mkdir(path, 777)
+                    self.mountpoint = path
+                except:
+                    self._debug("[-] Could not create mountdir.")
+                    return False
+            else:
+                self.mountpoint = tempfile.mkdtemp(prefix=u'im_' + str(self.index) + u'_',
+                                                   suffix=u'_' + self.get_safe_label(),
+                                                   dir=self.parser.mountdir)
 
         # Prepare mount command
         try:
@@ -548,6 +566,21 @@ class Volume(object):
             except Exception as e2:
                 self._debug(e2)
 
+            return False
+
+    def bindmount(self, mountpoint):
+        """Bind mounts the volume to another mountpoint."""
+
+        if not self.mountpoint:
+            return False
+        try:
+            self.bindmountpoint = mountpoint
+            util.check_call_(['mount', '--bind', self.mountpoint, self.bindmountpoint], self, stdout=subprocess.PIPE)
+            return True
+        except Exception as e:
+            self.bindmountpoint = None
+            self._debug("[-] Error bind mounting {0}.".format(self))
+            self._debug(e)
             return False
 
     def find_lvm_volumes(self, force=False):
@@ -669,11 +702,11 @@ class Volume(object):
 
             self.loopback = None
 
-        if self.bindmount:
-            if not util.clean_unmount([u'umount'], self.bindmount, rmdir=False):
+        if self.bindmountpoint:
+            if not util.clean_unmount([u'umount'], self.bindmountpoint, rmdir=False):
                 return False
 
-            self.bindmount = None
+            self.bindmountpoint = None
 
         if self.mountpoint:
             if not util.clean_unmount([u'umount'], self.mountpoint):
