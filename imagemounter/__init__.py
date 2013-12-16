@@ -12,7 +12,7 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['Volume', 'ImageParser']
-__version__ = '1.2.3'
+__version__ = '1.2.4'
 
 BLOCK_SIZE = 512
 
@@ -64,7 +64,7 @@ class ImageParser(object):
         self.mountdir = mountdir
         self.pretty = pretty
 
-        if vstype == 'any':
+        if vstype.lower() == 'any':
             self.vstype = 'any'
         else:
             self.vstype = getattr(pytsk3, 'TSK_VS_TYPE_' + vstype.upper())
@@ -117,7 +117,7 @@ class ImageParser(object):
         raw_path.extend(glob.glob(os.path.join(self.basemountpoint, u'ewf1')))
         return raw_path[0]
 
-    def mount_partitions(self):
+    def mount_volumes(self):
         """Generator that mounts every partition of this image and yields the mountpoint."""
 
         # ewf raw image is now available on basemountpoint
@@ -161,11 +161,20 @@ class ImageParser(object):
                 partition.fsdescription = p.desc
                 partition.index = p.addr
                 partition.size = p.len * BLOCK_SIZE
+                if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
+                    partition.flag = 'alloc'
+                elif p.flags == pytsk3.TSK_VS_PART_FLAG_UNALLOC:
+                    partition.flag = 'unalloc'
+                elif p.flags == pytsk3.TSK_VS_PART_FLAG_META:
+                    partition.flag = 'meta'
 
                 # Retrieve additional information about image by using fsstat.
                 if self.stats:
                     partition.fill_stats()
 
+                if partition.flag != 'alloc':
+                    yield partition
+                    continue
                 partition.mount()
                 subvolumes = partition.find_lvm_volumes()  # this method does nothing when it is not an lvm
                 if not subvolumes:
@@ -189,6 +198,8 @@ class ImageParser(object):
                 except Exception as ex:
                     self._debug(ex)
                 yield partition
+
+    mount_partitions = mount_volumes
 
     def rw_active(self):
         """Indicates whether the rw-path is active."""
@@ -353,7 +364,7 @@ class Volume(object):
     set. Either way, if mountpoint is set, you can use the partition. Call unmount when you're done!
     """
 
-    def __init__(self, parser=None, mountpoint=None, offset=0, fstype=None, fsdescription=None, index=None,
+    def __init__(self, parser=None, mountpoint=None, offset=0, fstype=None, fsdescription=None, index=None, flag=None,
                  label=None, lastmountpoint=None, version=None, bindmountpoint=None, exception=None, size=None,
                  loopback=None, volume_group=None):
         self.parser = parser
@@ -362,6 +373,7 @@ class Volume(object):
         self.fstype = fstype
         self.fsdescription = fsdescription
         self.index = index
+        self.flag = flag
         self.label = label
         self.version = version
         self.lastmountpoint = lastmountpoint
@@ -389,13 +401,13 @@ class Volume(object):
             #noinspection PyProtectedMember
             self.parser._debug(val)
 
-    def get_description(self):
-        if self.size:
-            desc = u'{0} '.format(self.get_size_gib())
-        else:
-            desc = u''
+    def get_description(self, with_size=True):
+        desc = ''
 
-        desc += u'{1}:{0}'.format(self.fstype, self.index)
+        if with_size and self.size:
+            desc += u'{0} '.format(self.get_size_gib())
+
+        desc += u'{1}:{0}'.format(self.fstype or self.fsdescription, self.index)
 
         if self.label:
             desc += u' {0}'.format(self.label)
@@ -407,7 +419,14 @@ class Volume(object):
 
     def get_size_gib(self):
         if self.size and (isinstance(self.size, (int, long)) or self.size.isdigit()):
-            return u"{0} GiB".format(round(self.size / 1024.0 ** 3, 2))
+            if self.size < 1024:
+                return u"{0} B".format(self.size)
+            elif self.size < 1024 ** 2:
+                return u"{0} KiB".format(round(self.size / 1024, 2))
+            elif self.size < 1024**3:
+                return u"{0} MiB".format(round(self.size / 1024.0 ** 2, 2))
+            else:
+                return u"{0} GiB".format(round(self.size / 1024.0 ** 3, 2))
         else:
             return self.size
 
@@ -646,6 +665,8 @@ class Volume(object):
                     if line.startswith("Volume Name:") and not self.label:
                         self.label = line[line.index(':') + 2:].strip()
                     if line.startswith("Version:"):
+                        self.version = line[line.index(':') + 2:].strip()
+                    if line.startswith("Source OS:"):
                         self.version = line[line.index(':') + 2:].strip()
                     if 'CYLINDER GROUP INFORMATION' in line:
                         #noinspection PyBroadException
