@@ -96,7 +96,7 @@ def main():
         sys.exit(1)
 
     if args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount'))):
-        print "[-] No tools installed to mount the base partition!"
+        print "[-] No tools installed to mount the image base!"
         sys.exit(1)
 
     if args.reconstruct:  # Reconstruct implies use of fsstat
@@ -151,36 +151,48 @@ def main():
 
             if args.read_write:
                 print u'[+] Created read-write cache at {0}'.format(p.rwpath)
-            print u'[+] Mounted raw image [{num}/{total}], now mounting partitions...'.format(num=num + 1,
-                                                                                              total=len(args.images))
+            print u'[+] Mounted raw image [{num}/{total}], now mounting volumes...'.format(num=num + 1,
+                                                                                           total=len(args.images))
 
             sys.stdout.write("[+] Mounting partition 0...\r")
             sys.stdout.flush()
 
             i = 0
             has_left_mounted = False
-            for partition in p.mount_partitions():
+            for volume in p.mount_volumes():
                 i += 1
 
-                if not partition.mountpoint and not partition.loopback:
-                    if partition.exception:
-                        print col(u'[-] Exception while mounting {0}'.format(partition), 'red')
+                if not volume.mountpoint and not volume.loopback:
+                    if volume.exception and volume.size is not None and volume.size <= 1048576:
+                        print col(u'[-] Exception while mounting small volume {0}'.format(volume.get_description()),
+                                  'yellow')
+                        if args.wait:
+                            raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+
+                    elif volume.exception:
+                        print col(u'[-] Exception while mounting {0}'.format(volume.get_description()), 'red')
                         raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+                    elif volume.flag != 'alloc':
+                        print col(u'[-] Skipped {1} volume {0}'
+                                  .format(volume.get_description(), volume.flag), 'yellow')
+                        if args.wait:
+                            raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                     else:
-                        print col(u'[-] Could not mount partition {0}'.format(partition), 'yellow')
+                        print col(u'[-] Could not mount volume {0}'
+                                  .format(volume.get_description()), 'yellow')
                         if args.wait:
                             raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
                     continue
 
                 try:
-                    if partition.mountpoint:
-                        print u'[+] Mounted partition {0} on {1}.'.format(col(partition.get_description(), attrs=['bold']),
-                                                                          col(partition.mountpoint, 'green', attrs=['bold']))
-                    elif partition.loopback:  # fallback, generally indicates error.
-                        print u'[+] Mounted partition {0} as loopback on {1}.'.format(col(partition.get_description(), attrs=['bold']),
-                                                                                      col(partition.loopback, 'green', attrs=['bold']))
-                        print col(u'[-] Could not detect further partitions in the loopback device.', 'red')
+                    if volume.mountpoint:
+                        print u'[+] Mounted volume {0} on {1}.'.format(col(volume.get_description(), attrs=['bold']),
+                                                                       col(volume.mountpoint, 'green', attrs=['bold']))
+                    elif volume.loopback:  # fallback, generally indicates error.
+                        print u'[+] Mounted volume {0} as loopback on {1}.'.format(col(volume.get_description(), attrs=['bold']),
+                                                                                      col(volume.loopback, 'green', attrs=['bold']))
+                        print col(u'[-] Could not detect further volumes in the loopback device.', 'red')
 
                     # Do not offer unmount when reconstructing
                     if args.reconstruct:
@@ -188,16 +200,16 @@ def main():
                         continue
 
 
-                    raw_input(col('>>> Press [enter] to unmount the partition, or ^C to keep mounted... ', attrs=['dark']))
+                    raw_input(col('>>> Press [enter] to unmount the volume, or ^C to keep mounted... ', attrs=['dark']))
 
                     # Case where image should be unmounted, but has failed to do so. Keep asking whether the user wants
                     # to unmount.
                     while True:
-                        if partition.unmount():
+                        if volume.unmount():
                             break
                         else:
                             try:
-                                print col("[-] Error unmounting partition. Perhaps files are still open?", "red")
+                                print col("[-] Error unmounting volume. Perhaps files are still open?", "red")
                                 raw_input(col('>>> Press [enter] to retry unmounting, or ^C to skip... ', attrs=['dark']))
                             except KeyboardInterrupt:
                                 has_left_mounted = True
@@ -206,20 +218,21 @@ def main():
                 except KeyboardInterrupt:
                     has_left_mounted = True
                     print ""
-                sys.stdout.write("[+] Mounting partition {0}{1}\r".format(i, col("...", attrs=['blink'])))
+                sys.stdout.write("[+] Mounting volume {0}{1}\r".format(i, col("...", attrs=['blink'])))
                 sys.stdout.flush()
             if i == 0:
                 if args.vstype != 'detect':
                     print col(u'[?] Could not determine volume information. Image may be empty, or volume system type '
-                              u'{0} was incorrect.'.format(col(args.vstype.upper(), attrs=['bold'])), 'yellow')
+                              u'{0} was incorrect.'.format(args.vstype.upper()), 'yellow')
                 else:
                     print col(u'[?] Could not determine volume information. Image may be empty, or volume system type '
-                              u'could not be detected. Try explicitly providing the volume system type with --vstype.',
+                              u'could not be detected. Try explicitly providing the volume system type with --vstype. ',
+                              #u'Clues about what to use can be found by using:  parted {0} print'.format(p.get_raw_path()),
                               'yellow')
                 if args.wait:
                     raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
-            print u'[+] Parsed all partitions for this image!'
+            print u'[+] Parsed all volumes for this image!'
 
             # Perform reconstruct if required
             if args.reconstruct:
@@ -238,9 +251,9 @@ def main():
                     else:
                         print "[+] The entire filesystem is reconstructed in {0}.".format(col(root.mountpoint, "green", attrs=["bold"]))
 
-                raw_input(col(">>> Press [enter] to unmount all partitions... ", attrs=['dark']))
+                raw_input(col(">>> Press [enter] to unmount all volumes... ", attrs=['dark']))
             elif has_left_mounted:
-                raw_input(col(">>> Some partitions were left mounted. Press [enter] to unmount all... ", attrs=['dark']))
+                raw_input(col(">>> Some volumes were left mounted. Press [enter] to unmount all... ", attrs=['dark']))
 
         except KeyboardInterrupt:
             print u'\n[+] User pressed ^C, aborting...'
@@ -264,7 +277,7 @@ def main():
                     break
                 else:
                     try:
-                        print col("[-] Error unmounting base image. Perhaps partitions are still open?", 'red')
+                        print col("[-] Error unmounting base image. Perhaps volumes are still open?", 'red')
                         raw_input(col('>>> Press [enter] to retry unmounting, or ^C to cancel... ', attrs=['dark']))
                     except KeyboardInterrupt:
                         print ""  # ^C does not print \n
