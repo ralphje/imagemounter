@@ -208,7 +208,7 @@ class ImageParser(object):
 
     def mount_partitions(self):
         warnings.warn("Use mount_volumes instead", PendingDeprecationWarning)
-        self.mount_volumes()
+        return self.mount_volumes()
 
     def rw_active(self):
         """Indicates whether the rw-path is active."""
