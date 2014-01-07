@@ -7,12 +7,13 @@ import threading
 import glob
 import sys
 import os
+import warnings
 
 from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['Volume', 'ImageParser']
-__version__ = '1.2.4'
+__version__ = '1.2.5'
 
 BLOCK_SIZE = 512
 
@@ -139,7 +140,7 @@ class ImageParser(object):
                     self.volumes = pytsk3.Volume_Info(self.baseimage, vst)
                     self._debug(u"[+] Using VS type {0}".format(vs))
                     break
-                except Exception as e:
+                except Exception:
                     self._debug(u"    VS type {0} did not work".format(vs))
             else:
                 self._debug(u"[-] Failed retrieving volume info")
@@ -168,14 +169,18 @@ class ImageParser(object):
                 elif p.flags == pytsk3.TSK_VS_PART_FLAG_META:
                     partition.flag = 'meta'
 
+                # unalloc / meta partitions do not have stats and can not be mounted
+                if partition.flag != 'alloc':
+                    yield partition
+                    continue
+
                 # Retrieve additional information about image by using fsstat.
                 if self.stats:
                     partition.fill_stats()
 
-                if partition.flag != 'alloc':
-                    yield partition
-                    continue
                 partition.mount()
+                if self.stats:
+                    partition.detect_mountpoint()
                 subvolumes = partition.find_lvm_volumes()  # this method does nothing when it is not an lvm
                 if not subvolumes:
                     yield partition
@@ -186,6 +191,8 @@ class ImageParser(object):
                         if self.stats:
                             p.fill_stats()
                         p.mount()
+                        if self.stats:
+                            partition.detect_mountpoint()
                         yield p
 
             except Exception as e:
@@ -199,7 +206,9 @@ class ImageParser(object):
                     self._debug(ex)
                 yield partition
 
-    mount_partitions = mount_volumes
+    def mount_partitions(self):
+        warnings.warn("Use mount_volumes instead", PendingDeprecationWarning)
+        self.mount_volumes()
 
     def rw_active(self):
         """Indicates whether the rw-path is active."""
@@ -456,7 +465,7 @@ class Volume(object):
                 fstype = self.parser.fstype
 
             if fstype:
-                self._debug("    Detected {0} as {1}".format(fsdesc,fstype))
+                self._debug("    Detected {0} as {1}".format(fsdesc, fstype))
         return fstype
 
     def get_raw_base_path(self):
@@ -493,6 +502,7 @@ class Volume(object):
                 pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.parser.paths[0]).split('.')[0:-1]),
                                                 self.get_safe_label() or self.index)
                 path = os.path.join(md, pretty_label)
+                #noinspection PyBroadException
                 try:
                     os.mkdir(path, 777)
                     self.mountpoint = path
@@ -661,7 +671,7 @@ class Volume(object):
                     if line.startswith("File System Type:"):
                         self.fstype = line[line.index(':') + 2:].strip()
                     if line.startswith("Last Mount Point:") or line.startswith("Last mounted on:"):
-                        self.lastmountpoint = line[line.index(':') + 2:].strip()
+                        self.lastmountpoint = line[line.index(':') + 2:].strip().replace("//", "/")
                     if line.startswith("Volume Name:") and not self.label:
                         self.label = line[line.index(':') + 2:].strip()
                     if line.startswith("Version:"):
@@ -699,6 +709,42 @@ class Volume(object):
                 pass
             thread.join()
             self._debug("    Killed fsstat after {0}s".format(duration))
+
+    def detect_mountpoint(self):
+        """Attempts to detect the previous mountpoint if the stats are failing on doing so. The volume must be mounted
+        first.
+        """
+
+        if self.lastmountpoint:
+            return self.lastmountpoint
+        if not self.mountpoint:
+            return None
+
+        result = None
+        paths = os.listdir(self.mountpoint)
+        if 'grub' in paths:
+            result = '/boot'
+        elif 'usr' in paths and 'var' in paths and 'root' in paths:
+            result = '/'
+        elif 'bin' in paths and 'lib' in paths and 'local' in paths and 'src' in paths and not 'usr' in paths:
+            result = '/usr'
+        elif 'bin' in paths and 'lib' in paths and 'local' not in paths and 'src' in paths and not 'usr' in paths:
+            result = '/usr/local'
+        elif 'lib' in paths and 'local' in paths and 'tmp' in paths and not 'var' in paths:
+            result = '/var'
+        #elif sum(['bin' in paths, 'boot' in paths, 'cdrom' in paths, 'dev' in paths, 'etc' in paths, 'home' in paths,
+        #          'lib' in paths, 'lib64' in paths, 'media' in paths, 'mnt' in paths, 'opt' in paths,
+        #          'proc' in paths, 'root' in paths, 'sbin' in paths, 'srv' in paths, 'sys' in paths, 'tmp' in paths,
+        #          'usr' in paths, 'var' in paths]) > 11:
+        #    result = '/'
+
+        if result:
+            self.lastmountpoint = result
+            if not self.label:
+                self.label = self.lastmountpoint
+            self._debug("    Detected mountpoint as {0} based on files in volume".format(self.lastmountpoint))
+
+        return result
 
     #noinspection PyBroadException
     def unmount(self):

@@ -173,13 +173,11 @@ def main():
                         print col(u'[-] Exception while mounting {0}'.format(volume.get_description()), 'red')
                         raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                     elif volume.flag != 'alloc':
-                        print col(u'[-] Skipped {1} volume {0}'
-                                  .format(volume.get_description(), volume.flag), 'yellow')
+                        print col(u'[-] Skipped {1} volume {0}' .format(volume.get_description(), volume.flag), 'yellow')
                         if args.wait:
                             raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                     else:
-                        print col(u'[-] Could not mount volume {0}'
-                                  .format(volume.get_description()), 'yellow')
+                        print col(u'[-] Could not mount volume {0}'.format(volume.get_description()), 'yellow')
                         if args.wait:
                             raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
