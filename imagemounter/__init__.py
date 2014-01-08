@@ -712,7 +712,7 @@ class Volume(object):
                     self.label = "{0} ({1})".format(self.lastmountpoint, self.label)
                 elif self.lastmountpoint and not self.label:
                     self.label = self.lastmountpoint
-                elif not self.lastmountpoint and self.label.startswith("/"):  # e.g. /boot1
+                elif not self.lastmountpoint and self.label and self.label.startswith("/"):  # e.g. /boot1
                     if self.label.endswith("1"):
                         self.lastmountpoint = self.label[:-1]
                     else:

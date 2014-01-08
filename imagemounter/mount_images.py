@@ -54,8 +54,7 @@ def main():
                         help='show limited information from fsstat, which will slow down mounting and may cause '
                              'random issues such as partitions being unreadable (default)')
     parser.add_argument('--no-stats', action='store_true', default=False,
-                        help='show limited information from fsstat, which will slow down mounting and may cause '
-                             'random issues such as partitions being unreadable')
+                        help='do not show limited information from fsstat')
     parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'auto'], default='auto',
                         help='use other tool to mount the initial images; results may vary between methods and if '
                              'something doesn\'t work, try another method (default: auto)')
