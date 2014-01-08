@@ -50,7 +50,10 @@ def main():
     parser.add_argument('-rw', '--read-write', action='store_true', default=False,
                         help='mount image read-write by creating a local write-cache file in a temp directory; '
                              'implies --method=xmount')
-    parser.add_argument('-s', '--stats', action='store_true', default=False,
+    parser.add_argument('-s', '--stats', action='store_true', default=True,
+                        help='show limited information from fsstat, which will slow down mounting and may cause '
+                             'random issues such as partitions being unreadable (default)')
+    parser.add_argument('--no-stats', action='store_true', default=False,
                         help='show limited information from fsstat, which will slow down mounting and may cause '
                              'random issues such as partitions being unreadable')
     parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'auto'], default='auto',
@@ -88,6 +91,9 @@ def main():
             return s
     else:
         col = colored
+
+    if args.no_stats:
+        args.stats = False
 
     if args.method not in ('xmount', 'auto') and args.read_write:
         print "[-] {0} does not support mounting read-write! Will mount read-only.".format(args.method)
