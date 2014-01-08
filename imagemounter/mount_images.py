@@ -70,7 +70,9 @@ def main():
                         help="specify fallback type of the filesystem, which is used when it could not be detected or "
                              "is unsupported; use unknown to mount without specifying type")
     parser.add_argument('-fsf', '--fsforce', action='store_true', default=False,
-                        help="force the use of the filesystem type specified with --fstype for all partitions")
+                        help="force the use of the filesystem type specified with --fstype for all volumes")
+    parser.add_argument('-k', '--keep', action='store_true', default=False,
+                        help='keep volumes mounted after program exits')
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose output')
     args = parser.parse_args()
 
@@ -193,10 +195,9 @@ def main():
                         print col(u'[-] Could not detect further volumes in the loopback device.', 'red')
 
                     # Do not offer unmount when reconstructing
-                    if args.reconstruct:
+                    if args.reconstruct or args.keep:
                         has_left_mounted = True
                         continue
-
 
                     raw_input(col('>>> Press [enter] to unmount the volume, or ^C to keep mounted... ', attrs=['dark']))
 
@@ -250,7 +251,7 @@ def main():
                         print "[+] The entire filesystem is reconstructed in {0}.".format(col(root.mountpoint, "green", attrs=["bold"]))
 
                 raw_input(col(">>> Press [enter] to unmount all volumes... ", attrs=['dark']))
-            elif has_left_mounted:
+            elif has_left_mounted and not args.keep:
                 raw_input(col(">>> Some volumes were left mounted. Press [enter] to unmount all... ", attrs=['dark']))
 
         except KeyboardInterrupt:
@@ -262,30 +263,33 @@ def main():
             raw_input(col(">>> Press [enter] to continue.", attrs=['dark']))
 
         finally:
-            print u'[+] Analysis complete, unmounting...'
-
-            # All done with this image, unmount it
-            try:
-                remove_rw = p.rw_active() and 'y' in raw_input('>>> Delete the rw cache file? [y/N] ').lower()
-            except KeyboardInterrupt:
-                remove_rw = False
-
-            while True:
-                if p.clean(remove_rw):
-                    break
-                else:
-                    try:
-                        print col("[-] Error unmounting base image. Perhaps volumes are still open?", 'red')
-                        raw_input(col('>>> Press [enter] to retry unmounting, or ^C to cancel... ', attrs=['dark']))
-                    except KeyboardInterrupt:
-                        print ""  # ^C does not print \n
-                        break
-            print u"[+] All cleaned up"
-
-            if num == len(args.images) - 1:
-                print u'[+] Image processed, all done.'
+            if args.keep:
+                print "[+] Analysis complete."
             else:
-                print u'[+] Image processed, proceeding with next image.'
+                print u'[+] Analysis complete, unmounting...'
+
+                # All done with this image, unmount it
+                try:
+                    remove_rw = p.rw_active() and 'y' in raw_input('>>> Delete the rw cache file? [y/N] ').lower()
+                except KeyboardInterrupt:
+                    remove_rw = False
+
+                while True:
+                    if p.clean(remove_rw):
+                        break
+                    else:
+                        try:
+                            print col("[-] Error unmounting base image. Perhaps volumes are still open?", 'red')
+                            raw_input(col('>>> Press [enter] to retry unmounting, or ^C to cancel... ', attrs=['dark']))
+                        except KeyboardInterrupt:
+                            print ""  # ^C does not print \n
+                            break
+                print u"[+] All cleaned up"
+
+                if num == len(args.images) - 1:
+                    print u'[+] Image processed, all done.'
+                else:
+                    print u'[+] Image processed, proceeding with next image.'
 
 
 if __name__ == '__main__':
