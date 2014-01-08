@@ -13,7 +13,7 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['Volume', 'ImageParser']
-__version__ = '1.2.7'
+__version__ = '1.2.8'
 
 BLOCK_SIZE = 512
 
@@ -186,6 +186,7 @@ class ImageParser(object):
                     partition.flag = 'alloc'
                 elif p.flags == pytsk3.TSK_VS_PART_FLAG_UNALLOC:
                     partition.flag = 'unalloc'
+                    self._debug("    Unallocated space: block offset: {0}, length: {1} ".format(p.start, p.len))
                 elif p.flags == pytsk3.TSK_VS_PART_FLAG_META:
                     partition.flag = 'meta'
 
@@ -595,7 +596,8 @@ class Volume(object):
                     self.fstype = 'LVM'
 
             else:
-                self._debug("[-] Unknown filesystem {0}".format(self))
+                self._debug("[-] Unknown filesystem {0} (block offset: {1}, length: {2})"
+                            .format(self, self.offset / BLOCK_SIZE, self.size / BLOCK_SIZE))
                 return False
 
             # Execute mount
