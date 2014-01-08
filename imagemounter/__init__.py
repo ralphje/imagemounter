@@ -26,6 +26,7 @@ class ImageParser(object):
     #noinspection PyUnusedLocal
     def __init__(self, path, out=sys.stdout, mountdir=None, pretty=False, vstype='detect',
                  fstype=None, fsforce=False, read_write=False, verbose=False, color=False, stats=False, method='auto',
+                 multifile=True,
                  **args):
         path = os.path.expandvars(os.path.expanduser(path))
         if util.is_encase(path):
@@ -64,6 +65,7 @@ class ImageParser(object):
         self.volumes = None
         self.mountdir = mountdir
         self.pretty = pretty
+        self.multifile = multifile
 
         if vstype.lower() == 'any':
             self.vstype = 'any'
@@ -84,23 +86,41 @@ class ImageParser(object):
 
         self.basemountpoint = tempfile.mkdtemp(prefix=u'image_mounter_')
 
-        for paths in (self.paths[:1], self.paths):
+        if self.multifile:
+            pathss = (self.paths[:1], self.paths)
+        else:
+            pathss = (self.paths[:1], )
+
+        for paths in pathss:
             try:
+                fallbackcmd = None
                 if self.method == 'xmount':
                     cmd = [u'xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']
                     if self.read_write:
                         cmd.extend(['--rw', self.rwpath])
+
                 elif self.method == 'affuse':
                     cmd = [u'affuse', '-o', 'allow_other']
+                    fallbackcmd = [u'affuse']
+
                 elif self.method == 'ewfmount':
                     cmd = [u'ewfmount', '-X', 'allow_other']
+                    fallbackcmd = [u'ewfmount']
+
                 else:
                     raise Exception("Unknown mount method {0}".format(self.method))
 
-                cmd.extend(paths)
-                cmd.append(self.basemountpoint)
-
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                try:
+                    cmd.extend(paths)
+                    cmd.append(self.basemountpoint)
+                    util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                except Exception as e:
+                    if fallbackcmd:
+                        fallbackcmd.extend(paths)
+                        fallbackcmd.append(self.basemountpoint)
+                        util.check_call_(fallbackcmd, self, stdout=subprocess.PIPE)
+                    else:
+                        raise
                 return True
 
             except Exception as e:
