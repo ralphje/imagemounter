@@ -13,7 +13,7 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['Volume', 'ImageParser']
-__version__ = '1.2.5'
+__version__ = '1.2.6'
 
 BLOCK_SIZE = 512
 
