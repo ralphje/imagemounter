@@ -36,7 +36,7 @@ def main():
     parser = MyParser(description=u'Utility to mount volumes in Encase and dd images locally.')
     parser.add_argument('images', nargs='+',
                         help='path(s) to the image(s) that you want to mount; generally just the first file (e.g. '
-                             'the .E01 or .001 file) or the folder containing the files is enough in the cast of '
+                             'the .E01 or .001 file) or the folder containing the files is enough in the case of '
                              'split files.')
     parser.add_argument('--version', action='version', version=__version__, help='display version and exit')
     parser.add_argument('--clean', action=CleanAction, nargs=0,
@@ -44,16 +44,18 @@ def main():
                              'this utility')
     parser.add_argument('-c', '--color', action='store_true', default=False, help='colorize the output')
     parser.add_argument('-w', '--wait', action='store_true', default=False, help='pause on some additional warnings')
+    parser.add_argument('-k', '--keep', action='store_true', default=False,
+                        help='keep volumes mounted after program exits')
     parser.add_argument('-r', '--reconstruct', action='store_true', default=False,
                         help='attempt to reconstruct the full filesystem tree; implies -s and mounts all partitions '
                              'at once')
     parser.add_argument('-rw', '--read-write', action='store_true', default=False,
                         help='mount image read-write by creating a local write-cache file in a temp directory; '
                              'implies --method=xmount')
-    parser.add_argument('-s', '--stats', action='store_true', default=True,
+    parser.add_argument('-s', '--stats', action='store_true', default=False,
                         help='show limited information from fsstat, which will slow down mounting and may cause '
                              'random issues such as partitions being unreadable (default)')
-    parser.add_argument('--no-stats', action='store_true', default=False,
+    parser.add_argument('-n', '--no-stats', action='store_true', default=False,
                         help='do not show limited information from fsstat')
     parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'auto'], default='auto',
                         help='use other tool to mount the initial images; results may vary between methods and if '
@@ -63,18 +65,16 @@ def main():
     parser.add_argument('-p', '--pretty', action='store_true', default=False,
                         help='use pretty names for mount points; useful in combination with --mountdir and does not '
                              'provide a fallback when the pretty mount name is unavailable')
-    parser.add_argument('-vs', '--vstype', choices=['detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller', 'any'],
+    parser.add_argument('--vstype', choices=['detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller', 'any'],
                         default="detect", help='specify type of volume system (partition table); if you don\'t know, '
                                                'use "detect" to try to detect, or "any" to loop over all VS types and '
                                                'use whatever works, which may produce unexpected results (default: '
                                                'detect)')
-    parser.add_argument('-fs', '--fstype', choices=['ext', 'ufs', 'ntfs', 'lvm', 'unknown'], default=None,
+    parser.add_argument('--fstype', choices=['ext', 'ufs', 'ntfs', 'lvm', 'unknown'], default=None,
                         help="specify fallback type of the filesystem, which is used when it could not be detected or "
                              "is unsupported; use unknown to mount without specifying type")
-    parser.add_argument('-fsf', '--fsforce', action='store_true', default=False,
+    parser.add_argument('--fsforce', action='store_true', default=False,
                         help="force the use of the filesystem type specified with --fstype for all volumes")
-    parser.add_argument('-k', '--keep', action='store_true', default=False,
-                        help='keep volumes mounted after program exits')
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose output')
     args = parser.parse_args()
 
@@ -91,8 +91,11 @@ def main():
     else:
         col = colored
 
-    if args.no_stats:
+    # Always assume stats, except when --no-stats is present, and --stats is not.
+    if not args.stats and args.no_stats:
         args.stats = False
+    else:
+        args.stats = True
 
     if args.method not in ('xmount', 'auto') and args.read_write:
         print "[-] {0} does not support mounting read-write! Will mount read-only.".format(args.method)
@@ -101,21 +104,21 @@ def main():
     if args.method != 'auto' and not util.command_exists(args.method):
         print "[-] {0} is not installed!".format(args.method)
         sys.exit(1)
-
-    if args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount'))):
+    elif args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount'))):
         print "[-] No tools installed to mount the image base!"
         sys.exit(1)
 
-    if args.reconstruct:  # Reconstruct implies use of fsstat
+    if args.reconstruct and not args.stats:  # Reconstruct implies use of fsstat
+        print "[-] You explicitly disabled stats, but --reconstruct implies the use of stats. Stats are re-enabled."
         args.stats = True
 
     if args.stats and not util.command_exists('fsstat'):
-        print "[-] To obtain stats, the fsstat command is used (part of sleuthkit package), but is not installed. " \
-              "Stats will not be obtained during this session."
+        print "[-] The fsstat command (part of sleuthkit package) is required to obtain stats, but is not installed. " \
+              "Stats can not be obtained during this session."
         args.stats = False
 
         if args.reconstruct:
-            print "[-] Reconstruction is now impossible!"
+            print "[-] Reconstruction requires stats to be obtained, but stats can not be enabled."
             sys.exit(1)
 
     if args.fstype and not args.fsforce:
@@ -140,7 +143,7 @@ def main():
                 image = f
                 break
             else:
-                print col("[-] {0} is a directory, aborting!".format(image), "red")
+                print col("[-] {0} is a directory not containing a .001 or .E01 file, aborting!".format(image), "red")
                 break
 
         elif not os.path.exists(image):
