@@ -455,8 +455,10 @@ class Volume(object):
                 return u"{0} KiB".format(round(self.size / 1024, 2))
             elif self.size < 1024**3:
                 return u"{0} MiB".format(round(self.size / 1024.0 ** 2, 2))
-            else:
+            elif self.size < 1024**4:
                 return u"{0} GiB".format(round(self.size / 1024.0 ** 3, 2))
+            else:
+                return u"{0} TiB".format(round(self.size / 1024.0 ** 4, 2))
         else:
             return self.size
 
@@ -468,8 +470,8 @@ class Volume(object):
             fstype = self.parser.fstype
         else:
             fsdesc = self.fsdescription.lower()
-            # for the purposes of this function, logical volume is nothing.
-            if fsdesc == 'logical volume':
+            # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info.
+            if fsdesc in ('logical volume', 'primary'):
                 fsdesc = ''
             if not fsdesc and self.fstype:
                 fsdesc = self.fstype.lower()
@@ -544,8 +546,8 @@ class Volume(object):
                 if not self.parser.read_write:
                     cmd[-1] += ',ro'
 
-                if not self.fstype:
-                    self.fstype = 'Ext'
+                #if not self.fstype:
+                #    self.fstype = 'Ext'
 
             elif fstype == 'bsd':
                 # ufs
@@ -555,8 +557,8 @@ class Volume(object):
                 if not self.parser.read_write:
                     cmd[-1] += ',ro'
 
-                if not self.fstype:
-                    self.fstype = 'UFS'
+                #if not self.fstype:
+                #    self.fstype = 'UFS'
 
             elif fstype == 'ntfs':
                 # NTFS
@@ -565,16 +567,16 @@ class Volume(object):
                 if not self.parser.read_write:
                     cmd[-1] += ',ro'
 
-                if not self.fstype:
-                    self.fstype = 'NTFS'
+                #if not self.fstype:
+                #    self.fstype = 'NTFS'
 
             elif fstype == 'unknown':  # mounts without specifying the filesystem type
                 cmd = [u'mount', raw_path, self.mountpoint, u'-o', u'loop,offset=' + str(self.offset)]
                 if not self.parser.read_write:
                     cmd[-1] += ',ro'
 
-                if not self.fstype:
-                    self.fstype = 'Unknown'
+                #if not self.fstype:
+                #    self.fstype = 'Unknown'
 
             elif fstype == 'lvm':
                 # LVM
@@ -592,8 +594,8 @@ class Volume(object):
                 if not self.parser.read_write:
                     cmd.insert(1, '-r')
 
-                if not self.fstype:
-                    self.fstype = 'LVM'
+                #if not self.fstype:
+                #    self.fstype = 'LVM'
 
             else:
                 self._debug("[-] Unknown filesystem {0} (block offset: {1}, length: {2})"
