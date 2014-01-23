@@ -113,6 +113,10 @@ def main():
         print "[-] No tools installed to mount the image base!"
         sys.exit(1)
 
+    if args.raid and not util.command_exists('mdadm'):
+        print "[-] RAID mount requires the mdadm command"
+        sys.exit(1)
+
     if args.reconstruct and not args.stats:  # Reconstruct implies use of fsstat
         print "[-] You explicitly disabled stats, but --reconstruct implies the use of stats. Stats are re-enabled."
         args.stats = True
@@ -250,10 +254,10 @@ def main():
                     print col(u'[?] Could not determine volume information. Image may be empty, or volume system type '
                               u'{0} was incorrect.'.format(args.vstype.upper()), 'yellow')
                 else:
-                    print col(u'[?] Could not determine volume information. Image may be empty, or volume system type '
-                              u'could not be detected. Try explicitly providing the volume system type with --vstype. ',
-                              #u'Clues about what to use can be found by using:  parted {0} print'.format(p.get_raw_path()),
-                              'yellow')
+                    print col(u'[?] Could not determine volume information. Image may be empty, or volume system '
+                              u'type could not be detected. Try explicitly providing the volume system type with '
+                              u'--vstype, mounting as RAID with --raid and/or mounting as a single volume with '
+                              u'--single', 'yellow')
                 if args.wait:
                     raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
