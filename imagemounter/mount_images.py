@@ -57,9 +57,10 @@ def main():
                              'random issues such as partitions being unreadable (default)')
     parser.add_argument('-n', '--no-stats', action='store_true', default=False,
                         help='do not show limited information from fsstat')
-    parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'auto'], default='auto',
+    parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'auto', 'dummy'], default='auto',
                         help='use other tool to mount the initial images; results may vary between methods and if '
-                             'something doesn\'t work, try another method (default: auto)')
+                             'something doesn\'t work, try another method; dummy can be used when base should not be '
+                             'mounted (default: auto)')
     parser.add_argument('-md', '--mountdir', default=None,
                         help='specify other directory for volume mountpoints')
     parser.add_argument('-p', '--pretty', action='store_true', default=False,
@@ -75,6 +76,10 @@ def main():
                              "is unsupported; use unknown to mount without specifying type")
     parser.add_argument('--fsforce', action='store_true', default=False,
                         help="force the use of the filesystem type specified with --fstype for all volumes")
+    parser.add_argument('--raid', action='store_true', default=False,
+                        help="try to mount the volume as a RAID volume")
+    parser.add_argument('--single', action='store_true', default=False,
+                        help="do not try to find a volume system, but assume the image contains a single volume")
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose output')
     args = parser.parse_args()
 
@@ -101,7 +106,7 @@ def main():
         print "[-] {0} does not support mounting read-write! Will mount read-only.".format(args.method)
         args.read_write = False
 
-    if args.method != 'auto' and not util.command_exists(args.method):
+    if args.method not in ('auto', 'dummy') and not util.command_exists(args.method):
         print "[-] {0} is not installed!".format(args.method)
         sys.exit(1)
     elif args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount'))):
@@ -130,7 +135,10 @@ def main():
         print "[-] You are forcing a file system type, but have not specified the type to use. Ignoring force."
         args.fsforce = False
 
-    if args.vstype == 'any':
+    if args.vstype != 'detect' and args.single:
+        print "[!] There's no point in using --single in combination with --vstype."
+
+    elif args.vstype == 'any':
         print "[!] You are using the 'any' volume system type. This may cause unexpected results. It is recommended " \
               "to use either 'detect' or explicitly specify the correct volume system. However, 'any' may provide " \
               "some hints on the volume system to use (e.g. GPT mounted as DOS lists a GPT safety partition)."
@@ -159,6 +167,10 @@ def main():
                 print col("[-] Failed mounting base image.", "red")
                 continue
 
+            if args.raid and not p.mount_raid():
+                print col("[-] Failed mounting base image in RAID.", "red")
+                continue
+
             if args.read_write:
                 print u'[+] Created read-write cache at {0}'.format(p.rwpath)
             print u'[+] Mounted raw image [{num}/{total}], now mounting volumes...'.format(num=num + 1,
@@ -169,7 +181,13 @@ def main():
 
             i = 0
             has_left_mounted = False
-            for volume in p.mount_volumes():
+
+            if not args.single:
+                command = p.mount_volumes
+            else:
+                command = p.mount_single_volume
+
+            for volume in command():
                 i += 1
 
                 if not volume.mountpoint and not volume.loopback:
@@ -183,7 +201,7 @@ def main():
                         print col(u'[-] Exception while mounting {0}'.format(volume.get_description()), 'red')
                         raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                     elif volume.flag != 'alloc':
-                        print col(u'[-] Skipped {1} volume {0}' .format(volume.get_description(), volume.flag), 'yellow')
+                        print col(u'[-] Skipped {0} volume {1}' .format(volume.get_description(), volume.flag), 'yellow')
                         if args.wait:
                             raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                     else:
