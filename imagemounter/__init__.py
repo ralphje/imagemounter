@@ -165,8 +165,8 @@ class ImageParser(object):
         else:
             return self.get_raw_path()
 
-    def mount_raid(self):
-        """Detects whether this image is actually a RAID volume, and mounts it as such"""
+    def is_raid(self):
+        """Tests whether this image is in RAID."""
 
         if not util.command_exists('mdadm'):
             self._debug("    mdadm not installed, so could not detect RAID")
@@ -179,6 +179,14 @@ class ImageParser(object):
                 self._debug("    Detected RAID level " + l[l.index(':') + 2:])
                 break
         else:
+            return False
+
+        return True
+
+    def mount_raid(self):
+        """Detects whether this image is actually a RAID volume, and mounts it as such"""
+
+        if not self.is_raid():
             return False
 
         # find free loopback device
