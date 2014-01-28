@@ -13,21 +13,131 @@ from imagemounter import util
 from termcolor import colored
 
 __ALL__ = ['Volume', 'ImageParser']
-__version__ = '1.3.0'
+__version__ = '1.4.0'
 
 BLOCK_SIZE = 512
 
 
 class ImageParser(object):
+    def __init__(self, paths, out=sys.stdout, verbose=False, color=False, **args):
+        if isinstance(paths, (str, unicode)):
+            self.paths = [paths]
+        else:
+            self.paths = paths
+        self.out = out
+        self.verbose = verbose
+        self.verbose_color = color
+        self.args = args
+
+        self.disks = []
+        for path in self.paths:
+            self.disks.append(Disk(self, path, **self.args))
+
+    def _debug(self, val):
+        if self.verbose:
+            if self.verbose_color:
+                print >> self.out, colored(val, "cyan")
+            else:
+                print >> self.out, val
+
+    def mount_disks(self):
+        """Mounts all disks in the parser."""
+
+        result = True
+        for disk in self.disks:
+            result = disk.mount() and result
+        return result
+
+    def rw_active(self):
+        """Indicates whether any RW cache is active."""
+        result = False
+        for disk in self.disks:
+            result = disk.rw_active() or result
+        return result
+
+    mount_base = mount_disks  # backwards compatibility
+
+    def mount_raid(self):
+        """Crates a RAID device and adds all devices to the RAID. Returns True if all devices were added
+        successfully. Should be called before mount_disks.
+        """
+
+        result = True
+        for disk in self.disks:
+            result = disk.add_to_raid() and result
+        return result
+
+    def mount_single_volume(self):
+        for disk in self.disks:
+            for volume in disk.mount_single_volume():
+                yield volume
+
+    def mount_multiple_volumes(self):
+        for disk in self.disks:
+            for volume in disk.mount_multiple_volumes():
+                yield volume
+
+    def mount_volumes(self, single=None):
+        """Mounts all volumes in all disks. Call mount_disks first."""
+
+        for disk in self.disks:
+            for volume in disk.mount_volumes(single):
+                yield volume
+
+    def clean(self, remove_rw=False):
+        """Cleans everything."""
+
+        for disk in self.disks:
+            if not disk.unmount(remove_rw):
+                self._debug("[-] Error unmounting {0}".format(disk))
+                return False
+
+        return True
+
+
+
+    #Backwards compatibiltiy
+    @staticmethod
+    def force_clean(execute=True):
+        return util.force_clean(execute)
+
+    def reconstruct(self):
+        """Reconstructs the filesystem of all volumes mounted by the parser by inspecting the last mount point and
+        bind mounting everything.
+        """
+        volumes = []
+        for disk in self.disks:
+            volumes.extend(disk.volumes)
+        volumes = list(reversed(sorted(volumes)))
+
+        mounted_partitions = filter(lambda x: x.mountpoint, volumes)
+        viable_for_reconstruct = sorted(filter(lambda x: x.lastmountpoint, mounted_partitions))
+
+        try:
+            root = filter(lambda x: x.lastmountpoint == '/', viable_for_reconstruct)[0]
+        except IndexError:
+            self._debug(u"[-] Could not find / while reconstructing, aborting!")
+            return None
+
+        viable_for_reconstruct.remove(root)
+
+        for v in viable_for_reconstruct:
+            v.bindmount(os.path.join(root.mountpoint, v.lastmountpoint[1:]))
+        return root
+
+
+class Disk(object):
     """Parses an image and mounts it."""
 
     VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
 
     #noinspection PyUnusedLocal
-    def __init__(self, path, out=sys.stdout, mountdir=None, offset=0, pretty=False, vstype='detect',
-                 fstype=None, fsforce=False, read_write=False, verbose=False, color=False, stats=False, method='auto',
-                 multifile=True,
+    def __init__(self, parser, path, offset=0, vstype='detect', read_write=False, method='auto', multifile=True,
                  **args):
+
+        self.parser = parser
+
+        # Find the type and the paths
         path = os.path.expandvars(os.path.expanduser(path))
         if util.is_encase(path):
             self.type = 'encase'
@@ -35,11 +145,14 @@ class ImageParser(object):
             self.type = 'dd'
         self.paths = sorted(util.expand_path(path))
 
-        self.read_write = read_write
-        self.verbose = verbose
-        self.verbose_color = color
-        self.stats = stats
         self.offset = offset
+
+        if vstype.lower() == 'any':
+            self.vstype = 'any'
+        else:
+            self.vstype = getattr(pytsk3, 'TSK_VS_TYPE_' + vstype.upper())
+
+        self.read_write = read_write
 
         if method == 'auto':
             if self.read_write:
@@ -53,47 +166,51 @@ class ImageParser(object):
         else:
             self.method = method
 
-        self.out = out
-
-        if read_write:
-            self.rwpath = tempfile.mkstemp(prefix="image_mounter_rw_cache_")[1]
-        else:
-            self.rwpath = None
-        self.name = os.path.split(path)[1]
-        self.basemountpoint = u''
-        self.partitions = []
-        self.baseimage = None
-        self.volumes = None
-        self.mountdir = mountdir
-        self.pretty = pretty
+        self.read_write = read_write
+        self.rwpath = None
         self.multifile = multifile
+        self.args = args
 
-        if vstype.lower() == 'any':
-            self.vstype = 'any'
-        else:
-            self.vstype = getattr(pytsk3, 'TSK_VS_TYPE_' + vstype.upper())
-        self.fstype = fstype
-        self.fsforce = fsforce
+        self.name = os.path.split(path)[1]
+        self.mountpoint = u''
+        self.volumes = []
 
         self.loopback = None
         self.md_device = None
 
-    def _debug(self, val):
-        if self.verbose:
-            if self.verbose_color:
-                print >> self.out, colored(val, "cyan")
-            else:
-                print >> self.out, val
+    def __unicode__(self):
+        return unicode(self.name)
 
-    def mount_base(self):
+    def __str__(self):
+        return str(self.__unicode__())
+
+    def _debug(self, val):
+        #noinspection PyProtectedMember
+        return self.parser._debug(val)
+
+    def init(self, single=None, raid=True):
+        """Performs a full initialization. If single is None, mount_volumes is performed. If this returns nothing,
+        mount_single_volume is used in addition."""
+
+        self.mount()
+        if raid:
+            self.add_to_raid()
+
+        for v in self.mount_volumes(single):
+            yield v
+
+    def mount(self):
         """Mount the image at a temporary path for analysis"""
 
-        self.basemountpoint = tempfile.mkdtemp(prefix=u'image_mounter_')
+        self.mountpoint = tempfile.mkdtemp(prefix=u'image_mounter_')
 
         if self.multifile:
             pathss = (self.paths[:1], self.paths)
         else:
             pathss = (self.paths[:1], )
+
+        if self.read_write:
+            self.rwpath = tempfile.mkstemp(prefix="image_mounter_rw_cache_")[1]
 
         for paths in pathss:
             try:
@@ -113,8 +230,8 @@ class ImageParser(object):
 
                 elif self.method == 'dummy':
                     # remove basemountpoint
-                    os.rmdir(self.basemountpoint)
-                    self.basemountpoint = None
+                    os.rmdir(self.mountpoint)
+                    self.mountpoint = None
                     return True
 
                 else:
@@ -122,12 +239,12 @@ class ImageParser(object):
 
                 try:
                     cmd.extend(paths)
-                    cmd.append(self.basemountpoint)
+                    cmd.append(self.mountpoint)
                     util.check_call_(cmd, self, stdout=subprocess.PIPE)
                 except Exception as e:
                     if fallbackcmd:
                         fallbackcmd.extend(paths)
-                        fallbackcmd.append(self.basemountpoint)
+                        fallbackcmd.append(self.mountpoint)
                         util.check_call_(fallbackcmd, self, stdout=subprocess.PIPE)
                     else:
                         raise
@@ -137,8 +254,8 @@ class ImageParser(object):
                 self._debug(u'[-] Could not mount {0} (see below), will try multi-file method'.format(paths[0]))
                 self._debug(e)
 
-        os.rmdir(self.basemountpoint)
-        self.basemountpoint = None
+        os.rmdir(self.mountpoint)
+        self.mountpoint = None
 
         return False
 
@@ -148,9 +265,9 @@ class ImageParser(object):
         if self.method == 'dummy':
             return self.paths[0]
         else:
-            raw_path = glob.glob(os.path.join(self.basemountpoint, u'*.dd'))
-            raw_path.extend(glob.glob(os.path.join(self.basemountpoint, u'*.raw')))
-            raw_path.extend(glob.glob(os.path.join(self.basemountpoint, u'ewf1')))
+            raw_path = glob.glob(os.path.join(self.mountpoint, u'*.dd'))
+            raw_path.extend(glob.glob(os.path.join(self.mountpoint, u'*.raw')))
+            raw_path.extend(glob.glob(os.path.join(self.mountpoint, u'ewf1')))
             return raw_path[0]
 
     def get_fs_path(self):
@@ -183,8 +300,8 @@ class ImageParser(object):
 
         return True
 
-    def mount_raid(self):
-        """Detects whether this image is actually a RAID volume, and mounts it as such"""
+    def add_to_raid(self):
+        """Adds the disk to the main RAID"""
 
         if not self.is_raid():
             return False
@@ -209,30 +326,42 @@ class ImageParser(object):
             self._debug(e)
             return False
 
-        # find free md device (don't know of a command that does this)
-        devices_in_use = util.check_output_(['cat', '/proc/mdstat'], self).strip().split('unused devices')[0]
-        for device in ('md0', 'md1', 'md2', 'md3', 'md4', 'md5', 'md6', 'md7', 'md8', 'md9'):
-            if device not in devices_in_use:
-                self.md_device = '/dev/' + device
-                break
-        else:
-            self._debug("    Could not find unused MD device")
-            return False
-
         try:
             # use mdadm to mount the loopback to a md device
-            util.check_call_(['mdadm', '-AR', self.md_device, self.loopback], self, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        except Exception:
+            # incremental and run as soon as available
+            output = util.check_output_(['mdadm', '-IR', self.loopback], self, stderr=subprocess.STDOUT)
+            match = re.findall(r"attached to ([^ ,]+)", output)
+            if match:
+                self.md_device = os.path.realpath(match[0])
+                self._debug("    Mounted RAID to {0}".format(self.md_device))
+        except Exception as e:
             self._debug("[-] Failed mounting RAID.")
+            self._debug(e)
             return False
 
         return True
 
+    def mount_volumes(self, single=None):
+        if single:
+            # if single, then only use single_Volume
+            for v in self.mount_single_volume():
+                yield v
+        else:
+            # if single == False or single == None, loop over all volumes
+            amount = 0
+            for v in self.mount_multiple_volumes():
+                amount += 1
+                yield v
+
+            # if single == None and no volumes were mounted, use single_volume
+            if single is None and amount == 0:
+                for v in self.mount_single_volume():
+                    yield v
+
     def mount_single_volume(self):
         """Assumes the mounted image does not contain a full disk image, but only a single volume."""
 
-        volume = Volume(parser=self)
+        volume = Volume(disk=self, **self.args)
         volume.offset = 0
         volume.index = 0
 
@@ -243,143 +372,108 @@ class ImageParser(object):
                 volume.size = int(description.split('size: ', 1)[1].strip())
 
         volume.flag = 'alloc'
-        self.partitions = [volume]
+        self.volumes = [volume]
 
-        volume.mount()
-        subvolumes = volume.find_lvm_volumes()  # this method does nothing when it is not an lvm
-        if not subvolumes:
-            yield volume
-        else:
-            # yield from subvolumes
-            for p in subvolumes:
-                self._debug(u"    Mounting LVM volume {0}".format(p))
-                if self.stats:
-                    p.fill_stats()
-                p.mount()
-                if self.stats:
-                    p.detect_mountpoint()
-                yield p
+        for v in volume.init(no_stats=True):  # stats can't  be retrieved from single volumes
+            yield v
 
-    def mount_volumes(self):
+    def _find_volumes(self):
+        """Finds all volumes based on the pytsk3 library."""
+
+        baseimage = None
+        try:
+            # ewf raw image is now available on basemountpoint
+            # either as ewf1 file or as .dd file
+            raw_path = self.get_raw_path()
+            try:
+                baseimage = pytsk3.Img_Info(raw_path)
+            except Exception as e:
+                self._debug(u"[-] Failed retrieving image info (possible empty image).")
+                self._debug(e)
+                return []
+
+            # any loops over all vstypes
+            if self.vstype == 'any':
+                for vs in ImageParser.VOLUME_SYSTEM_TYPES:
+                    #noinspection PyBroadException
+                    try:
+                        vst = getattr(pytsk3, 'TSK_VS_TYPE_' + vs.upper())
+                        volumes = pytsk3.Volume_Info(baseimage, vst)
+                        self._debug(u"[+] Using VS type {0}".format(vs))
+                        return volumes
+                        break
+                    except Exception:
+                        self._debug(u"    VS type {0} did not work".format(vs))
+                else:
+                    self._debug(u"[-] Failed retrieving volume info")
+                    return []
+            else:
+                # base case: just obtian all volumes
+                try:
+                    volumes = pytsk3.Volume_Info(baseimage, self.vstype)
+                    return volumes
+                except Exception as e:
+                    self._debug(u"[-] Failed retrieving volume info (possible empty image).")
+                    self._debug(e)
+                    return []
+        finally:
+            if baseimage:
+                baseimage.close()
+
+    def mount_multiple_volumes(self):
         """Generator that mounts every partition of this image and yields the mountpoint."""
 
-        # ewf raw image is now available on basemountpoint
-        # either as ewf1 file or as .dd file
-        raw_path = self.get_raw_path()
-        try:
-            self.baseimage = pytsk3.Img_Info(raw_path)
-        except Exception as e:
-            self._debug(u"[-] Failed retrieving image info (possible empty image).")
-            self._debug(e)
-            return
-
-        # any loops over all vstypes
-        if self.vstype == 'any':
-            for vs in ImageParser.VOLUME_SYSTEM_TYPES:
-                #noinspection PyBroadException
-                try:
-                    vst = getattr(pytsk3, 'TSK_VS_TYPE_' + vs.upper())
-                    self.volumes = pytsk3.Volume_Info(self.baseimage, vst)
-                    self._debug(u"[+] Using VS type {0}".format(vs))
-                    break
-                except Exception:
-                    self._debug(u"    VS type {0} did not work".format(vs))
-            else:
-                self._debug(u"[-] Failed retrieving volume info")
-                return
-        else:
-            try:
-                self.volumes = pytsk3.Volume_Info(self.baseimage, self.vstype)
-            except Exception as e:
-                self._debug(u"[-] Failed retrieving volume info (possible empty image).")
-                self._debug(e)
-                return
-
         # Loop over all volumes in image.
-        for p in self.volumes:
-            try:
-                partition = Volume(parser=self)
-                self.partitions.append(partition)
-                partition.offset = p.start * BLOCK_SIZE
-                partition.fsdescription = p.desc
-                partition.index = p.addr
-                partition.size = p.len * BLOCK_SIZE
-                if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
-                    partition.flag = 'alloc'
-                elif p.flags == pytsk3.TSK_VS_PART_FLAG_UNALLOC:
-                    partition.flag = 'unalloc'
-                    self._debug("    Unallocated space: block offset: {0}, length: {1} ".format(p.start, p.len))
-                elif p.flags == pytsk3.TSK_VS_PART_FLAG_META:
-                    partition.flag = 'meta'
+        for p in self._find_volumes():
+            volume = Volume(disk=self, **self.args)
+            self.volumes.append(volume)
 
-                # unalloc / meta partitions do not have stats and can not be mounted
-                if partition.flag != 'alloc':
-                    yield partition
-                    continue
+            # Fill volume with more information
+            volume.offset = p.start * BLOCK_SIZE
+            volume.fsdescription = p.desc
+            volume.index = p.addr
+            volume.size = p.len * BLOCK_SIZE
 
-                # Retrieve additional information about image by using fsstat.
-                if self.stats:
-                    partition.fill_stats()
+            if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
+                volume.flag = 'alloc'
+            elif p.flags == pytsk3.TSK_VS_PART_FLAG_UNALLOC:
+                volume.flag = 'unalloc'
+                self._debug("    Unallocated space: block offset: {0}, length: {1} ".format(p.start, p.len))
+            elif p.flags == pytsk3.TSK_VS_PART_FLAG_META:
+                volume.flag = 'meta'
 
-                partition.mount()
-                if self.stats:
-                    partition.detect_mountpoint()
-                subvolumes = partition.find_lvm_volumes()  # this method does nothing when it is not an lvm
-                if not subvolumes:
-                    yield partition
-                else:
-                    # yield from subvolumes
-                    for p in subvolumes:
-                        self._debug(u"    Mounting LVM volume {0}".format(p))
-                        if self.stats:
-                            p.fill_stats()
-                        p.mount()
-                        if self.stats:
-                            p.detect_mountpoint()
-                        yield p
+            # unalloc / meta partitions do not have stats and can not be mounted
+            if volume.flag != 'alloc':
+                yield volume
+                continue
 
-            except Exception as e:
-                partition.exception = e
-                self._debug("[-] Error mounting.")
-                self._debug(e)
-                try:
-                    if partition.mountpoint:
-                        os.rmdir(partition.mountpoint)
-                        partition.mountpoint = None
-                except Exception as ex:
-                    self._debug(ex)
-                yield partition
+            for v in volume.init():
+                yield v
 
-    def mount_partitions(self):
-        warnings.warn("Use mount_volumes instead", PendingDeprecationWarning)
-        return self.mount_volumes()
+    mount_partitions = mount_multiple_volumes  # Backwards compatibility
 
     def rw_active(self):
         """Indicates whether the rw-path is active."""
 
         return self.rwpath and os.path.getsize(self.rwpath)
 
-    def clean(self, remove_rw=False):
+    def unmount(self, remove_rw=False):
         """Method that removes all ties to the filesystem, so the image can be unmounted successfully"""
 
-        if self.baseimage:
-            self.baseimage.close()
-        self.baseimage = None
-        self.volumes = None
-
-        if self.rw_active() and remove_rw:
-            os.remove(self.rwpath)
-
-        for m in self.partitions:
+        for m in list(reversed(sorted(self.volumes))):
             if not m.unmount():
-                self._debug(u"[-] Error unmounting partition {0}".format(m.mountpoint))
+                self._debug(u"[-] Error unmounting volume {0}".format(m.mountpoint))
 
+        # TODO: remove specific device from raid array
         if self.md_device:
+            # Removes the RAID device first. Actually, we should be able to remove the devices from the array separately,
+            # but whatever.
             try:
                 util.check_call_(['mdadm', '-S', self.md_device], self, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 self.md_device = None
-            except Exception:
+            except Exception as e:
                 self._debug(u"[-] Failed unmounting MD device {0}".format(self.md_device))
+                self._debug(e)
 
         if self.loopback:
             try:
@@ -388,123 +482,16 @@ class ImageParser(object):
             except Exception:
                 self._debug(u"[-] Failed deleting loopback device {0}".format(self.loopback))
 
-        if self.basemountpoint and not util.clean_unmount([u'fusermount', u'-u'], self.basemountpoint):
-            self._debug(u"[-] Error unmounting base partition {0}".format(self.basemountpoint))
+        if self.mountpoint and not util.clean_unmount([u'fusermount', u'-u'], self.mountpoint):
+            self._debug(u"[-] Error unmounting base {0}".format(self.mountpoint))
             return False
+
+        if self.rw_active() and remove_rw:
+            os.remove(self.rwpath)
+
         return True
 
-    #noinspection PyBroadException
-    @staticmethod
-    def force_clean(execute=True):
-        """Cleans previous mount points without knowing which is mounted. It assumes proper naming of mountpoints.
-
-        1. Unmounts all bind mounted folders in folders with a name of the form /im_0_
-        2. Unmounts all folders with a name of the form /im_0_ or originating from /image_mounter_
-        3. Deactivates volume groups which originate from a loopback device, which originates from /image_mounter
-        4. ... and unmounts their related loopback devices
-        5. Unmounts all /image_mounter_ folders
-        6. Removes all /tmp/image_mounter folders
-
-        Performs only a dry run when execute==False
-        """
-
-        os.environ['LVM_SUPPRESS_FD_WARNINGS'] = '1'
-        commands = []
-
-        # find all mountponits
-        mountpoints = {}
-        try:
-            result = util.check_output_(['mount'])
-            for line in result.splitlines():
-                m = re.match(r'(.+) on (.+) type (.+) \((.+)\)', line)
-                if m:
-                    mountpoints[m.group(2)] = (m.group(1), m.group(3), m.group(4))
-        except Exception:
-            pass
-
-        # start by unmounting all bind mounts
-        for mountpoint, (orig, fs, opts) in mountpoints.items():
-            if 'bind' in opts and re.match(r".*/im_[0-9.]+_.+", mountpoint):
-                commands.append('umount {0}'.format(mountpoint))
-                if execute:
-                    util.clean_unmount(['umount'], mountpoint, rmdir=False)
-        # now unmount all mounts originating from an image_mounter
-        for mountpoint, (orig, fs, opts) in mountpoints.items():
-            if 'bind' not in opts and ('/image_mounter_' in orig or re.match(r".*/im_[0-9.]+_.+", mountpoint)):
-                commands.append('umount {0}'.format(mountpoint))
-                commands.append('rm -Rf {0}'.format(mountpoint))
-                if execute:
-                    util.clean_unmount(['umount'], mountpoint)
-
-        # find all loopback devices
-        loopbacks = {}
-        try:
-            result = util.check_output_(['losetup', '-a'])
-            for line in result.splitlines():
-                m = re.match(r'(.+): (.+) \((.+)\).*', line)
-                if m:
-                    loopbacks[m.group(1)] = m.group(3)
-        except Exception:
-            pass
-
-        # find volume groups
-        try:
-            result = util.check_output_(['pvdisplay'])
-            pvname = vgname = None
-            for line in result.splitlines():
-                if '--- Physical volume ---' in line:
-                    pvname = vgname = None
-                elif "PV Name" in line:
-                    pvname = line.replace("PV Name", "").strip()
-                elif "VG Name" in line:
-                    vgname = line.replace("VG Name", "").strip()
-
-                if pvname and vgname:
-                    try:
-                        # unmount volume groups with a physical volume originating from a disk image
-                        if '/image_mounter_' in loopbacks[pvname]:
-                            commands.append('lvchange -a n {0}'.format(vgname))
-                            commands.append('losetup -d {0}'.format(pvname))
-                            if execute:
-                                util.check_output_(['lvchange', '-a', 'n', vgname])
-                                util.check_output_(['losetup', '-d', pvname])
-                    except Exception:
-                        pass
-                    pvname = vgname = None
-
-        except Exception:
-            pass
-
-        # unmount base image
-        for mountpoint, _ in mountpoints.items():
-            if '/image_mounter_' in mountpoint:
-                commands.append('fusermount -u {0}'.format(mountpoint))
-                commands.append('rm -Rf {0}'.format(mountpoint))
-                if execute:
-                    util.clean_unmount(['fusermount', '-u'], mountpoint)
-
-        # finalize by cleaning /tmp
-        for folder in glob.glob("/tmp/im_*"):
-            if re.match(r".*/im_[0-9.]+_.+", folder):
-                cmd = 'rm -Rf {0}'.format(folder)
-                if cmd not in commands:
-                    commands.append(cmd)
-                if execute:
-                    try:
-                        os.rmdir(folder)
-                    except Exception:
-                        pass
-        for folder in glob.glob("/tmp/image_mounter_*"):
-            cmd = 'rm -Rf {0}'.format(folder)
-            if cmd not in commands:
-                commands.append(cmd)
-            if execute:
-                try:
-                    os.rmdir(folder)
-                except Exception:
-                    pass
-
-        return commands
+    clean = unmount  # backwards compatibility
 
     def reconstruct(self):
         """Reconstructs the filesystem of all currently mounted partitions by inspecting the last mount point and
@@ -531,28 +518,38 @@ class Volume(object):
     set. Either way, if mountpoint is set, you can use the partition. Call unmount when you're done!
     """
 
-    def __init__(self, parser=None, mountpoint=None, offset=0, fstype=None, fsdescription=None, index=None, flag=None,
-                 label=None, lastmountpoint=None, version=None, bindmountpoint=None, exception=None, size=None,
-                 loopback=None, volume_group=None):
-        self.parser = parser
-        self.mountpoint = mountpoint
-        self.offset = offset
-        self.fstype = fstype
-        self.fsdescription = fsdescription
-        self.index = index
-        self.flag = flag
-        self.label = label
-        self.version = version
-        self.lastmountpoint = lastmountpoint
-        self.exception = exception
-        self.size = size
-        self.loopback = loopback
+    def __init__(self, disk=None, stats=False, fsforce=False, fsfallback=None, pretty=False, mountdir=None, **args):
+        self.disk = disk
+        self.stats = stats
+        self.fsforce = fsforce
+        self.fsfallback = fsfallback
+        self.pretty = pretty
+        self.mountdir = mountdir
 
-        self.volume_group = volume_group
+        # Should be filled somewhere
+        self.size = 0
+        self.offset = 0
+        self.index = 0
+        self.size = 0
+        self.flag = 'alloc'
+        self.fsdescription = None
+
+        # Should be filled by fill_stats
+        self.lastmountpoint = None
+        self.label = None
+        self.version = None
+        self.fstype = None
+
+        # Should be filled by mount
+        self.mountpoint = None
+        self.bindmountpoint = None
+        self.loopback = None
+        self.exception = None
+
+        # Used by lvm specific functions
+        self.volume_group = None
         self.volumes = []
         self.lv_path = None
-
-        self.bindmountpoint = bindmountpoint
 
     def __unicode__(self):
         return u'{0}:{1}'.format(self.index, self.fsdescription)
@@ -564,9 +561,8 @@ class Volume(object):
         return cmp(self.lastmountpoint, other.lastmountpoint)
 
     def _debug(self, val):
-        if self.parser:
-            #noinspection PyProtectedMember
-            self.parser._debug(val)
+        if self.disk:
+            self.disk._debug(val)
 
     def get_description(self, with_size=True):
         desc = ''
@@ -603,8 +599,8 @@ class Volume(object):
         """Determines the FS type for this partition. Used internally to determine which mount system to use."""
 
         # Determine fs type. If forced, always use provided type.
-        if self.parser.fsforce:
-            fstype = self.parser.fstype
+        if self.fsforce:
+            fstype = self.fsfallback
         else:
             fsdesc = self.fsdescription.lower()
             # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info.
@@ -622,7 +618,7 @@ class Volume(object):
             elif u'0x8e' in fsdesc or 'lvm' in fsdesc:
                 fstype = 'lvm'
             else:
-                fstype = self.parser.fstype
+                fstype = self.fsfallback
 
             if fstype:
                 self._debug("    Detected {0} as {1}".format(fsdesc, fstype))
@@ -634,7 +630,7 @@ class Volume(object):
         if self.lv_path:
             return self.lv_path
         else:
-            return self.parser.get_fs_path()
+            return self.disk.get_fs_path()
 
     def get_safe_label(self):
         """Returns a label to be added to a path in the fs for this volume."""
@@ -649,6 +645,27 @@ class Volume(object):
             suffix = suffix[:-1]
         return suffix
 
+    def init(self, no_stats=False):
+        """Calls all methods required to fully mount the volume. Yields all subvolumes, or the volume itself,
+        if none.
+        """
+
+        if self.stats and not no_stats:
+            self.fill_stats()
+        self.mount()
+        if self.stats and not no_stats:
+            self.detect_mountpoint()
+
+        subvolumes = self.find_lvm_volumes()
+
+        if not subvolumes:
+            yield self
+        else:
+            for v in subvolumes:
+                self._debug(u"    Mounting LVM volume {0}".format(v))
+                for s in v.init():
+                    yield s
+
     def mount(self):
         """Mounts the partition locally."""
 
@@ -657,9 +674,9 @@ class Volume(object):
 
         # we need a mountpoint if it is not a lvm
         if fstype in ('ext', 'bsd', 'ntfs', 'unknown'):
-            if self.parser.pretty:
-                md = self.parser.mountdir or tempfile.tempdir
-                pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.parser.paths[0]).split('.')[0:-1]),
+            if self.pretty:
+                md = self.mountdir or tempfile.tempdir
+                pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]),
                                                 self.get_safe_label() or self.index)
                 path = os.path.join(md, pretty_label)
                 #noinspection PyBroadException
@@ -672,7 +689,7 @@ class Volume(object):
             else:
                 self.mountpoint = tempfile.mkdtemp(prefix=u'im_' + str(self.index) + u'_',
                                                    suffix=u'_' + self.get_safe_label(),
-                                                   dir=self.parser.mountdir)
+                                                   dir=self.mountdir)
 
         # Prepare mount command
         try:
@@ -680,7 +697,7 @@ class Volume(object):
                 # ext
                 cmd = [u'mount', raw_path, self.mountpoint, u'-t', u'ext4', u'-o',
                        u'loop,noexec,noload,offset=' + str(self.offset)]
-                if not self.parser.read_write:
+                if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
                 #if not self.fstype:
@@ -691,7 +708,7 @@ class Volume(object):
                 #mount -t ufs -o ufstype=ufs2,loop,ro,offset=4294967296 /tmp/image/ewf1 /media/a
                 cmd = [u'mount', raw_path, self.mountpoint, u'-t', u'ufs', u'-o',
                        u'ufstype=ufs2,loop,offset=' + str(self.offset)]
-                if not self.parser.read_write:
+                if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
                 #if not self.fstype:
@@ -701,7 +718,7 @@ class Volume(object):
                 # NTFS
                 cmd = [u'mount', raw_path, self.mountpoint, u'-t', u'ntfs', u'-o',
                        u'loop,noexec,offset=' + str(self.offset)]
-                if not self.parser.read_write:
+                if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
                 #if not self.fstype:
@@ -709,7 +726,7 @@ class Volume(object):
 
             elif fstype == 'unknown':  # mounts without specifying the filesystem type
                 cmd = [u'mount', raw_path, self.mountpoint, u'-o', u'loop,offset=' + str(self.offset)]
-                if not self.parser.read_write:
+                if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
                 #if not self.fstype:
@@ -722,13 +739,13 @@ class Volume(object):
                 # find free loopback device
                 #noinspection PyBroadException
                 try:
-                    self.loopback = util.check_output_(['losetup', '-f'], self.parser).strip()
+                    self.loopback = util.check_output_(['losetup', '-f'], self).strip()
                 except Exception:
                     self._debug("[-] No free loopback device found for LVM")
                     return False
 
                 cmd = [u'losetup', u'-o', str(self.offset), self.loopback, raw_path]
-                if not self.parser.read_write:
+                if not self.disk.read_write:
                     cmd.insert(1, '-r')
 
                 #if not self.fstype:
@@ -745,7 +762,7 @@ class Volume(object):
                 return False
 
             # Execute mount
-            util.check_call_(cmd, self.parser, stdout=subprocess.PIPE)
+            util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
             return True
         except Exception as e:
@@ -791,7 +808,7 @@ class Volume(object):
         # Scan for new lvm volumes
         result = util.check_output_(["lvm", "pvscan"], self)
         for l in result.splitlines():
-            if self.loopback in l or (self.offset == 0 and self.parser.get_fs_path() in l):
+            if self.loopback in l or (self.offset == 0 and self.disk.get_fs_path() in l):
                 for vg in re.findall(r'VG (\w+)', l):
                     self.volume_group = vg
 
@@ -800,15 +817,17 @@ class Volume(object):
             return []
 
         # Enable lvm volumes
-        util.check_call_(["vgchange", "-a", "y", self.volume_group], self.parser, stdout=subprocess.PIPE)
+        util.check_call_(["vgchange", "-a", "y", self.volume_group], self, stdout=subprocess.PIPE)
 
         # Gather information about lvolumes, gathering their label, size and raw path
-        result = util.check_output_(["lvdisplay", self.volume_group], self.parser)
+        result = util.check_output_(["lvdisplay", self.volume_group], self)
         for l in result.splitlines():
             if "--- Logical volume ---" in l:
-                self.volumes.append(Volume(parser=self.parser, flag='alloc'))
+                self.volumes.append(Volume(disk=self.disk, stats=self.stats, fsforce=self.fsforce,
+                                           fsfallback=self.fsfallback, pretty=self.pretty, mountdir=self.mountdir))
                 self.volumes[-1].index = "{0}.{1}".format(self.index, len(self.volumes) - 1)
                 self.volumes[-1].fsdescription = 'Logical Volume'
+                self.volumes[-1].flag = 'alloc'
             if "LV Name" in l:
                 self.volumes[-1].label = l.replace("LV Name", "").strip()
             if "LV Size" in l:
@@ -926,7 +945,7 @@ class Volume(object):
 
         if self.loopback and self.volume_group:
             try:
-                util.check_call_(['vgchange', '-a', 'n', self.volume_group], self.parser, stdout=subprocess.PIPE)
+                util.check_call_(['vgchange', '-a', 'n', self.volume_group], self, stdout=subprocess.PIPE)
             except Exception:
                 return False
 
@@ -934,7 +953,7 @@ class Volume(object):
 
         if self.loopback:
             try:
-                util.check_call_(['losetup', '-d', self.loopback], self.parser)
+                util.check_call_(['losetup', '-d', self.loopback], self)
             except Exception:
                 return False
 
