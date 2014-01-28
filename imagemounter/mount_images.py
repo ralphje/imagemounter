@@ -71,15 +71,19 @@ def main():
                                                'use "detect" to try to detect, or "any" to loop over all VS types and '
                                                'use whatever works, which may produce unexpected results (default: '
                                                'detect)')
-    parser.add_argument('--fstype', choices=['ext', 'ufs', 'ntfs', 'lvm', 'unknown'], default=None,
+    parser.add_argument('--fsfallback', choices=['ext', 'ufs', 'ntfs', 'lvm', 'unknown'], default=None,
                         help="specify fallback type of the filesystem, which is used when it could not be detected or "
                              "is unsupported; use unknown to mount without specifying type")
     parser.add_argument('--fsforce', action='store_true', default=False,
-                        help="force the use of the filesystem type specified with --fstype for all volumes")
+                        help="force the use of the filesystem type specified with --fsfallback for all volumes")
     parser.add_argument('--raid', action='store_true', default=False,
-                        help="try to mount the volume as a RAID volume")
+                        help="try to detect whether the volume is part of a RAID array (default)")
+    parser.add_argument('--no-raid', action='store_true', default=False,
+                        help="prevent trying to mount the volume in a RAID array")
     parser.add_argument('--single', action='store_true', default=False,
                         help="do not try to find a volume system, but assume the image contains a single volume")
+    parser.add_argument('--no-single', action='store_true', default=False,
+                        help="prevent trying to mount the image as a single volume if no volume system was found")
     parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose output')
     args = parser.parse_args()
 
@@ -101,6 +105,20 @@ def main():
         args.stats = False
     else:
         args.stats = True
+
+    # Make args.raid default to True
+    if not args.raid and args.no_raid:
+        args.raid = False
+    else:
+        args.raid = True
+
+    # Make args.single default to None
+    if args.single == args.no_single:
+        args.single = None
+    elif args.single:
+        args.single = True
+    elif args.no_single:
+        args.single = False
 
     if args.method not in ('xmount', 'auto') and args.read_write:
         print "[-] {0} does not support mounting read-write! Will mount read-only.".format(args.method)
@@ -130,12 +148,12 @@ def main():
             print "[-] Reconstruction requires stats to be obtained, but stats can not be enabled."
             sys.exit(1)
 
-    if args.fstype and not args.fsforce:
+    if args.fsfallback and not args.fsforce:
         print "[!] You are using the file system type {0} as fallback. This may cause unexpected results."\
-            .format(args.fstype)
-    elif args.fstype and args.fsforce:
-        print "[!] You are forcing the file system type to {0}. This may cause unexpected results.".format(args.fstype)
-    elif not args.fstype and args.fsforce:
+            .format(args.fsfallback)
+    elif args.fsfallback and args.fsforce:
+        print "[!] You are forcing the file system type to {0}. This may cause unexpected results.".format(args.fsfallback)
+    elif not args.fsfallback and args.fsforce:
         print "[-] You are forcing a file system type, but have not specified the type to use. Ignoring force."
         args.fsforce = False
 
@@ -148,51 +166,50 @@ def main():
               "some hints on the volume system to use (e.g. GPT mounted as DOS lists a GPT safety partition)."
 
     # Enumerate over all images in the CLI
+    images = []
     for num, image in enumerate(args.images):
         # If is a directory, find a E01 file in the directory
         if os.path.isdir(image):
             for f in glob.glob(os.path.join(image, '*.[E0]01')):
-                image = f
+                images.append(f)
                 break
             else:
                 print col("[-] {0} is a directory not containing a .001 or .E01 file, aborting!".format(image), "red")
                 break
+            continue
 
         elif not os.path.exists(image):
             print col("[-] Image {0} does not exist, aborting!".format(image), "red")
             break
 
+        images.append(image)
+
+    else:
         try:
-            p = ImageParser(image, **vars(args))
-            print u'[+] Mounting image {0} using {1}...'.format(p.paths[0], p.method)
+            p = ImageParser(images, **vars(args))
 
-            # Mount the base image using the preferred method
-            if not p.mount_base():
-                print col("[-] Failed mounting base image.", "red")
-                continue
+            # Mount all disks. We could use .init, but where's the fun in that?
+            for disk in p.disks:
+                print u'[+] Mounting image {0} using {1}...'.format(p.paths[0], args.method)
 
-            if args.raid and not p.mount_raid():
-                print col("[-] Failed mounting base image in RAID.", "red")
-                continue
+                # Mount the base image using the preferred method
+                if not disk.mount():
+                    print col("[-] Failed mounting base image.", "red")
+                    continue
 
-            if args.read_write:
-                print u'[+] Created read-write cache at {0}'.format(p.rwpath)
-            print u'[+] Mounted raw image [{num}/{total}], now mounting volumes...'.format(num=num + 1,
-                                                                                           total=len(args.images))
+                if args.raid and not disk.add_to_raid():
+                    print col("[-] Failed mounting base image in RAID.", "red")
+                    continue
+
+                if args.read_write:
+                    print u'[+] Created read-write cache at {0}'.format(disk.rwpath)
+                print u'[+] Mounted raw image [{num}/{total}]'.format(num=num + 1, total=len(args.images))
 
             sys.stdout.write("[+] Mounting partition 0...\r")
             sys.stdout.flush()
-
-            i = 0
             has_left_mounted = False
 
-            if not args.single:
-                command = p.mount_volumes
-            else:
-                command = p.mount_single_volume
-
-            for volume in command():
-                i += 1
+            for volume in p.mount_volumes(args.single):
 
                 if not volume.mountpoint and not volume.loopback:
                     if volume.exception and volume.size is not None and volume.size <= 1048576:
@@ -205,7 +222,7 @@ def main():
                         print col(u'[-] Exception while mounting {0}'.format(volume.get_description()), 'red')
                         raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                     elif volume.flag != 'alloc':
-                        print col(u'[-] Skipped {0} volume {1}' .format(volume.get_description(), volume.flag), 'yellow')
+                        print col(u'[-] Skipped {0} {1} volume' .format(volume.get_description(), volume.flag), 'yellow')
                         if args.wait:
                             raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                     else:
@@ -247,32 +264,37 @@ def main():
                 except KeyboardInterrupt:
                     has_left_mounted = True
                     print ""
-                sys.stdout.write("[+] Mounting volume {0}{1}\r".format(i, col("...", attrs=['blink'])))
+                sys.stdout.write("[+] Mounting volume...\r")
                 sys.stdout.flush()
-            if i == 0:
-                if args.vstype != 'detect':
-                    print col(u'[?] Could not determine volume information. Image may be empty, or volume system type '
-                              u'{0} was incorrect.'.format(args.vstype.upper()), 'yellow')
-                else:
-                    print col(u'[?] Could not determine volume information. Image may be empty, or volume system '
-                              u'type could not be detected. Try explicitly providing the volume system type with '
-                              u'--vstype, mounting as RAID with --raid and/or mounting as a single volume with '
-                              u'--single', 'yellow')
-                if args.wait:
-                    raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
-            print u'[+] Parsed all volumes for this image!'
+            for disk in p.disks:
+                if len(disk.volumes) == 0:
+                    if args.vstype != 'detect':
+                        print col(u'[?] Could not determine volume information. Image may be empty, or volume system '
+                                  u'type {0} was incorrect.'.format(args.vstype.upper()), 'yellow')
+                    else:
+                        print col(u'[?] Could not determine volume information. Image may be empty, or volume system '
+                                  u'type could not be detected. Try explicitly providing the volume system type with '
+                                  u'--vstype, mounting as RAID with --raid and/or mounting as a single volume with '
+                                  u'--single', 'yellow')
+                    if args.wait:
+                        raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+
+            print u'[+] Parsed all volumes!'
 
             # Perform reconstruct if required
             if args.reconstruct:
                 # Reverse order so '/' gets unmounted last
-                p.partitions = list(reversed(sorted(p.partitions)))
+
                 print "[+] Performing reconstruct... "
                 root = p.reconstruct()
                 if not root:
                     print col("[-] Failed reconstructing filesystem: could not find root directory.", 'red')
                 else:
-                    failed = filter(lambda x: not x.bindmountpoint and x.mountpoint and x != root, p.partitions)
+                    failed = []
+                    for disk in p.disks:
+                        failed.extend(filter(lambda x: not x.bindmountpoint and x.mountpoint and x != root,
+                                             disk.volumes))
                     if failed:
                         print "[+] Parts of the filesystem are reconstructed in {0}.".format(col(root.mountpoint, "green", attrs=["bold"]))
                         for m in failed:
@@ -289,6 +311,7 @@ def main():
             return
 
         except Exception as e:
+            import traceback ; traceback.print_exc()
             print col("[-] {0}".format(e), 'red')
             raw_input(col(">>> Press [enter] to continue.", attrs=['dark']))
 
@@ -315,11 +338,6 @@ def main():
                             print ""  # ^C does not print \n
                             break
                 print u"[+] All cleaned up"
-
-                if num == len(args.images) - 1:
-                    print u'[+] Image processed, all done.'
-                else:
-                    print u'[+] Image processed, proceeding with next image.'
 
 
 if __name__ == '__main__':
