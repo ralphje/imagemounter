@@ -37,35 +37,39 @@ def main():
     parser.add_argument('images', nargs='+',
                         help='path(s) to the image(s) that you want to mount; generally just the first file (e.g. '
                              'the .E01 or .001 file) or the folder containing the files is enough in the case of '
-                             'split files.')
+                             'split files')
+
+    # Special options
     parser.add_argument('--version', action='version', version=__version__, help='display version and exit')
     parser.add_argument('--clean', action=CleanAction, nargs=0,
                         help='try to rigorously clean anything that resembles traces from previous runs of '
-                             'this utility')
+                             'this utility (is not able to detect RAID volumes)')
+
+    # Utility specific
     parser.add_argument('-c', '--color', action='store_true', default=False, help='colorize the output')
     parser.add_argument('-w', '--wait', action='store_true', default=False, help='pause on some additional warnings')
     parser.add_argument('-k', '--keep', action='store_true', default=False,
                         help='keep volumes mounted after program exits')
+    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose output')
+
+    # Additional options
     parser.add_argument('-r', '--reconstruct', action='store_true', default=False,
                         help='attempt to reconstruct the full filesystem tree; implies -s and mounts all partitions '
                              'at once')
-    parser.add_argument('-rw', '--read-write', action='store_true', default=False,
-                        help='mount image read-write by creating a local write-cache file in a temp directory; '
-                             'implies --method=xmount')
-    parser.add_argument('-s', '--stats', action='store_true', default=False,
-                        help='show limited information from fsstat, which will slow down mounting and may cause '
-                             'random issues such as partitions being unreadable (default)')
-    parser.add_argument('-n', '--no-stats', action='store_true', default=False,
-                        help='do not show limited information from fsstat')
-    parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'auto', 'dummy'], default='auto',
-                        help='use other tool to mount the initial images; results may vary between methods and if '
-                             'something doesn\'t work, try another method; dummy can be used when base should not be '
-                             'mounted (default: auto)')
+
+    # Specify options to the subsystem
     parser.add_argument('-md', '--mountdir', default=None,
                         help='specify other directory for volume mountpoints')
     parser.add_argument('-p', '--pretty', action='store_true', default=False,
                         help='use pretty names for mount points; useful in combination with --mountdir and does not '
                              'provide a fallback when the pretty mount name is unavailable')
+    parser.add_argument('-rw', '--read-write', action='store_true', default=False,
+                        help='mount image read-write by creating a local write-cache file in a temp directory; '
+                             'implies --method=xmount')
+    parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'auto', 'dummy'], default='auto',
+                        help='use other tool to mount the initial images; results may vary between methods and if '
+                             'something doesn\'t work, try another method; dummy can be used when base should not be '
+                             'mounted (default: auto)')
     parser.add_argument('--vstype', choices=['detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller', 'any'],
                         default="detect", help='specify type of volume system (partition table); if you don\'t know, '
                                                'use "detect" to try to detect, or "any" to loop over all VS types and '
@@ -76,6 +80,13 @@ def main():
                              "is unsupported; use unknown to mount without specifying type")
     parser.add_argument('--fsforce', action='store_true', default=False,
                         help="force the use of the filesystem type specified with --fsfallback for all volumes")
+
+    # Toggles for default settings you may perhaps want to override
+    parser.add_argument('-s', '--stats', action='store_true', default=False,
+                        help='show limited information from fsstat, which will slow down mounting and may cause '
+                             'random issues such as partitions being unreadable (default)')
+    parser.add_argument('-n', '--no-stats', action='store_true', default=False,
+                        help='do not show limited information from fsstat')
     parser.add_argument('--raid', action='store_true', default=False,
                         help="try to detect whether the volume is part of a RAID array (default)")
     parser.add_argument('--no-raid', action='store_true', default=False,
@@ -84,7 +95,6 @@ def main():
                         help="do not try to find a volume system, but assume the image contains a single volume")
     parser.add_argument('--no-single', action='store_true', default=False,
                         help="prevent trying to mount the image as a single volume if no volume system was found")
-    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose output')
     args = parser.parse_args()
 
     # Check some prerequisites
@@ -92,6 +102,10 @@ def main():
         print u'[-] This program needs to be ran as root! Requesting elevation... '
         os.execvp('sudo', ['sudo'] + sys.argv)
         #sys.exit(1)
+
+    if __version__.endswith('b'):
+        print "    You are running a beta version of this program. Please report any bugs you find. "
+        print "    Encountered a critical bug? Use git tag to list all versions and use git checkout <version>"
 
     if not args.color:
         #noinspection PyUnusedLocal,PyShadowingNames
@@ -187,23 +201,27 @@ def main():
     else:
         try:
             p = ImageParser(images, **vars(args))
+            num = 0
+            found_raid = False
 
             # Mount all disks. We could use .init, but where's the fun in that?
             for disk in p.disks:
-                print u'[+] Mounting image {0} using {1}...'.format(p.paths[0], args.method)
+                num += 1
+                print u'[+] Mounting image {0} using {1}...'.format(p.paths[0], disk.method)
 
                 # Mount the base image using the preferred method
                 if not disk.mount():
-                    print col("[-] Failed mounting base image.", "red")
-                    continue
+                    print col("[-] Failed mounting base image. Perhaps try another mount method than {0}?"
+                              .format(disk.method), "red")
+                    return
 
-                if args.raid and not disk.add_to_raid():
-                    print col("[-] Failed mounting base image in RAID.", "red")
-                    continue
+                if args.raid:
+                    if disk.add_to_raid():
+                        found_raid = True
 
                 if args.read_write:
                     print u'[+] Created read-write cache at {0}'.format(disk.rwpath)
-                print u'[+] Mounted raw image [{num}/{total}]'.format(num=num + 1, total=len(args.images))
+                print u'[+] Mounted raw image [{num}/{total}]'.format(num=num, total=len(args.images))
 
             sys.stdout.write("[+] Mounting partition 0...\r")
             sys.stdout.flush()
@@ -268,15 +286,23 @@ def main():
                 sys.stdout.flush()
 
             for disk in p.disks:
-                if len(disk.volumes) == 0:
+                if filter(lambda x: x.was_mounted, disk.volumes) == 0:
                     if args.vstype != 'detect':
+                        print col(u'[?] Could not determine volume information of {0}. Image may be empty, '
+                                  u'or volume system type {0} was incorrect.'.format(args.vstype.upper()), 'yellow')
+                    elif found_raid:
                         print col(u'[?] Could not determine volume information. Image may be empty, or volume system '
-                                  u'type {0} was incorrect.'.format(args.vstype.upper()), 'yellow')
-                    else:
+                                  u'type could not be detected. Try explicitly providing the volume system type with '
+                                  u'--vstype, or providing more volumes to complete the RAID array.', 'yellow')
+                    elif not args.raid or args.single is False:
                         print col(u'[?] Could not determine volume information. Image may be empty, or volume system '
                                   u'type could not be detected. Try explicitly providing the volume system type with '
                                   u'--vstype, mounting as RAID with --raid and/or mounting as a single volume with '
                                   u'--single', 'yellow')
+                    else:
+                        print col(u'[?] Could not determine volume information. Image may be empty, or volume system '
+                                  u'type could not be detected. Try explicitly providing the volume system type with '
+                                  u'--vstype.', 'yellow')
                     if args.wait:
                         raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
