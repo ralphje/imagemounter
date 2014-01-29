@@ -103,16 +103,16 @@ def main():
         os.execvp('sudo', ['sudo'] + sys.argv)
         #sys.exit(1)
 
-    if __version__.endswith('b'):
-        print "    You are running a beta version of this program. Please report any bugs you find. "
-        print "    Encountered a critical bug? Use git tag to list all versions and use git checkout <version>"
-
     if not args.color:
         #noinspection PyUnusedLocal,PyShadowingNames
         def col(s, *args, **kwargs):
             return s
     else:
         col = colored
+
+    if __version__.endswith('a') or __version__.endswith('b'):
+        print col("Development release v{0}. Please report any bugs you encounter.".format(__version__), attrs=['dark'])
+        print col("Critical bug? Use git tag to list all versions and use git checkout <version>", attrs=['dark'])
 
     # Always assume stats, except when --no-stats is present, and --stats is not.
     if not args.stats and args.no_stats:
@@ -146,8 +146,8 @@ def main():
         sys.exit(1)
 
     if args.raid and not util.command_exists('mdadm'):
-        print "[-] RAID mount requires the mdadm command"
-        sys.exit(1)
+        print "[-] RAID mount requires the mdadm command."
+        args.raid = False
 
     if args.reconstruct and not args.stats:  # Reconstruct implies use of fsstat
         print "[-] You explicitly disabled stats, but --reconstruct implies the use of stats. Stats are re-enabled."
