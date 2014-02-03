@@ -18,7 +18,10 @@ Just perform the following commands for a full install:
     python setup.py install
 
 ### Python packages
-This package depends on two other packages. The _termcolor_ package is available from PyPI and is easily installed using tools such as `pip` or `easy_install`. The _pytsk_ package requires some additional packages to be installed: `python-dev` and `libtsk-dev`. For compilation, the `build-essential` package from your distribution is also required. After that, you can easily install the pytsk package from PyPI (pip requires the --pre flag to allow installing the package).
+This package depends on two other packages. 
+
+- The _termcolor_ package is available from PyPI and is easily installed using tools such as `pip` or `easy_install`. 
+- The _pytsk_ package requires some additional packages to be installed: `python-dev` and `libtsk-dev`. For compilation, the `build-essential` package from your distribution is also required. After that, you can easily install the `pytsk` package from PyPI (pip requires the --pre flag to allow installing the package).
 
 ### Other dependencies
 This package highly depends on other utilities to be present on your system. For a full installation, you require the following tools:
