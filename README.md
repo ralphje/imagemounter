@@ -42,7 +42,7 @@ Due to a bug with ewf-tools in Ubuntu <=13.10, it may be that ewfmount is not pr
 
 1. Download a recent build of ewf-tools from https://launchpad.net/ubuntu/+source/libewf/20130416-2ubuntu1 (choose your arch under 'Builds' and download all deb files under 'Built files')
 2. Execute `sudo apt-get install libbfio1`
-3. Execute `sudo dpkg -i ewf-tools_* libewf-dev_* libewf2_*`
+3. Execute `sudo dpkg -i ewf-tools_* libewf2_*`
 
 
 Command order
