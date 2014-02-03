@@ -135,31 +135,31 @@ def main():
         args.single = False
 
     if args.method not in ('xmount', 'auto') and args.read_write:
-        print "[-] {0} does not support mounting read-write! Will mount read-only.".format(args.method)
+        print col("[!] {0} does not support mounting read-write! Will mount read-only.".format(args.method), 'yellow')
         args.read_write = False
 
     if args.method not in ('auto', 'dummy') and not util.command_exists(args.method):
-        print "[-] {0} is not installed!".format(args.method)
+        print col("[-] {0} is not installed!".format(args.method), 'red')
         sys.exit(1)
     elif args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount'))):
-        print "[-] No tools installed to mount the image base!"
+        print col("[-] No tools installed to mount the image base!", 'red')
         sys.exit(1)
 
     if args.raid and not util.command_exists('mdadm'):
-        print "[-] RAID mount requires the mdadm command."
+        print col("[!] RAID mount requires the mdadm command.", 'yellow')
         args.raid = False
 
     if args.reconstruct and not args.stats:  # Reconstruct implies use of fsstat
-        print "[-] You explicitly disabled stats, but --reconstruct implies the use of stats. Stats are re-enabled."
+        print "[!] You explicitly disabled stats, but --reconstruct implies the use of stats. Stats are re-enabled."
         args.stats = True
 
     if args.stats and not util.command_exists('fsstat'):
-        print "[-] The fsstat command (part of sleuthkit package) is required to obtain stats, but is not installed. " \
-              "Stats can not be obtained during this session."
+        print col("[-] The fsstat command (part of sleuthkit package) is required to obtain stats, but is not "
+                  "installed. Stats can not be obtained during this session.", 'yellow')
         args.stats = False
 
         if args.reconstruct:
-            print "[-] Reconstruction requires stats to be obtained, but stats can not be enabled."
+            print col("[-] Reconstruction requires stats to be obtained, but stats can not be enabled.", 'red')
             sys.exit(1)
 
     if args.fsfallback and not args.fsforce:
@@ -223,7 +223,7 @@ def main():
                     print u'[+] Created read-write cache at {0}'.format(disk.rwpath)
                 print u'[+] Mounted raw image [{num}/{total}]'.format(num=num, total=len(args.images))
 
-            sys.stdout.write("[+] Mounting partition 0...\r")
+            sys.stdout.write("[+] Mounting volume...\r")
             sys.stdout.flush()
             has_left_mounted = False
 
