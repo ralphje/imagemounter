@@ -35,6 +35,11 @@ class ImageParser(object):
             else:
                 print >> self.out, val
 
+    def init(self, single=None, raid=True):
+        for d in self.disks:
+            for v in d.init(single, raid):
+                yield v
+
     def mount_disks(self):
         """Mounts all disks in the parser."""
 
