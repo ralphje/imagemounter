@@ -1,5 +1,5 @@
 __ALL__ = ['Volume', 'Disk', 'ImageParser']
-__version__ = '1.4.0b'
+__version__ = '1.4.0'
 
 BLOCK_SIZE = 512
 VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
