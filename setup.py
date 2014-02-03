@@ -11,7 +11,7 @@ def get_metadata():
 metadata = get_metadata()
 
 setup(
-    name='image_mounter',
+    name='imagemounter',
     version=metadata['version'],
     packages=['imagemounter'],
     author='Peter Wagenaar, Ralph Broenink',
