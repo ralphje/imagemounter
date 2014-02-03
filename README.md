@@ -12,20 +12,38 @@ it will try to mount the entire image as a whole if it succeeds detecting what i
 
 Installation
 ------------
-Basic installation is simple: use `python setup.py install` to install the Python package and CLI tool. However, there
-are some dependencies to be resolved; most notably two Python packages: pytsk3 and termcolor. Additionally, some
-command-line utilities are required, including xmount and fsstat. Run `install/install.sh` as root to automatically
-install dependencies and this utility.
+Just perform the following commands for a full install:
 
-Note: ewf-tools and afflib-tools are very useful, but not installed by the installation script. These packages provide
-affuse and ewfmount. If you do not install these packages, xmount is used by default to mount your disk images, with
-varying results.
+    apt-get install python-setuptools python-dev libtsk-dev xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm
+    python setup.py install
 
-Note: Installing ewf-tools does not guarantee that you obtain ewfmount on Ubuntu <=13.10. You may want to get a recent
-package from https://launchpad.net/ubuntu/+source/libewf; 20130416-2ubuntu1 is known to provide ewfmount.
+### Python packages
+This package depends on two other packages. The _termcolor_ package is available from PyPI and is easily installed using tools such as `pip` or `easy_install`. The _pytsk_ package requires some additional packages to be installed: `python-dev` and `libtsk-dev`. For compilation, the `build-essential` package from your distribution is also required. After that, you can easily install the pytsk package from PyPI (pip requires the --pre flag to allow installing the package).
 
-Dependencies and command order
-------------------------------
+### Other dependencies
+This package highly depends on other utilities to be present on your system. For a full installation, you require the following tools:
+
+- Mount tools
+  - `xmount`
+  - `ewfmount`, part of ewf-tools package, see note below
+  - `affuse`, part of afflib-tools package
+- Statistics, e.g. last mountpoint of volumes
+  - `fsstat`, part of sleuthkit package
+- LVM arrays
+  - `lvm` et al, all part of lvm2 package
+- RAID volumes
+  - `mdadm`
+
+#### Ubuntu ewfmount
+Due to a bug with ewf-tools in Ubuntu <=13.10, it may be that ewfmount is not properly provided. This bug will be resolved in Ubuntu 14.04. If you are using Ubuntu 13.10, you can install ewf-tools with ewfmount as follows:
+
+1. Download a recent build of ewf-tools from https://launchpad.net/ubuntu/+source/libewf/20130416-2ubuntu1 (choose your arch under 'Builds' and download all deb files under 'Built files')
+2. Execute `sudo apt-get install libbfio1`
+3. Execute `sudo dpkg -i ewf-tools_* libewf-dev_* libewf2_*`
+
+
+Command order
+-------------
 imagemounter utilizes many command line utilities to perform its actions. It does not actually do a lot by itself,
 although it manages currently mounted sytems and provides the correct unmounting order. To gather a general idea of
 what the tool does, the following is a non-exhaustive list of the commands used in what order in the default mode.

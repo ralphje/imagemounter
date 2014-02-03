@@ -1,2 +1,2 @@
-pytsk3
+pytsk>=0.0.dev0  # allow dev releases
 termcolor
