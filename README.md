@@ -12,16 +12,16 @@ it will try to mount the entire image as a whole if it succeeds detecting what i
 
 Installation
 ------------
-Just perform the following commands for a full install:
+Just perform the following commands for a full install, including all optional dependencies (but see the note about Ubuntu 13.10 below):
 
     apt-get install python-setuptools python-dev libtsk-dev xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm
-    python setup.py install
+    pip install imagemounter
 
 ### Python packages
 This package depends on two other packages. 
 
 - The _termcolor_ package is available from PyPI and is easily installed using tools such as `pip` or `easy_install`. 
-- The _pytsk_ package requires some additional packages to be installed: `python-dev` and `libtsk-dev`. For compilation, the `build-essential` package from your distribution is also required. After that, you can easily install the `pytsk` package from PyPI (pip requires the --pre flag to allow installing the package).
+- The _pytsk3_ package requires some additional packages to be installed: `python-dev` and `libtsk-dev`. For compilation, the `build-essential` package from your distribution is also required. After that, you can easily install the `pytsk3` package from PyPI (pip requires the --pre flag to allow installing the package).
 
 ### Other dependencies
 This package highly depends on other utilities to be present on your system. For a full installation, you require the following tools:
@@ -37,7 +37,7 @@ This package highly depends on other utilities to be present on your system. For
 - RAID volumes
   - `mdadm`
 
-#### Ubuntu ewfmount
+#### ewfmount on Ubuntu 13.10
 Due to a bug with ewf-tools in Ubuntu <=13.10, it may be that ewfmount is not properly provided. This bug will be resolved in Ubuntu 14.04. If you are using Ubuntu 13.10, you can install ewf-tools with ewfmount as follows:
 
 1. Download a recent build of ewf-tools from https://launchpad.net/ubuntu/+source/libewf/20130416-2ubuntu1 (choose your arch under 'Builds' and download all deb files under 'Built files')
@@ -45,8 +45,8 @@ Due to a bug with ewf-tools in Ubuntu <=13.10, it may be that ewfmount is not pr
 3. Execute `sudo dpkg -i ewf-tools_* libewf2_*`
 
 
-Command order
--------------
+Commands and execution order
+----------------------------
 imagemounter utilizes many command line utilities to perform its actions. It does not actually do a lot by itself,
 although it manages currently mounted sytems and provides the correct unmounting order. To gather a general idea of
 what the tool does, the following is a non-exhaustive list of the commands used in what order in the default mode.
