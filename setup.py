@@ -18,5 +18,5 @@ setup(
     description='Utility to mount partitions in Encase and dd images locally on Linux operating systems.',
     entry_points={'console_scripts': ['mount_images = imagemounter.mount_images:main',
                                       'imount = imagemounter.mount_images:main']},
-    install_requires=['pytsk3', 'termcolor']
+    install_requires=['pytsk', 'termcolor']
 )
