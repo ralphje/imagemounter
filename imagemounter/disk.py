@@ -1,3 +1,6 @@
+from __future__ import print_function
+from __future__ import unicode_literals
+
 import glob
 import os
 import pytsk3
@@ -52,7 +55,7 @@ class Disk(object):
         self.args = args
 
         self.name = os.path.split(path)[1]
-        self.mountpoint = u''
+        self.mountpoint = ''
         self.volumes = []
         self.volume_source = None
 
@@ -60,10 +63,10 @@ class Disk(object):
         self.md_device = None
 
     def __unicode__(self):
-        return unicode(self.name)
+        return self.name
 
     def __str__(self):
-        return str(self.__unicode__())
+        return self.__unicode__()
 
     def _debug(self, val):
         #noinspection PyProtectedMember
@@ -83,7 +86,7 @@ class Disk(object):
     def mount(self):
         """Mount the image at a temporary path for analysis"""
 
-        self.mountpoint = tempfile.mkdtemp(prefix=u'image_mounter_')
+        self.mountpoint = tempfile.mkdtemp(prefix='image_mounter_')
 
         if self.multifile:
             pathss = (self.paths[:1], self.paths)
@@ -97,17 +100,17 @@ class Disk(object):
             try:
                 fallbackcmd = None
                 if self.method == 'xmount':
-                    cmd = [u'xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']
+                    cmd = ['xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']
                     if self.read_write:
                         cmd.extend(['--rw', self.rwpath])
 
                 elif self.method == 'affuse':
-                    cmd = [u'affuse', '-o', 'allow_other']
-                    fallbackcmd = [u'affuse']
+                    cmd = ['affuse', '-o', 'allow_other']
+                    fallbackcmd = ['affuse']
 
                 elif self.method == 'ewfmount':
-                    cmd = [u'ewfmount', '-X', 'allow_other']
-                    fallbackcmd = [u'ewfmount']
+                    cmd = ['ewfmount', '-X', 'allow_other']
+                    fallbackcmd = ['ewfmount']
 
                 elif self.method == 'dummy':
                     # remove basemountpoint
@@ -118,11 +121,12 @@ class Disk(object):
                 else:
                     raise Exception("Unknown mount method {0}".format(self.method))
 
+                # noinspection PyBroadException
                 try:
                     cmd.extend(paths)
                     cmd.append(self.mountpoint)
                     util.check_call_(cmd, self, stdout=subprocess.PIPE)
-                except Exception as e:
+                except Exception:
                     if fallbackcmd:
                         fallbackcmd.extend(paths)
                         fallbackcmd.append(self.mountpoint)
@@ -132,7 +136,7 @@ class Disk(object):
                 return True
 
             except Exception as e:
-                self._debug(u'[-] Could not mount {0} (see below), will try multi-file method'.format(paths[0]))
+                self._debug('[-] Could not mount {0} (see below), will try multi-file method'.format(paths[0]))
                 self._debug(e)
 
         os.rmdir(self.mountpoint)
@@ -146,9 +150,9 @@ class Disk(object):
         if self.method == 'dummy':
             return self.paths[0]
         else:
-            raw_path = glob.glob(os.path.join(self.mountpoint, u'*.dd'))
-            raw_path.extend(glob.glob(os.path.join(self.mountpoint, u'*.raw')))
-            raw_path.extend(glob.glob(os.path.join(self.mountpoint, u'ewf1')))
+            raw_path = glob.glob(os.path.join(self.mountpoint, '*.dd'))
+            raw_path.extend(glob.glob(os.path.join(self.mountpoint, '*.raw')))
+            raw_path.extend(glob.glob(os.path.join(self.mountpoint, 'ewf1')))
             return raw_path[0]
 
     def get_fs_path(self):
@@ -171,6 +175,7 @@ class Disk(object):
             return False
 
         # Scan for new lvm volumes
+        # noinspection PyBroadException
         try:
             result = util.check_output_(["mdadm", "--examine", self.get_raw_path()], self, stderr=subprocess.STDOUT)
             for l in result.splitlines():
@@ -199,7 +204,7 @@ class Disk(object):
             return False
 
         # mount image as loopback
-        cmd = [u'losetup', u'-o', str(self.offset), self.loopback, self.get_raw_path()]
+        cmd = ['losetup', '-o', str(self.offset), self.loopback, self.get_raw_path()]
         if not self.read_write:
             cmd.insert(1, '-r')
 
@@ -283,7 +288,7 @@ class Disk(object):
             try:
                 baseimage = pytsk3.Img_Info(raw_path)
             except Exception as e:
-                self._debug(u"[-] Failed retrieving image info (possible empty image).")
+                self._debug("[-] Failed retrieving image info (possible empty image).")
                 self._debug(e)
                 return []
 
@@ -294,22 +299,21 @@ class Disk(object):
                     try:
                         vst = getattr(pytsk3, 'TSK_VS_TYPE_' + vs.upper())
                         volumes = pytsk3.Volume_Info(baseimage, vst)
-                        self._debug(u"[+] Using VS type {0}".format(vs))
+                        self._debug("[+] Using VS type {0}".format(vs))
                         return volumes
-                        break
                     except Exception:
-                        self._debug(u"    VS type {0} did not work".format(vs))
+                        self._debug("    VS type {0} did not work".format(vs))
                 else:
-                    self._debug(u"[-] Failed retrieving volume info")
+                    self._debug("[-] Failed retrieving volume info")
                     return []
             else:
-                # base case: just obtian all volumes
+                # base case: just obtain all volumes
                 try:
                     volumes = pytsk3.Volume_Info(baseimage, self.vstype)
                     self.volume_source = 'multi'
                     return volumes
                 except Exception as e:
-                    self._debug(u"[-] Failed retrieving volume info (possible empty image).")
+                    self._debug("[-] Failed retrieving volume info (possible empty image).")
                     self._debug(e)
                     return []
         finally:
@@ -358,7 +362,7 @@ class Disk(object):
 
         for m in list(reversed(sorted(self.volumes))):
             if not m.unmount():
-                self._debug(u"[-] Error unmounting volume {0}".format(m.mountpoint))
+                self._debug("[-] Error unmounting volume {0}".format(m.mountpoint))
 
         # TODO: remove specific device from raid array
         if self.md_device:
@@ -368,18 +372,19 @@ class Disk(object):
                 util.check_call_(['mdadm', '-S', self.md_device], self, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 self.md_device = None
             except Exception as e:
-                self._debug(u"[-] Failed unmounting MD device {0}".format(self.md_device))
+                self._debug("[-] Failed unmounting MD device {0}".format(self.md_device))
                 self._debug(e)
 
         if self.loopback:
+            # noinspection PyBroadException
             try:
                 util.check_call_(['losetup', '-d', self.loopback], self)
                 self.loopback = None
             except Exception:
-                self._debug(u"[-] Failed deleting loopback device {0}".format(self.loopback))
+                self._debug("[-] Failed deleting loopback device {0}".format(self.loopback))
 
-        if self.mountpoint and not util.clean_unmount([u'fusermount', u'-u'], self.mountpoint):
-            self._debug(u"[-] Error unmounting base {0}".format(self.mountpoint))
+        if self.mountpoint and not util.clean_unmount(['fusermount', '-u'], self.mountpoint):
+            self._debug("[-] Error unmounting base {0}".format(self.mountpoint))
             return False
 
         if self.rw_active() and remove_rw:

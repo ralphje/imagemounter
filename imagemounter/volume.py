@@ -1,8 +1,12 @@
+from __future__ import print_function
+from __future__ import unicode_literals
+
 import os
 import subprocess
 import re
 import tempfile
 import threading
+import sys
 from imagemounter import util, BLOCK_SIZE
 
 
@@ -45,9 +49,10 @@ class Volume(object):
         self.volumes = []
         self.lv_path = None
 
+        self.args = args
 
     def __unicode__(self):
-        return u'{0}:{1}'.format(self.index, self.fsdescription)
+        return '{0}:{1}'.format(self.index, self.fsdescription)
 
     def __str__(self):
         return str(self.__unicode__())
@@ -55,6 +60,7 @@ class Volume(object):
     def __cmp__(self, other):
         return cmp(self.lastmountpoint, other.lastmountpoint)
 
+    # noinspection PyProtectedMember
     def _debug(self, val):
         if self.disk:
             self.disk._debug(val)
@@ -63,30 +69,37 @@ class Volume(object):
         desc = ''
 
         if with_size and self.size:
-            desc += u'{0} '.format(self.get_size_gib())
+            desc += '{0} '.format(self.get_size_gib())
 
-        desc += u'{1}:{0}'.format(self.fstype or self.fsdescription, self.index)
+        desc += '{1}:{0}'.format(self.fstype or self.fsdescription, self.index)
 
         if self.label:
-            desc += u' {0}'.format(self.label)
+            desc += ' {0}'.format(self.label)
 
         if self.version:  # NTFS
-            desc += u' [{0}]'.format(self.version)
+            desc += ' [{0}]'.format(self.version)
 
         return desc
 
     def get_size_gib(self):
-        if self.size and (isinstance(self.size, (int, long)) or self.size.isdigit()):
+        # Python 3 compatibility
+        if sys.version_info[0] == 2:
+            integer_types = (int, long)
+        else:
+            integer_types = int
+
+        # noinspection PyUnresolvedReferences
+        if self.size and (isinstance(self.size, integer_types) or self.size.isdigit()):
             if self.size < 1024:
-                return u"{0} B".format(self.size)
+                return "{0} B".format(self.size)
             elif self.size < 1024 ** 2:
-                return u"{0} KiB".format(round(self.size / 1024, 2))
+                return "{0} KiB".format(round(self.size / 1024, 2))
             elif self.size < 1024**3:
-                return u"{0} MiB".format(round(self.size / 1024.0 ** 2, 2))
+                return "{0} MiB".format(round(self.size / 1024.0 ** 2, 2))
             elif self.size < 1024**4:
-                return u"{0} GiB".format(round(self.size / 1024.0 ** 3, 2))
+                return "{0} GiB".format(round(self.size / 1024.0 ** 3, 2))
             else:
-                return u"{0} TiB".format(round(self.size / 1024.0 ** 4, 2))
+                return "{0} TiB".format(round(self.size / 1024.0 ** 4, 2))
         else:
             return self.size
 
@@ -104,13 +117,13 @@ class Volume(object):
             if not fsdesc and self.fstype:
                 fsdesc = self.fstype.lower()
 
-            if u'0x83' in fsdesc or '0xfd' in fsdesc or re.search(r'\bext[0-9]*\b', fsdesc):
+            if '0x83' in fsdesc or '0xfd' in fsdesc or re.search(r'\bext[0-9]*\b', fsdesc):
                 fstype = 'ext'
-            elif u'bsd' in fsdesc:
+            elif 'bsd' in fsdesc:
                 fstype = 'bsd'
-            elif u'0x07' in fsdesc or 'ntfs' in fsdesc:
+            elif '0x07' in fsdesc or 'ntfs' in fsdesc:
                 fstype = 'ntfs'
-            elif u'0x8e' in fsdesc or 'lvm' in fsdesc:
+            elif '0x8e' in fsdesc or 'lvm' in fsdesc:
                 fstype = 'lvm'
             else:
                 fstype = self.fsfallback
@@ -158,7 +171,7 @@ class Volume(object):
             yield self
         else:
             for v in subvolumes:
-                self._debug(u"    Mounting LVM volume {0}".format(v))
+                self._debug("    Mounting LVM volume {0}".format(v))
                 for s in v.init():
                     yield s
 
@@ -183,16 +196,16 @@ class Volume(object):
                     self._debug("[-] Could not create mountdir.")
                     return False
             else:
-                self.mountpoint = tempfile.mkdtemp(prefix=u'im_' + str(self.index) + u'_',
-                                                   suffix=u'_' + self.get_safe_label(),
+                self.mountpoint = tempfile.mkdtemp(prefix='im_' + str(self.index) + '_',
+                                                   suffix='_' + self.get_safe_label(),
                                                    dir=self.mountdir)
 
         # Prepare mount command
         try:
             if fstype == 'ext':
                 # ext
-                cmd = [u'mount', raw_path, self.mountpoint, u'-t', u'ext4', u'-o',
-                       u'loop,noexec,noload,offset=' + str(self.offset)]
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'ext4', '-o',
+                       'loop,noexec,noload,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
@@ -202,8 +215,8 @@ class Volume(object):
             elif fstype == 'bsd':
                 # ufs
                 #mount -t ufs -o ufstype=ufs2,loop,ro,offset=4294967296 /tmp/image/ewf1 /media/a
-                cmd = [u'mount', raw_path, self.mountpoint, u'-t', u'ufs', u'-o',
-                       u'ufstype=ufs2,loop,offset=' + str(self.offset)]
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'ufs', '-o',
+                       'ufstype=ufs2,loop,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
@@ -212,8 +225,8 @@ class Volume(object):
 
             elif fstype == 'ntfs':
                 # NTFS
-                cmd = [u'mount', raw_path, self.mountpoint, u'-t', u'ntfs', u'-o',
-                       u'loop,noexec,offset=' + str(self.offset)]
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'ntfs', '-o',
+                       'loop,noexec,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
@@ -221,7 +234,7 @@ class Volume(object):
                 #    self.fstype = 'NTFS'
 
             elif fstype == 'unknown':  # mounts without specifying the filesystem type
-                cmd = [u'mount', raw_path, self.mountpoint, u'-o', u'loop,offset=' + str(self.offset)]
+                cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
@@ -240,7 +253,7 @@ class Volume(object):
                     self._debug("[-] No free loopback device found for LVM")
                     return False
 
-                cmd = [u'losetup', u'-o', str(self.offset), self.loopback, raw_path]
+                cmd = ['losetup', '-o', str(self.offset), self.loopback, raw_path]
                 if not self.disk.read_write:
                     cmd.insert(1, '-r')
 
@@ -357,7 +370,7 @@ class Volume(object):
 
         def stats_thread():
             try:
-                cmd = [u'fsstat', self.get_raw_base_path(), u'-o', str(self.offset / BLOCK_SIZE)]
+                cmd = ['fsstat', self.get_raw_base_path(), '-o', str(self.offset / BLOCK_SIZE)]
                 self._debug('    {0}'.format(' '.join(cmd)))
                 #noinspection PyShadowingNames
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -470,13 +483,13 @@ class Volume(object):
             self.loopback = None
 
         if self.bindmountpoint:
-            if not util.clean_unmount([u'umount'], self.bindmountpoint, rmdir=False):
+            if not util.clean_unmount(['umount'], self.bindmountpoint, rmdir=False):
                 return False
 
             self.bindmountpoint = None
 
         if self.mountpoint:
-            if not util.clean_unmount([u'umount'], self.mountpoint):
+            if not util.clean_unmount(['umount'], self.mountpoint):
                 return False
 
             self.mountpoint = None

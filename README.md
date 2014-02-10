@@ -10,6 +10,9 @@ In its default mode, imagemounter will try to start mounting the base image on a
 detect the volume system and then mount each volume seperately. If it fails finding a volume system,
 it will try to mount the entire image as a whole if it succeeds detecting what it actually is.
 
+This package currently only supports Python 2.6 and 2.7. Although this module in fact should be ready for Python 3.2+,
+it depends on pytsk3, which currently does not support Python 3.
+
 Installation
 ------------
 Just perform the following commands for a full install, including all optional dependencies (but see the note about Ubuntu 13.10 below):

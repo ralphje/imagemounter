@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+
+from __future__ import print_function
+from __future__ import unicode_literals
+
 import argparse
 import glob
 import sys
@@ -9,6 +13,12 @@ from termcolor import colored
 
 
 def main():
+    # Python 2 compatibility
+    try:
+        input = raw_input
+    except NameError:
+        pass
+
     class MyParser(argparse.ArgumentParser):
         def error(self, message):
             sys.stderr.write('error: {0}\n'.format(message))
@@ -16,24 +26,25 @@ def main():
             sys.exit(2)
 
     class CleanAction(argparse.Action):
+        # noinspection PyShadowingNames
         def __call__(self, parser, namespace, values, option_string=None):
             commands = ImageParser.force_clean(False)
             if not commands:
-                print "[+] Nothing to do"
+                print("[+] Nothing to do")
                 parser.exit()
-            print "[!] --clean will rigorously clean anything that looks like a mount or volume group originating " \
-                  "from this utility. You may regret using this if you have other mounts or volume groups that are " \
-                  "similarly named. The following commands will be executed:"
+            print("[!] --clean will rigorously clean anything that looks like a mount or volume group originating "
+                  "from this utility. You may regret using this if you have other mounts or volume groups that are "
+                  "similarly named. The following commands will be executed:")
             for c in commands:
-                print "    {0}".format(c)
+                print("    {0}".format(c))
             try:
-                raw_input(">>> Press [enter] to continue or ^C to cancel... ")
+                input(">>> Press [enter] to continue or ^C to cancel... ")
                 ImageParser.force_clean()
             except KeyboardInterrupt:
-                print "\n[-] Aborted."
+                print("\n[-] Aborted.")
             parser.exit()
 
-    parser = MyParser(description=u'Utility to mount volumes in Encase and dd images locally.')
+    parser = MyParser(description='Utility to mount volumes in Encase and dd images locally.')
     parser.add_argument('images', nargs='+',
                         help='path(s) to the image(s) that you want to mount; generally just the first file (e.g. '
                              'the .E01 or .001 file) or the folder containing the files is enough in the case of '
@@ -99,7 +110,7 @@ def main():
 
     # Check some prerequisites
     if os.geteuid():  # Not run as root
-        print u'[-] This program needs to be ran as root! Requesting elevation... '
+        print('[-] This program needs to be ran as root! Requesting elevation... ')
         os.execvp('sudo', ['sudo'] + sys.argv)
         #sys.exit(1)
 
@@ -111,8 +122,9 @@ def main():
         col = colored
 
     if __version__.endswith('a') or __version__.endswith('b'):
-        print col("Development release v{0}. Please report any bugs you encounter.".format(__version__), attrs=['dark'])
-        print col("Critical bug? Use git tag to list all versions and use git checkout <version>", attrs=['dark'])
+        print(col("Development release v{0}. Please report any bugs you encounter.".format(__version__),
+                  attrs=['dark']))
+        print(col("Critical bug? Use git tag to list all versions and use git checkout <version>", attrs=['dark']))
 
     # Always assume stats, except when --no-stats is present, and --stats is not.
     if not args.stats and args.no_stats:
@@ -135,49 +147,50 @@ def main():
         args.single = False
 
     if args.method not in ('xmount', 'auto') and args.read_write:
-        print col("[!] {0} does not support mounting read-write! Will mount read-only.".format(args.method), 'yellow')
+        print(col("[!] {0} does not support mounting read-write! Will mount read-only.".format(args.method), 'yellow'))
         args.read_write = False
 
     if args.method not in ('auto', 'dummy') and not util.command_exists(args.method):
-        print col("[-] {0} is not installed!".format(args.method), 'red')
+        print(col("[-] {0} is not installed!".format(args.method), 'red'))
         sys.exit(1)
     elif args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount'))):
-        print col("[-] No tools installed to mount the image base!", 'red')
+        print(col("[-] No tools installed to mount the image base!", 'red'))
         sys.exit(1)
 
     if args.raid and not util.command_exists('mdadm'):
-        print col("[!] RAID mount requires the mdadm command.", 'yellow')
+        print(col("[!] RAID mount requires the mdadm command.", 'yellow'))
         args.raid = False
 
     if args.reconstruct and not args.stats:  # Reconstruct implies use of fsstat
-        print "[!] You explicitly disabled stats, but --reconstruct implies the use of stats. Stats are re-enabled."
+        print("[!] You explicitly disabled stats, but --reconstruct implies the use of stats. Stats are re-enabled.")
         args.stats = True
 
     if args.stats and not util.command_exists('fsstat'):
-        print col("[-] The fsstat command (part of sleuthkit package) is required to obtain stats, but is not "
-                  "installed. Stats can not be obtained during this session.", 'yellow')
+        print(col("[-] The fsstat command (part of sleuthkit package) is required to obtain stats, but is not "
+                  "installed. Stats can not be obtained during this session.", 'yellow'))
         args.stats = False
 
         if args.reconstruct:
-            print col("[-] Reconstruction requires stats to be obtained, but stats can not be enabled.", 'red')
+            print(col("[-] Reconstruction requires stats to be obtained, but stats can not be enabled.", 'red'))
             sys.exit(1)
 
     if args.fsfallback and not args.fsforce:
-        print "[!] You are using the file system type {0} as fallback. This may cause unexpected results."\
-            .format(args.fsfallback)
+        print("[!] You are using the file system type {0} as fallback. This may cause unexpected results."
+              .format(args.fsfallback))
     elif args.fsfallback and args.fsforce:
-        print "[!] You are forcing the file system type to {0}. This may cause unexpected results.".format(args.fsfallback)
+        print("[!] You are forcing the file system type to {0}. This may cause unexpected results."
+              .format(args.fsfallback))
     elif not args.fsfallback and args.fsforce:
-        print "[-] You are forcing a file system type, but have not specified the type to use. Ignoring force."
+        print("[-] You are forcing a file system type, but have not specified the type to use. Ignoring force.")
         args.fsforce = False
 
     if args.vstype != 'detect' and args.single:
-        print "[!] There's no point in using --single in combination with --vstype."
+        print("[!] There's no point in using --single in combination with --vstype.")
 
     elif args.vstype == 'any':
-        print "[!] You are using the 'any' volume system type. This may cause unexpected results. It is recommended " \
-              "to use either 'detect' or explicitly specify the correct volume system. However, 'any' may provide " \
-              "some hints on the volume system to use (e.g. GPT mounted as DOS lists a GPT safety partition)."
+        print("[!] You are using the 'any' volume system type. This may cause unexpected results. It is recommended "
+              "to use either 'detect' or explicitly specify the correct volume system. However, 'any' may provide "
+              "some hints on the volume system to use (e.g. GPT mounted as DOS lists a GPT safety partition).")
 
     # Enumerate over all images in the CLI
     images = []
@@ -188,17 +201,18 @@ def main():
                 images.append(f)
                 break
             else:
-                print col("[-] {0} is a directory not containing a .001 or .E01 file, aborting!".format(image), "red")
+                print(col("[-] {0} is a directory not containing a .001 or .E01 file, aborting!".format(image), "red"))
                 break
             continue
 
         elif not os.path.exists(image):
-            print col("[-] Image {0} does not exist, aborting!".format(image), "red")
+            print(col("[-] Image {0} does not exist, aborting!".format(image), "red"))
             break
 
         images.append(image)
 
     else:
+        p = None
         try:
             p = ImageParser(images, **vars(args))
             num = 0
@@ -207,12 +221,12 @@ def main():
             # Mount all disks. We could use .init, but where's the fun in that?
             for disk in p.disks:
                 num += 1
-                print u'[+] Mounting image {0} using {1}...'.format(p.paths[0], disk.method)
+                print('[+] Mounting image {0} using {1}...'.format(p.paths[0], disk.method))
 
                 # Mount the base image using the preferred method
                 if not disk.mount():
-                    print col("[-] Failed mounting base image. Perhaps try another mount method than {0}?"
-                              .format(disk.method), "red")
+                    print(col("[-] Failed mounting base image. Perhaps try another mount method than {0}?"
+                              .format(disk.method), "red"))
                     return
 
                 if args.raid:
@@ -220,8 +234,8 @@ def main():
                         found_raid = True
 
                 if args.read_write:
-                    print u'[+] Created read-write cache at {0}'.format(disk.rwpath)
-                print u'[+] Mounted raw image [{num}/{total}]'.format(num=num, total=len(args.images))
+                    print('[+] Created read-write cache at {0}'.format(disk.rwpath))
+                print('[+] Mounted raw image [{num}/{total}]'.format(num=num, total=len(args.images)))
 
             sys.stdout.write("[+] Mounting volume...\r")
             sys.stdout.flush()
@@ -231,40 +245,43 @@ def main():
 
                 if not volume.mountpoint and not volume.loopback:
                     if volume.exception and volume.size is not None and volume.size <= 1048576:
-                        print col(u'[-] Exception while mounting small volume {0}'.format(volume.get_description()),
-                                  'yellow')
+                        print(col('[-] Exception while mounting small volume {0}'.format(volume.get_description()),
+                                  'yellow'))
                         if args.wait:
-                            raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+                            input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
                     elif volume.exception:
-                        print col(u'[-] Exception while mounting {0}'.format(volume.get_description()), 'red')
-                        raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+                        print(col('[-] Exception while mounting {0}'.format(volume.get_description()), 'red'))
+                        input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                     elif volume.flag != 'alloc':
-                        print col(u'[-] Skipped {0} {1} volume' .format(volume.get_description(), volume.flag), 'yellow')
+                        print(col('[-] Skipped {0} {1} volume' .format(volume.get_description(), volume.flag),
+                                  'yellow'))
                         if args.wait:
-                            raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+                            input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                     else:
-                        print col(u'[-] Could not mount volume {0}'.format(volume.get_description()), 'yellow')
+                        print(col('[-] Could not mount volume {0}'.format(volume.get_description()), 'yellow'))
                         if args.wait:
-                            raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+                            input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
                     continue
 
                 try:
                     if volume.mountpoint:
-                        print u'[+] Mounted volume {0} on {1}.'.format(col(volume.get_description(), attrs=['bold']),
-                                                                       col(volume.mountpoint, 'green', attrs=['bold']))
+                        print('[+] Mounted volume {0} on {1}.'.format(col(volume.get_description(), attrs=['bold']),
+                                                                      col(volume.mountpoint, 'green', attrs=['bold'])))
                     elif volume.loopback:  # fallback, generally indicates error.
-                        print u'[+] Mounted volume {0} as loopback on {1}.'.format(col(volume.get_description(), attrs=['bold']),
-                                                                                      col(volume.loopback, 'green', attrs=['bold']))
-                        print col(u'[-] Could not detect further volumes in the loopback device.', 'red')
+                        print('[+] Mounted volume {0} as loopback on {1}.'.format(col(volume.get_description(),
+                                                                                      attrs=['bold']),
+                                                                                  col(volume.loopback, 'green',
+                                                                                      attrs=['bold'])))
+                        print(col('[-] Could not detect further volumes in the loopback device.', 'red'))
 
                     # Do not offer unmount when reconstructing
                     if args.reconstruct or args.keep:
                         has_left_mounted = True
                         continue
 
-                    raw_input(col('>>> Press [enter] to unmount the volume, or ^C to keep mounted... ', attrs=['dark']))
+                    input(col('>>> Press [enter] to unmount the volume, or ^C to keep mounted... ', attrs=['dark']))
 
                     # Case where image should be unmounted, but has failed to do so. Keep asking whether the user wants
                     # to unmount.
@@ -273,83 +290,88 @@ def main():
                             break
                         else:
                             try:
-                                print col("[-] Error unmounting volume. Perhaps files are still open?", "red")
-                                raw_input(col('>>> Press [enter] to retry unmounting, or ^C to skip... ', attrs=['dark']))
+                                print(col("[-] Error unmounting volume. Perhaps files are still open?", "red"))
+                                input(col('>>> Press [enter] to retry unmounting, or ^C to skip... ', attrs=['dark']))
                             except KeyboardInterrupt:
                                 has_left_mounted = True
-                                print ""
+                                print("")
                                 break
                 except KeyboardInterrupt:
                     has_left_mounted = True
-                    print ""
+                    print("")
                 sys.stdout.write("[+] Mounting volume...\r")
                 sys.stdout.flush()
 
             for disk in p.disks:
-                if filter(lambda x: x.was_mounted, disk.volumes) == 0:
+                if [x for x in disk.volumes if x.was_mounted] == 0:
                     if args.vstype != 'detect':
-                        print col(u'[?] Could not determine volume information of {0}. Image may be empty, '
-                                  u'or volume system type {0} was incorrect.'.format(args.vstype.upper()), 'yellow')
+                        print(col('[?] Could not determine volume information of {0}. Image may be empty, '
+                                  'or volume system type {0} was incorrect.'.format(args.vstype.upper()), 'yellow'))
                     elif found_raid:
-                        print col(u'[?] Could not determine volume information. Image may be empty, or volume system '
-                                  u'type could not be detected. Try explicitly providing the volume system type with '
-                                  u'--vstype, or providing more volumes to complete the RAID array.', 'yellow')
+                        print(col('[?] Could not determine volume information. Image may be empty, or volume system '
+                                  'type could not be detected. Try explicitly providing the volume system type with '
+                                  '--vstype, or providing more volumes to complete the RAID array.', 'yellow'))
                     elif not args.raid or args.single is False:
-                        print col(u'[?] Could not determine volume information. Image may be empty, or volume system '
-                                  u'type could not be detected. Try explicitly providing the volume system type with '
-                                  u'--vstype, mounting as RAID with --raid and/or mounting as a single volume with '
-                                  u'--single', 'yellow')
+                        print(col('[?] Could not determine volume information. Image may be empty, or volume system '
+                                  'type could not be detected. Try explicitly providing the volume system type with '
+                                  '--vstype, mounting as RAID with --raid and/or mounting as a single volume with '
+                                  '--single', 'yellow'))
                     else:
-                        print col(u'[?] Could not determine volume information. Image may be empty, or volume system '
-                                  u'type could not be detected. Try explicitly providing the volume system type with '
-                                  u'--vstype.', 'yellow')
+                        print(col('[?] Could not determine volume information. Image may be empty, or volume system '
+                                  'type could not be detected. Try explicitly providing the volume system type with '
+                                  '--vstype.', 'yellow'))
                     if args.wait:
-                        raw_input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+                        input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
-            print u'[+] Parsed all volumes!'
+            print('[+] Parsed all volumes!')
 
             # Perform reconstruct if required
             if args.reconstruct:
                 # Reverse order so '/' gets unmounted last
 
-                print "[+] Performing reconstruct... "
+                print("[+] Performing reconstruct... ")
                 root = p.reconstruct()
                 if not root:
-                    print col("[-] Failed reconstructing filesystem: could not find root directory.", 'red')
+                    print(col("[-] Failed reconstructing filesystem: could not find root directory.", 'red'))
                 else:
                     failed = []
                     for disk in p.disks:
-                        failed.extend(filter(lambda x: not x.bindmountpoint and x.mountpoint and x != root,
-                                             disk.volumes))
+                        failed.extend([x for x in disk.volumes if not x.bindmountpoint and x.mountpoint and x != root])
                     if failed:
-                        print "[+] Parts of the filesystem are reconstructed in {0}.".format(col(root.mountpoint, "green", attrs=["bold"]))
+                        print("[+] Parts of the filesystem are reconstructed in {0}.".format(col(root.mountpoint,
+                                                                                                 "green",
+                                                                                                 attrs=["bold"])))
                         for m in failed:
-                            print "    {0} was not reconstructed".format(m.mountpoint)
+                            print("    {0} was not reconstructed".format(m.mountpoint))
                     else:
-                        print "[+] The entire filesystem is reconstructed in {0}.".format(col(root.mountpoint, "green", attrs=["bold"]))
+                        print("[+] The entire filesystem is reconstructed in {0}.".format(col(root.mountpoint,
+                                                                                              "green", attrs=["bold"])))
 
-                raw_input(col(">>> Press [enter] to unmount all volumes... ", attrs=['dark']))
+                input(col(">>> Press [enter] to unmount all volumes... ", attrs=['dark']))
             elif has_left_mounted and not args.keep:
-                raw_input(col(">>> Some volumes were left mounted. Press [enter] to unmount all... ", attrs=['dark']))
+                input(col(">>> Some volumes were left mounted. Press [enter] to unmount all... ", attrs=['dark']))
 
         except KeyboardInterrupt:
-            print u'\n[+] User pressed ^C, aborting...'
+            print('\n[+] User pressed ^C, aborting...')
             return
 
         except Exception as e:
-            import traceback ; traceback.print_exc()
-            print col("[-] {0}".format(e), 'red')
-            raw_input(col(">>> Press [enter] to continue.", attrs=['dark']))
+            import traceback
+            traceback.print_exc()
+            print(col("[-] {0}".format(e), 'red'))
+            input(col(">>> Press [enter] to continue.", attrs=['dark']))
 
         finally:
             if args.keep:
-                print "[+] Analysis complete."
+                print("[+] Analysis complete.")
+            elif not p:
+                print("[-] Crashed before creating parser")
             else:
-                print u'[+] Analysis complete, unmounting...'
+                print('[+] Analysis complete, unmounting...')
 
                 # All done with this image, unmount it
                 try:
-                    remove_rw = p.rw_active() and 'y' in raw_input('>>> Delete the rw cache file? [y/N] ').lower()
+                    remove_rw = p.rw_active() and 'y' in input('>>> Delete the rw cache file? [y/N] ').lower()
                 except KeyboardInterrupt:
                     remove_rw = False
 
@@ -358,12 +380,12 @@ def main():
                         break
                     else:
                         try:
-                            print col("[-] Error unmounting base image. Perhaps volumes are still open?", 'red')
-                            raw_input(col('>>> Press [enter] to retry unmounting, or ^C to cancel... ', attrs=['dark']))
+                            print(col("[-] Error unmounting base image. Perhaps volumes are still open?", 'red'))
+                            input(col('>>> Press [enter] to retry unmounting, or ^C to cancel... ', attrs=['dark']))
                         except KeyboardInterrupt:
-                            print ""  # ^C does not print \n
+                            print("")  # ^C does not print \n
                             break
-                print u"[+] All cleaned up"
+                print("[+] All cleaned up")
 
 
 if __name__ == '__main__':

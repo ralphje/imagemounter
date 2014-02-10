@@ -1,5 +1,8 @@
+from __future__ import print_function
+from __future__ import unicode_literals
+
 __ALL__ = ['Volume', 'Disk', 'ImageParser']
-__version__ = '1.4.0'
+__version__ = '1.4.1'
 
 BLOCK_SIZE = 512
 VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
@@ -15,7 +18,13 @@ from termcolor import colored
 
 class ImageParser(object):
     def __init__(self, paths, out=sys.stdout, verbose=False, color=False, **args):
-        if isinstance(paths, (str, unicode)):
+        # Python 3 compatibility
+        if sys.version_info[0] == 2:
+            string_types = basestring
+        else:
+            string_types = str
+
+        if isinstance(paths, string_types):
             self.paths = [paths]
         else:
             self.paths = paths
@@ -31,9 +40,9 @@ class ImageParser(object):
     def _debug(self, val):
         if self.verbose:
             if self.verbose_color:
-                print >> self.out, colored(val, "cyan")
+                print(colored(val, "cyan"), file=self.out)
             else:
-                print >> self.out, val
+                print(val, file=self.out)
 
     def init(self, single=None, raid=True):
         for d in self.disks:
@@ -105,7 +114,7 @@ class ImageParser(object):
         volumes = list(reversed(sorted(self.get_volumes())))
         for v in volumes:
             if not v.unmount():
-                self._debug(u"[-] Error unmounting volume {0}".format(v.mountpoint))
+                self._debug("[-] Error unmounting volume {0}".format(v.mountpoint))
 
         # Now just clean the rest.
         for disk in self.disks:
@@ -121,13 +130,13 @@ class ImageParser(object):
         """
         volumes = list(reversed(sorted(self.get_volumes())))
 
-        mounted_partitions = filter(lambda x: x.mountpoint, volumes)
-        viable_for_reconstruct = sorted(filter(lambda x: x.lastmountpoint, mounted_partitions))
+        mounted_partitions = [x for x in volumes if x.mountpoint]
+        viable_for_reconstruct = sorted([x for x in mounted_partitions if x.lastmountpoint])
 
         try:
             root = filter(lambda x: x.lastmountpoint == '/', viable_for_reconstruct)[0]
         except IndexError:
-            self._debug(u"[-] Could not find / while reconstructing, aborting!")
+            self._debug("[-] Could not find / while reconstructing, aborting!")
             return None
 
         viable_for_reconstruct.remove(root)
