@@ -17,7 +17,7 @@ Installation
 ------------
 Just perform the following commands for a full install, including all optional dependencies (but see the note about Ubuntu 13.10 below):
 
-    apt-get install python-setuptools python-dev libtsk-dev xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm
+    apt-get install python-setuptools python-dev libtsk-dev xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm cryptsetup
     pip install imagemounter
 
 ### Python packages
@@ -35,13 +35,17 @@ This package highly depends on other utilities to be present on your system. For
   - `affuse`, part of afflib-tools package
 - Statistics, e.g. last mountpoint of volumes
   - `fsstat`, part of sleuthkit package
-- LVM arrays
+- LVM volumes
   - `lvm` et al, all part of lvm2 package
-- RAID volumes
+- RAID arrays
   - `mdadm`
+- LUKS volumes
+  - `cryptsetup`
+
+A basic installation contains at least one of the mount tools. Highly recommended is also `fsstat`, others are required for specific file system types.
 
 #### ewfmount on Ubuntu 13.10
-Due to a bug with ewf-tools in Ubuntu <=13.10, it may be that ewfmount is not properly provided. This bug will be resolved in Ubuntu 14.04. If you are using Ubuntu 13.10, you can install ewf-tools with ewfmount as follows:
+Due to a bug with ewf-tools in Ubuntu <=13.10, it may be that ewfmount is not properly provided. This bug has been resolved in Ubuntu 14.04. If you are using Ubuntu 13.10, you can install ewf-tools with ewfmount as follows:
 
 1. Download a recent build of ewf-tools from https://launchpad.net/ubuntu/+source/libewf/20130416-2ubuntu1 (choose your arch under 'Builds' and download all deb files under 'Built files')
 2. Execute `sudo apt-get install libbfio1`
