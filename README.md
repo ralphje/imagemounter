@@ -15,7 +15,8 @@ it depends on pytsk3, which currently does not support Python 3.
 
 Installation
 ------------
-Just perform the following commands for a full install, including all optional dependencies (but see the note about Ubuntu 13.10 below):
+Just perform the following commands for a full install, including all optional dependencies (but see the note about
+Ubuntu 13.10 below):
 
     apt-get install python-setuptools python-dev libtsk-dev xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm cryptsetup
     pip install imagemounter
@@ -24,10 +25,13 @@ Just perform the following commands for a full install, including all optional d
 This package depends on two other packages. 
 
 - The _termcolor_ package is available from PyPI and is easily installed using tools such as `pip` or `easy_install`. 
-- The _pytsk3_ package requires some additional packages to be installed: `python-dev` and `libtsk-dev`. For compilation, the `build-essential` package from your distribution is also required. After that, you can easily install the `pytsk3` package from PyPI (pip requires the --pre flag to allow installing the package).
+- The _pytsk3_ package requires some additional packages to be installed: `python-dev` and `libtsk-dev`. For
+  compilation, the `build-essential` package from your distribution is also required. After that, you can easily install
+  the `pytsk3` package from PyPI (pip requires the --pre flag to allow installing the package).
 
 ### Other dependencies
-This package highly depends on other utilities to be present on your system. For a full installation, you require the following tools:
+This package highly depends on other utilities to be present on your system. For a full installation, you require the
+following tools:
 
 - Mount tools
   - `xmount`
@@ -42,12 +46,15 @@ This package highly depends on other utilities to be present on your system. For
 - LUKS volumes
   - `cryptsetup`
 
-A basic installation contains at least one of the mount tools. Highly recommended is also `fsstat`, others are required for specific file system types.
+A basic installation contains at least one of the mount tools. Highly recommended is also `fsstat`, others are required
+for specific file system types.
 
 #### ewfmount on Ubuntu 13.10
-Due to a bug with ewf-tools in Ubuntu <=13.10, it may be that ewfmount is not properly provided. This bug has been resolved in Ubuntu 14.04. If you are using Ubuntu 13.10, you can install ewf-tools with ewfmount as follows:
+Due to a bug with ewf-tools in Ubuntu <=13.10, it may be that ewfmount is not properly provided. This bug has been
+resolved in Ubuntu 14.04. If you are using Ubuntu 13.10, you can install ewf-tools with ewfmount as follows:
 
-1. Download a recent build of ewf-tools from https://launchpad.net/ubuntu/+source/libewf/20130416-2ubuntu1 (choose your arch under 'Builds' and download all deb files under 'Built files')
+1. Download a recent build of ewf-tools from https://launchpad.net/ubuntu/+source/libewf/20130416-2ubuntu1 (choose your
+arch under 'Builds' and download all deb files under 'Built files')
 2. Execute `sudo apt-get install libbfio1`
 3. Execute `sudo dpkg -i ewf-tools_* libewf2_*`
 
@@ -69,6 +76,7 @@ what the tool does, the following is a non-exhaustive list of the commands used 
   - `lvm pvscan` to scan for LVM systems
   - `vgchange` to activate the LVM system
   - `lvdisplay` to detect volumes (and again perform `fsstat` and `mount`, etc)
+
   or in the case of a LUKS volume:
   - `losetup` to mount the volume to a loopback device
   - `cryptsetup luksOpen` to open the volume
@@ -77,11 +85,17 @@ The same is performed in reverse (ish) order to unmount the image.
 
 Important notes
 ---------------
-Not all combinations of file and volume systems have been tested. If you encounter an issue, please try to change some of your arguments first, before creating a new issue.
+Not all combinations of file and volume systems have been tested. If you encounter an issue, please try to change some
+of your arguments first, before creating a new GitHub issue.
 
-Please note that many Linux based operating systems will try to mount LVMs and LUKS volumes for you. Although imagemounter tries to circumvent this automation, if you are unable to properly unmount, you should try to unmount through the interface of your OS first.
+Please note that many Linux based operating systems will try to mount LVMs for you. Although imagemounter tries to
+circumvent this automation, if you are unable to properly unmount, you should try to unmount through the interface of
+your OS first. Another useful command is `vgchange -a n` to disable all LVMs currently active (only use if you are not
+using a LVM for your own OS!).
 
-With `imount --clear` you can clear MOST temporary files and mounts, though this will not clean everything. If you used `--pretty` this tool can't do anything for you. It is therefore recommended to first try and mount your image without `--pretty`, to allow you to easily clean up if something crashes.
+With `imount --clear` you can clear MOST temporary files and mounts, though this will not clean everything. If you used
+`--pretty` this tool can't do anything for you. It is therefore recommended to first try and mount your image without
+`--pretty`, to allow you to easily clean up if something crashes.
 
 CLI usage
 ---------
