@@ -2,6 +2,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import os
+import random
 import subprocess
 import re
 import tempfile
@@ -15,11 +16,13 @@ class Volume(object):
     set. Either way, if mountpoint is set, you can use the partition. Call unmount when you're done!
     """
 
-    def __init__(self, disk=None, stats=False, fsforce=False, fsfallback=None, pretty=False, mountdir=None, **args):
+    def __init__(self, disk=None, stats=False, fsforce=False, fsfallback=None, fstypes=None, pretty=False,
+                 mountdir=None, **args):
         self.disk = disk
         self.stats = stats
         self.fsforce = fsforce
         self.fsfallback = fsfallback
+        self.fstypes = fstypes or {}
         self.pretty = pretty
         self.mountdir = mountdir
 
@@ -44,10 +47,16 @@ class Volume(object):
         self.exception = None
         self.was_mounted = False
 
+        # Used by functions that create subvolumes
+        self.volumes = []
+        self.parent = None
+
         # Used by lvm specific functions
         self.volume_group = None
-        self.volumes = []
         self.lv_path = None
+
+        # Used by LUKS
+        self.luks_path = None
 
         self.args = args
 
@@ -107,12 +116,14 @@ class Volume(object):
         """Determines the FS type for this partition. Used internally to determine which mount system to use."""
 
         # Determine fs type. If forced, always use provided type.
-        if self.fsforce:
+        if str(self.index) in self.fstypes:
+            fstype = self.fstypes[str(self.index)]
+        elif self.fsforce:
             fstype = self.fsfallback
         else:
             fsdesc = self.fsdescription.lower()
             # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info.
-            if fsdesc in ('logical volume', 'primary'):
+            if fsdesc in ('logical volume', 'luks container', 'primary'):
                 fsdesc = ''
             if not fsdesc and self.fstype:
                 fsdesc = self.fstype.lower()
@@ -125,6 +136,8 @@ class Volume(object):
                 fstype = 'ntfs'
             elif '0x8e' in fsdesc or 'lvm' in fsdesc:
                 fstype = 'lvm'
+            elif 'luks' in fsdesc:
+                fstype = 'luks'
             else:
                 fstype = self.fsfallback
 
@@ -138,6 +151,10 @@ class Volume(object):
 
         if self.lv_path:
             return self.lv_path
+        elif self.luks_path:
+            return '/dev/mapper/' + self.luks_path
+        elif self.parent and self.parent.luks_path:
+            return '/dev/mapper/' + self.parent.luks_path
         else:
             return self.disk.get_fs_path()
 
@@ -161,16 +178,16 @@ class Volume(object):
 
         if self.stats and not no_stats:
             self.fill_stats()
+
         self.mount()
+
         if self.stats and not no_stats:
             self.detect_mountpoint()
 
-        subvolumes = self.find_lvm_volumes()
-
-        if not subvolumes:
+        if not self.volumes:
             yield self
         else:
-            for v in subvolumes:
+            for v in self.volumes:
                 self._debug("    Mounting LVM volume {0}".format(v))
                 for s in v.init():
                     yield s
@@ -209,8 +226,7 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                #if not self.fstype:
-                #    self.fstype = 'Ext'
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
             elif fstype == 'bsd':
                 # ufs
@@ -220,8 +236,7 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                #if not self.fstype:
-                #    self.fstype = 'UFS'
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
             elif fstype == 'ntfs':
                 # NTFS
@@ -230,16 +245,17 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                #if not self.fstype:
-                #    self.fstype = 'NTFS'
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            elif fstype == 'luks':
+                self.open_luks_container()
 
             elif fstype == 'unknown':  # mounts without specifying the filesystem type
                 cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                #if not self.fstype:
-                #    self.fstype = 'Unknown'
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
             elif fstype == 'lvm':
                 # LVM
@@ -257,8 +273,9 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd.insert(1, '-r')
 
-                #if not self.fstype:
-                #    self.fstype = 'LVM'
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+                self.find_lvm_volumes()
 
             else:
                 try:
@@ -269,9 +286,6 @@ class Volume(object):
                 self._debug("[-] Unknown filesystem {0} (block offset: {1}, length: {2})"
                             .format(self, self.offset / BLOCK_SIZE, size))
                 return False
-
-            # Execute mount
-            util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
             self.was_mounted = True
 
@@ -306,6 +320,73 @@ class Volume(object):
             self._debug(e)
             return False
 
+    def open_luks_container(self):
+        """Alternative to the mount command, trying to open a LUKS container"""
+
+        # Open a loopback device
+        #noinspection PyBroadException
+        try:
+            self.loopback = util.check_output_(['losetup', '-f'], self).strip()
+        except Exception:
+            self._debug("[-] No free loopback device found for LUKS")
+            return None
+
+        cmd = ['losetup', '-o', str(self.offset), self.loopback, self.get_raw_base_path()]
+        if not self.disk.read_write:
+            cmd.insert(1, '-r')
+
+        util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+        # Check if this is a LUKS device
+        # noinspection PyBroadException
+        try:
+            util.check_call_(["cryptsetup", "isLuks", self.loopback], self, stderr=subprocess.STDOUT)
+            # ret = 0 if isLuks
+        except Exception:
+            self._debug("[-] Not a LUKS volume")
+            # clean the loopback device, we want this method to be clean as possible
+            # noinspection PyBroadException
+            try:
+                util.check_call_(['losetup', '-d', self.loopback], self)
+                self.loopback = None
+            except Exception:
+                pass
+
+            return None
+
+        # Open the LUKS container
+        self.luks_path = 'image_mounter_' + str(random.randint(10000, 99999))
+
+        # noinspection PyBroadException
+        try:
+            cmd = ["cryptsetup", "luksOpen", self.loopback, self.luks_path]
+            util.check_call_(cmd, self)
+        except Exception:
+            self.luks_path = None
+            return None
+
+        size = None
+        # noinspection PyBroadException
+        try:
+            result = util.check_output_(["cryptsetup", "status", self.luks_path], self)
+            for l in result.splitlines():
+                if "size:" in l and "key" not in l:
+                    size = int(l.replace("size:", "").replace("sectors", "").strip()) * BLOCK_SIZE
+        except Exception:
+            pass
+
+        container = Volume(disk=self.disk, stats=self.stats, fsforce=self.fsforce,
+                           fsfallback=self.fsfallback, fstypes=self.fstypes, pretty=self.pretty, mountdir=self.mountdir)
+        container.index = "{0}.0".format(self.index)
+        container.fsdescription = 'LUKS container'
+        container.flag = 'alloc'
+        container.parent = self
+        container.offset = 0
+        container.size = size  # kan uit status gehaald worden
+        self.volumes.append(container)
+
+        return container
+
     def find_lvm_volumes(self, force=False):
         """Performs post-mount actions on a LVM.
 
@@ -319,8 +400,8 @@ class Volume(object):
         # Scan for new lvm volumes
         result = util.check_output_(["lvm", "pvscan"], self)
         for l in result.splitlines():
-            if self.loopback in l or (self.offset == 0 and self.disk.get_fs_path() in l):
-                for vg in re.findall(r'VG (\w+)', l):
+            if self.loopback in l or (self.offset == 0 and self.get_raw_base_path() in l):
+                for vg in re.findall(r'VG (\S+)', l):
                     self.volume_group = vg
 
         if not self.volume_group:
@@ -335,10 +416,12 @@ class Volume(object):
         for l in result.splitlines():
             if "--- Logical volume ---" in l:
                 self.volumes.append(Volume(disk=self.disk, stats=self.stats, fsforce=self.fsforce,
-                                           fsfallback=self.fsfallback, pretty=self.pretty, mountdir=self.mountdir))
+                                           fsfallback=self.fsfallback, fstypes=self.fstypes,
+                                           pretty=self.pretty, mountdir=self.mountdir))
                 self.volumes[-1].index = "{0}.{1}".format(self.index, len(self.volumes) - 1)
                 self.volumes[-1].fsdescription = 'Logical Volume'
                 self.volumes[-1].flag = 'alloc'
+                self.volumes[-1].parent = self
             if "LV Name" in l:
                 self.volumes[-1].label = l.replace("LV Name", "").strip()
             if "LV Size" in l:
@@ -473,6 +556,14 @@ class Volume(object):
                 return False
 
             self.volume_group = None
+
+        if self.loopback and self.luks_path:
+            try:
+                util.check_call_(['cryptsetup', 'luksClose', self.luks_path], self, stdout=subprocess.PIPE)
+            except Exception:
+                return False
+
+            self.luks_path = None
 
         if self.loopback:
             try:

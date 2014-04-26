@@ -3,12 +3,12 @@ imagemounter
 
 imagemounter is a command-line utility and Python package to ease the mounting and unmounting of EnCase, Affuse and dd
 disk images. It supports mounting disk images using xmount (with optional RW cache), affuse and ewfmount;
-detecting DOS, BSD, Sun, Mac and GPT volume systems; mounting Ext, UFS, and NTFS volumes; detecting (nested) LVM
+detecting DOS, BSD, Sun, Mac and GPT volume systems; mounting Ext, UFS, LUKS and NTFS volumes; detecting (nested) LVM
 volume systems and mounting its subvolumes; and reconstructing RAID arrays.
 
 In its default mode, imagemounter will try to start mounting the base image on a temporary mount point,
 detect the volume system and then mount each volume seperately. If it fails finding a volume system,
-it will try to mount the entire image as a whole if it succeeds detecting what it actually is.
+it will try to mount the entire image as a whole if it succeeds in detecting what it actually is.
 
 This package currently only supports Python 2.6 and 2.7. Although this module in fact should be ready for Python 3.2+,
 it depends on pytsk3, which currently does not support Python 3.
@@ -65,6 +65,9 @@ what the tool does, the following is a non-exhaustive list of the commands used 
   - `lvm pvscan` to scan for LVM systems
   - `vgchange` to activate the LVM system
   - `lvdisplay` to detect volumes (and again perform `fsstat` and `mount`, etc)
+  or in the case of a LUKS volume:
+  - `losetup` to mount the volume to a loopback device
+  - `cryptsetup luksOpen` to open the volume
 
 The same is performed in reverse (ish) order to unmount the image.
 
@@ -94,6 +97,11 @@ sometimes cause issues. You can disable this additional information gathering wi
 
 You can disable the RAID check with `--no-raid`. If you know your volumes are not single volumes, or you know they are,
 use `--no-single` and `--single` respectively.
+
+Some volumes may not be automatically detected. If you know the type, you could use --fstypes to specify for each volume
+index the specific type, e.g. --fstypes=6=luks,6.0=lvm,6.0.0=ext. With --fsfallback you can specify a fallback if no
+type was detected, e.g. --fstypes=ext (use unknown to just mount and see what happens). --fsforce can be used to
+override automatic detection (--fstypes is not overriden).
 
 Use `imount --help` to discover more options.
 

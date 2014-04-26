@@ -2,10 +2,11 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 __ALL__ = ['Volume', 'Disk', 'ImageParser']
-__version__ = '1.4.2'
+__version__ = '1.4.3'
 
 BLOCK_SIZE = 512
 VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
+FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'luks', 'lvm', 'unknown')
 
 import sys
 import os
