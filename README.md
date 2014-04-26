@@ -75,6 +75,14 @@ what the tool does, the following is a non-exhaustive list of the commands used 
 
 The same is performed in reverse (ish) order to unmount the image.
 
+Important notes
+---------------
+Not all combinations of file and volume systems have been tested. If you encounter an issue, please try to change some of your arguments first, before creating a new issue.
+
+Please note that many Linux based operating systems will try to mount LVMs and LUKS volumes for you. Although imagemounter tries to circumvent this automation, if you are unable to properly unmount, you should try to unmount through the interface of your OS first.
+
+With `imount --clear` you can clear MOST temporary files and mounts, though this will not clean everything. If you used `--pretty` this tool can't do anything for you. It is therefore recommended to first try and mount your image without `--pretty`, to allow you to easily clean up if something crashes.
+
 CLI usage
 ---------
 In its most basic form, the installed command line utility (`imount`) accepts a positional argument pointing to

@@ -360,6 +360,8 @@ class Volume(object):
         # noinspection PyBroadException
         try:
             cmd = ["cryptsetup", "luksOpen", self.loopback, self.luks_path]
+            if not self.disk.read_write:
+                cmd.insert(1, '-r')
             util.check_call_(cmd, self)
         except Exception:
             self.luks_path = None
