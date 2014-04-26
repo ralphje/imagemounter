@@ -8,7 +8,7 @@ import glob
 import sys
 import os
 
-from imagemounter import util, ImageParser, __version__
+from imagemounter import util, ImageParser, __version__, FILE_SYSTEM_TYPES
 from termcolor import colored
 
 
@@ -86,11 +86,13 @@ def main():
                                                'use "detect" to try to detect, or "any" to loop over all VS types and '
                                                'use whatever works, which may produce unexpected results (default: '
                                                'detect)')
-    parser.add_argument('--fsfallback', choices=['ext', 'ufs', 'ntfs', 'lvm', 'unknown'], default=None,
+    parser.add_argument('--fsfallback', choices=FILE_SYSTEM_TYPES, default=None,
                         help="specify fallback type of the filesystem, which is used when it could not be detected or "
                              "is unsupported; use unknown to mount without specifying type")
     parser.add_argument('--fsforce', action='store_true', default=False,
                         help="force the use of the filesystem type specified with --fsfallback for all volumes")
+    parser.add_argument('--fstypes', default=None,
+                        help="allows the specification of the filesystem type per volume number; format: 0.1=lvm, ...")
 
     # Toggles for default settings you may perhaps want to override
     parser.add_argument('-s', '--stats', action='store_true', default=False,
@@ -110,9 +112,9 @@ def main():
 
     # Check some prerequisites
     if os.geteuid():  # Not run as root
-        print('[-] This program needs to be ran as root! Requesting elevation... ')
-        os.execvp('sudo', ['sudo'] + sys.argv)
-        #sys.exit(1)
+        print('[-] This program needs to be ran as root!')
+        #os.execvp('sudo', ['sudo'] + sys.argv)
+        sys.exit(1)
 
     if not args.color:
         #noinspection PyUnusedLocal,PyShadowingNames
@@ -183,6 +185,21 @@ def main():
     elif not args.fsfallback and args.fsforce:
         print("[-] You are forcing a file system type, but have not specified the type to use. Ignoring force.")
         args.fsforce = False
+
+    if args.fstypes:
+        try:
+            fstypes = {}
+            types = args.fstypes.split(',')
+            for type in types:
+                idx, fstype = type.split('=', 1)
+                if fstype.strip() not in FILE_SYSTEM_TYPES:
+                    print("[!] Error while parsing --fstypes: {} is invalid".format(fstype))
+                else:
+                    fstypes[idx.strip()] = fstype.strip()
+            args.fstypes = fstypes
+            print(fstypes)
+        except Exception as e:
+            print("[!] Failed to parse --fstypes: {}".format(e))
 
     if args.vstype != 'detect' and args.single:
         print("[!] There's no point in using --single in combination with --vstype.")
