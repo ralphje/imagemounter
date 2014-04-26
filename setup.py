@@ -10,6 +10,11 @@ def get_metadata():
 
 metadata = get_metadata()
 
+try:
+    long_description = open("README.md", "r").read()
+except Exception:
+    long_description = None
+
 setup(
     name='imagemounter',
     version=metadata['version'],
@@ -20,7 +25,7 @@ setup(
     url='https://github.com/ralphje/imagemounter',
     download_url='https://github.com/ralphje/imagemounter/tarball/v' + metadata['version'],
     description='Utility to mount partitions in Encase, AFF and dd images locally on Linux operating systems.',
-    long_description=open("README.md", "r").read(),
+    long_description=long_description,
     entry_points={'console_scripts': ['imount = imagemounter.mount_images:main']},
     install_requires=['pytsk3>=0.0.dev0', 'termcolor>=1.0.0'],
     keywords=['encase', 'aff', 'dd', 'disk image', 'ewfmount', 'affuse', 'xmount', 'imount'],

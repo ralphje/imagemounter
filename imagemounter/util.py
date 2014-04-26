@@ -8,12 +8,12 @@ import glob
 import os
 
 
-def clean_unmount(cmd, mountpoint, tries=20, rmdir=True):
+def clean_unmount(cmd, mountpoint, tries=20, rmdir=True, parser=None):
     cmd.append(mountpoint)
 
     # Perform unmount
     try:
-        subprocess.check_call(cmd)
+        check_call_(cmd, parser)
     except:
         return False
 
