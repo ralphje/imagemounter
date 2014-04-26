@@ -483,13 +483,13 @@ class Volume(object):
             self.loopback = None
 
         if self.bindmountpoint:
-            if not util.clean_unmount(['umount'], self.bindmountpoint, rmdir=False):
+            if not util.clean_unmount(['umount'], self.bindmountpoint, rmdir=False, parser=self):
                 return False
 
             self.bindmountpoint = None
 
         if self.mountpoint:
-            if not util.clean_unmount(['umount'], self.mountpoint):
+            if not util.clean_unmount(['umount'], self.mountpoint, parser=self):
                 return False
 
             self.mountpoint = None

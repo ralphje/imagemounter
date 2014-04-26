@@ -153,6 +153,9 @@ class Disk(object):
             raw_path = glob.glob(os.path.join(self.mountpoint, '*.dd'))
             raw_path.extend(glob.glob(os.path.join(self.mountpoint, '*.raw')))
             raw_path.extend(glob.glob(os.path.join(self.mountpoint, 'ewf1')))
+            if not raw_path:
+                self._debug("No mount found in {}.".format(self.mountpoint))
+                return None
             return raw_path[0]
 
     def get_fs_path(self):
@@ -171,7 +174,7 @@ class Disk(object):
         """Tests whether this image is in RAID."""
 
         if not util.command_exists('mdadm'):
-            self._debug("    mdadm not installed, so could not detect RAID")
+            self._debug("    mdadm not installed, could not detect RAID")
             return False
 
         # Scan for new lvm volumes
@@ -319,6 +322,7 @@ class Disk(object):
         finally:
             if baseimage:
                 baseimage.close()
+                del baseimage
 
     def mount_multiple_volumes(self):
         """Generator that mounts every partition of this image and yields the mountpoint."""
@@ -383,7 +387,7 @@ class Disk(object):
             except Exception:
                 self._debug("[-] Failed deleting loopback device {0}".format(self.loopback))
 
-        if self.mountpoint and not util.clean_unmount(['fusermount', '-u'], self.mountpoint):
+        if self.mountpoint and not util.clean_unmount(['fusermount', '-u'], self.mountpoint, parser=self):
             self._debug("[-] Error unmounting base {0}".format(self.mountpoint))
             return False
 
