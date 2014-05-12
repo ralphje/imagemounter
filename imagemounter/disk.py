@@ -3,7 +3,6 @@ from __future__ import unicode_literals
 
 import glob
 import os
-import pytsk3
 import re
 import subprocess
 import tempfile
@@ -29,11 +28,7 @@ class Disk(object):
         self.paths = sorted(util.expand_path(path))
 
         self.offset = offset
-
-        if vstype.lower() == 'any':
-            self.vstype = 'any'
-        else:
-            self.vstype = getattr(pytsk3, 'TSK_VS_TYPE_' + vstype.upper())
+        self.vstype = vstype.lower()
 
         self.read_write = read_write
 
@@ -280,8 +275,21 @@ class Disk(object):
         for v in volume.init(no_stats=True):  # stats can't  be retrieved from single volumes
             yield v
 
-    def _find_volumes(self):
+    def mount_multiple_volumes(self):
+        """Generator that mounts every partition of this image and yields the mountpoint."""
+        for v in self._mount_pytsk3_volumes():
+            yield v
+
+    mount_partitions = mount_multiple_volumes  # Backwards compatibility
+
+    def _find_pytsk3_volumes(self):
         """Finds all volumes based on the pytsk3 library."""
+
+        try:
+            import pytsk3
+        except ImportError:
+            self._debug("[-] pytsk3 not installed, could not detect volumes")
+            return []
 
         baseimage = None
         try:
@@ -312,7 +320,7 @@ class Disk(object):
             else:
                 # base case: just obtain all volumes
                 try:
-                    volumes = pytsk3.Volume_Info(baseimage, self.vstype)
+                    volumes = pytsk3.Volume_Info(baseimage, getattr(pytsk3, 'TSK_VS_TYPE_' + self.vstype.upper()))
                     self.volume_source = 'multi'
                     return volumes
                 except Exception as e:
@@ -324,11 +332,13 @@ class Disk(object):
                 baseimage.close()
                 del baseimage
 
-    def mount_multiple_volumes(self):
+    def _mount_pytsk3_volumes(self):
         """Generator that mounts every partition of this image and yields the mountpoint."""
 
         # Loop over all volumes in image.
-        for p in self._find_volumes():
+        for p in self._find_pytsk3_volumes():
+            import pytsk3
+
             volume = Volume(disk=self, **self.args)
             self.volumes.append(volume)
 
@@ -353,8 +363,6 @@ class Disk(object):
 
             for v in volume.init():
                 yield v
-
-    mount_partitions = mount_multiple_volumes  # Backwards compatibility
 
     def rw_active(self):
         """Indicates whether the rw-path is active."""
