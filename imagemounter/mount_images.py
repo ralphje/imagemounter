@@ -8,7 +8,7 @@ import glob
 import sys
 import os
 
-from imagemounter import util, ImageParser, __version__, FILE_SYSTEM_TYPES
+from imagemounter import util, ImageParser, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
 from termcolor import colored
 
 
@@ -81,7 +81,7 @@ def main():
                         help='use other tool to mount the initial images; results may vary between methods and if '
                              'something doesn\'t work, try another method; dummy can be used when base should not be '
                              'mounted (default: auto)')
-    parser.add_argument('--vstype', choices=['detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller', 'any'],
+    parser.add_argument('--vstype', choices=VOLUME_SYSTEM_TYPES + ("any", ),
                         default="detect", help='specify type of volume system (partition table); if you don\'t know, '
                                                'use "detect" to try to detect, or "any" to loop over all VS types and '
                                                'use whatever works, which may produce unexpected results (default: '
