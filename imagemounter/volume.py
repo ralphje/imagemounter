@@ -66,9 +66,6 @@ class Volume(object):
     def __str__(self):
         return str(self.__unicode__())
 
-    def __cmp__(self, other):
-        return cmp(self.lastmountpoint, other.lastmountpoint)
-
     # noinspection PyProtectedMember
     def _debug(self, val):
         if self.disk:

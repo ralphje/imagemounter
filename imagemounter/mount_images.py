@@ -9,16 +9,15 @@ import sys
 import os
 
 from imagemounter import util, ImageParser, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
-from termcolor import colored
+
+# Python 2 compatibility
+try:
+    input = raw_input
+except NameError:
+    pass
 
 
 def main():
-    # Python 2 compatibility
-    try:
-        input = raw_input
-    except NameError:
-        pass
-
     class MyParser(argparse.ArgumentParser):
         def error(self, message):
             sys.stderr.write('error: {0}\n'.format(message))
@@ -81,11 +80,14 @@ def main():
                         help='use other tool to mount the initial images; results may vary between methods and if '
                              'something doesn\'t work, try another method; dummy can be used when base should not be '
                              'mounted (default: auto)')
-    parser.add_argument('--vstype', choices=VOLUME_SYSTEM_TYPES + ("any", ),
+    parser.add_argument('-d', '--detection', choices=['pytsk3', 'mmls', 'auto'], default='auto',
+                        help='use other volume detection method; pytsk3 and mmls should provide identical results, '
+                             'though pytsk3 is using the direct C API of mmls, but requires pytsk3 to be installed; '
+                             'auto distinguishes between pytsk3 and mmls only '
+                             '(default: auto)')
+    parser.add_argument('--vstype', choices=VOLUME_SYSTEM_TYPES,
                         default="detect", help='specify type of volume system (partition table); if you don\'t know, '
-                                               'use "detect" to try to detect, or "any" to loop over all VS types and '
-                                               'use whatever works, which may produce unexpected results (default: '
-                                               'detect)')
+                                               'use "detect" to try to detect (default: detect)')
     parser.add_argument('--fsfallback', choices=FILE_SYSTEM_TYPES, default=None,
                         help="specify fallback type of the filesystem, which is used when it could not be detected or "
                              "is unsupported; use unknown to mount without specifying type")
@@ -121,6 +123,7 @@ def main():
         def col(s, *args, **kwargs):
             return s
     else:
+        from termcolor import colored
         col = colored
 
     if __version__.endswith('a') or __version__.endswith('b'):
@@ -148,10 +151,12 @@ def main():
     elif args.no_single:
         args.single = False
 
+    # Check if mount method supports rw
     if args.method not in ('xmount', 'auto') and args.read_write:
         print(col("[!] {0} does not support mounting read-write! Will mount read-only.".format(args.method), 'yellow'))
         args.read_write = False
 
+    # Check if mount method is available
     if args.method not in ('auto', 'dummy') and not util.command_exists(args.method):
         print(col("[-] {0} is not installed!".format(args.method), 'red'))
         sys.exit(1)
@@ -159,6 +164,18 @@ def main():
         print(col("[-] No tools installed to mount the image base!", 'red'))
         sys.exit(1)
 
+    # Check if detection method is available
+    if args.detection == 'pytsk3' and not util.module_exists('pytsk3'):
+        print(col("[-] pytsk3 module does not exist!", 'red'))
+        sys.exit(1)
+    elif args.detection == 'mmls' and not util.command_exists(args.detection):
+        print(col("[-] {0} is not installed!".format(args.detection), 'red'))
+        sys.exit(1)
+    elif args.detection == 'auto' and not util.module_exists('pytsk3') and not util.command_exists('mmls'):
+        print(col("[-] No tools installed to detect volumes!", 'red'))
+        sys.exit(1)
+
+    # Check if raid is available
     if args.raid and not util.command_exists('mdadm'):
         print(col("[!] RAID mount requires the mdadm command.", 'yellow'))
         args.raid = False
@@ -189,15 +206,15 @@ def main():
     if args.fstypes:
         try:
             fstypes = {}
+            # noinspection PyUnresolvedReferences
             types = args.fstypes.split(',')
-            for type in types:
-                idx, fstype = type.split('=', 1)
+            for typ in types:
+                idx, fstype = typ.split('=', 1)
                 if fstype.strip() not in FILE_SYSTEM_TYPES:
                     print("[!] Error while parsing --fstypes: {} is invalid".format(fstype))
                 else:
                     fstypes[idx.strip()] = fstype.strip()
             args.fstypes = fstypes
-            print(fstypes)
         except Exception as e:
             print("[!] Failed to parse --fstypes: {}".format(e))
 

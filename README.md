@@ -10,24 +10,23 @@ In its default mode, imagemounter will try to start mounting the base image on a
 detect the volume system and then mount each volume seperately. If it fails finding a volume system,
 it will try to mount the entire image as a whole if it succeeds in detecting what it actually is.
 
-This package currently only supports Python 2.6 and 2.7. Although this module in fact should be ready for Python 3.2+,
-it depends on pytsk3, which currently does not support Python 3.
+This package supports Python 2.6 and 2.7, and Python 3.2+. Versions before 1.5.0 depended on pytsk3, but 1.5.0
+introduced the option to use the result of the `mmls` command instead.
 
 Installation
 ------------
 Just perform the following commands for a full install, including all optional dependencies (but see the note about
 Ubuntu 13.10 below):
 
-    apt-get install python-setuptools python-dev libtsk-dev xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm cryptsetup
+    apt-get install python-setuptools xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm cryptsetup
     pip install imagemounter
 
 ### Python packages
-This package depends on two other packages. 
+This package does not require other packages, though _termcolor_ is recommended.
 
-- The _termcolor_ package is available from PyPI and is easily installed using tools such as `pip` or `easy_install`. 
-- The _pytsk3_ package requires some additional packages to be installed: `python-dev` and `libtsk-dev`. For
-  compilation, the `build-essential` package from your distribution is also required. After that, you can easily install
-  the `pytsk3` package from PyPI (pip requires the --pre flag to allow installing the package).
+If you wish to use _pytsk3_ support, you require `python-dev` and `libtsk-dev`. For compilation, the `build-essential`
+package from your distribution is also required. After that, you can easily install the `pytsk3` package from PyPI
+(pip requires the --pre flag to allow installing the package).
 
 ### Other dependencies
 This package highly depends on other utilities to be present on your system. For a full installation, you require the
@@ -37,6 +36,9 @@ following tools:
   - `xmount`
   - `ewfmount`, part of ewf-tools package, see note below
   - `affuse`, part of afflib-tools package
+- Volume detection
+  - `mmls`, part of sleuthkit package
+  - `pytsk3`
 - Statistics, e.g. last mountpoint of volumes
   - `fsstat`, part of sleuthkit package
 - LVM volumes

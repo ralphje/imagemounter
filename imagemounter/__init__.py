@@ -2,7 +2,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 __ALL__ = ['Volume', 'Disk', 'ImageParser']
-__version__ = '1.4.3'
+__version__ = '1.5.0'
 
 BLOCK_SIZE = 512
 VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
@@ -14,7 +14,6 @@ import os
 from imagemounter import util
 from imagemounter.disk import Disk
 from imagemounter.volume import Volume
-from termcolor import colored
 
 
 class ImageParser(object):
@@ -41,6 +40,7 @@ class ImageParser(object):
     def _debug(self, val):
         if self.verbose:
             if self.verbose_color:
+                from termcolor import colored
                 print(colored(val, "cyan"), file=self.out)
             else:
                 print(val, file=self.out)
@@ -112,7 +112,7 @@ class ImageParser(object):
 
         # To ensure clean unmount after reconstruct, we sort across all volumes in all our disks to provide a proper
         # order
-        volumes = list(reversed(sorted(self.get_volumes())))
+        volumes = list(sorted(self.get_volumes(), key=lambda v: v.mountpoint or "", reverse=True))
         for v in volumes:
             if not v.unmount():
                 self._debug("[-] Error unmounting volume {0}".format(v.mountpoint))
@@ -129,20 +129,18 @@ class ImageParser(object):
         """Reconstructs the filesystem of all volumes mounted by the parser by inspecting the last mount point and
         bind mounting everything.
         """
-        volumes = list(reversed(sorted(self.get_volumes())))
-
-        mounted_partitions = [x for x in volumes if x.mountpoint]
-        viable_for_reconstruct = sorted([x for x in mounted_partitions if x.lastmountpoint])
+        volumes = list(sorted((v for v in self.get_volumes() if v.mountpoint and v.lastmountpoint),
+                              key=lambda v: v.mountpoint or "", reverse=True))
 
         try:
-            root = filter(lambda x: x.lastmountpoint == '/', viable_for_reconstruct)[0]
+            root = list(filter(lambda x: x.lastmountpoint == '/', volumes))[0]
         except IndexError:
             self._debug("[-] Could not find / while reconstructing, aborting!")
             return None
 
-        viable_for_reconstruct.remove(root)
+        volumes.remove(root)
 
-        for v in viable_for_reconstruct:
+        for v in volumes:
             v.bindmount(os.path.join(root.mountpoint, v.lastmountpoint[1:]))
         return root
 

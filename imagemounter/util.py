@@ -68,16 +68,31 @@ def command_exists(cmd):
     return False
 
 
+def module_exists(mod):
+    import imp
+    try:
+        imp.find_module(mod)
+        return True
+    except ImportError:
+        return False
+
+
 def check_call_(cmd, parser=None, *args, **kwargs):
     if parser:
         parser._debug('    {0}'.format(' '.join(cmd)))
     return subprocess.check_call(cmd, *args, **kwargs)
 
+import locale
+encoding = locale.getdefaultlocale()[1]
+
 
 def check_output_(cmd, parser=None, *args, **kwargs):
     if parser:
         parser._debug('    {0}'.format(' '.join(cmd)))
-    return subprocess.check_output(cmd, *args, **kwargs)
+    result = subprocess.check_output(cmd, *args, **kwargs)
+    if result:
+        result = result.decode(encoding)
+    return result
 
 
 def force_clean(execute=True):
