@@ -6,7 +6,7 @@ import os
 import re
 import subprocess
 import tempfile
-from imagemounter import util, BLOCK_SIZE, VOLUME_SYSTEM_TYPES
+from imagemounter import util, BLOCK_SIZE
 from imagemounter.volume import Volume
 
 
@@ -14,8 +14,8 @@ class Disk(object):
     """Parses an image and mounts it."""
 
     #noinspection PyUnusedLocal
-    def __init__(self, parser, path, offset=0, vstype='detect', read_write=False, method='auto', multifile=True,
-                 **args):
+    def __init__(self, parser, path, offset=0, vstype='detect', read_write=False, method='auto', detection='auto',
+                 multifile=True, **args):
 
         self.parser = parser
 
@@ -43,6 +43,14 @@ class Disk(object):
                 self.method = 'xmount'
         else:
             self.method = method
+
+        if detection == 'auto':
+            if util.module_exists('pytsk3'):
+                self.detection = 'pytsk3'
+            else:
+                self.detection = 'mmls'
+        else:
+            self.detection = detection
 
         self.read_write = read_write
         self.rwpath = None
@@ -277,8 +285,15 @@ class Disk(object):
 
     def mount_multiple_volumes(self):
         """Generator that mounts every partition of this image and yields the mountpoint."""
-        for v in self._mount_pytsk3_volumes():
-            yield v
+        if self.detection == 'mmls':
+            for v in self._mount_mmls_volumes():
+                yield v
+        elif self.detection == 'pytsk3':
+            for v in self._mount_pytsk3_volumes():
+                yield v
+        else:
+            self._debug("[-] No viable detection method found")
+            return
 
     mount_partitions = mount_multiple_volumes  # Backwards compatibility
 
@@ -286,6 +301,7 @@ class Disk(object):
         """Finds all volumes based on the pytsk3 library."""
 
         try:
+            # noinspection PyUnresolvedReferences
             import pytsk3
         except ImportError:
             self._debug("[-] pytsk3 not installed, could not detect volumes")
@@ -303,30 +319,14 @@ class Disk(object):
                 self._debug(e)
                 return []
 
-            # any loops over all vstypes
-            if self.vstype == 'any':
-                for vs in VOLUME_SYSTEM_TYPES:
-                    #noinspection PyBroadException
-                    try:
-                        vst = getattr(pytsk3, 'TSK_VS_TYPE_' + vs.upper())
-                        volumes = pytsk3.Volume_Info(baseimage, vst)
-                        self._debug("[+] Using VS type {0}".format(vs))
-                        return volumes
-                    except Exception:
-                        self._debug("    VS type {0} did not work".format(vs))
-                else:
-                    self._debug("[-] Failed retrieving volume info")
-                    return []
-            else:
-                # base case: just obtain all volumes
-                try:
-                    volumes = pytsk3.Volume_Info(baseimage, getattr(pytsk3, 'TSK_VS_TYPE_' + self.vstype.upper()))
-                    self.volume_source = 'multi'
-                    return volumes
-                except Exception as e:
-                    self._debug("[-] Failed retrieving volume info (possible empty image).")
-                    self._debug(e)
-                    return []
+            try:
+                volumes = pytsk3.Volume_Info(baseimage, getattr(pytsk3, 'TSK_VS_TYPE_' + self.vstype.upper()))
+                self.volume_source = 'multi'
+                return volumes
+            except Exception as e:
+                self._debug("[-] Failed retrieving volume info (possible empty image).")
+                self._debug(e)
+                return []
         finally:
             if baseimage:
                 baseimage.close()
@@ -364,6 +364,54 @@ class Disk(object):
             for v in volume.init():
                 yield v
 
+    def _mount_mmls_volumes(self):
+        """Finds and mounts all volumes based on mmls."""
+
+        try:
+            cmd = ['mmls']
+            if self.vstype != 'detect':
+                cmd.extend(['-t', self.vstype])
+            cmd.append(self.get_raw_path())
+            output = util.check_output_(cmd, self.parser)
+            self.volume_source = 'multi'
+        except Exception as e:
+            self._debug("[-] Failed executing mmls command")
+            self._debug(e)
+            return
+
+        output = output.split("Description", 1)[-1]
+        for line in output.splitlines():
+            if not line:
+                continue
+            try:
+                index, slot, start, end, length, description = line.split(None, 5)
+                volume = Volume(disk=self, **self.args)
+                self.volumes.append(volume)
+
+                volume.offset = int(start) * BLOCK_SIZE
+                volume.fsdescription = description
+                volume.index = int(index[:-1])
+                volume.size = int(length) * BLOCK_SIZE
+            except Exception as e:
+                self._debug("[-] Error while parsing mmls output")
+                self._debug(e)
+                continue
+
+            if slot.lower() == 'meta':
+                volume.flag = 'meta'
+            elif slot.lower() == '-----':
+                volume.flag = 'unalloc'
+            else:
+                volume.flag = 'alloc'
+
+            # unalloc / meta partitions do not have stats and can not be mounted
+            if volume.flag != 'alloc':
+                yield volume
+                continue
+
+            for v in volume.init():
+                yield v
+
     def rw_active(self):
         """Indicates whether the rw-path is active."""
 
@@ -372,7 +420,7 @@ class Disk(object):
     def unmount(self, remove_rw=False):
         """Method that removes all ties to the filesystem, so the image can be unmounted successfully. Warning: """
 
-        for m in list(reversed(sorted(self.volumes))):
+        for m in list(sorted(self.volumes, key=lambda v: v.mountpoint or "", reverse=True)):
             if not m.unmount():
                 self._debug("[-] Error unmounting volume {0}".format(m.mountpoint))
 
