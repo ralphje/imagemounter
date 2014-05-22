@@ -16,9 +16,7 @@ Most operations are managed on a :class:`Volume` level, although RAIDs (and volu
 - :class:`imagemounter.Disk`, which represents a single disk iamge and can be mounted, added to RAID, and detect and maintain volumes. It is also responsible for maintaining the write cache.
 - :class:`imagemounter.Volume`, which can detect its own type and fill its stats, can be mounted, and detect LVM (sub)volumes.
 
-All three classes maintain an ``init()`` method that yields the volumes below it. You should call clean on the parser if
-you are done; you may also unmount separate volumes or disks, which will also unmount all volumes below it. Warning:
-unmounting one of the RAID volumes in a RAID array, causes the entire array to be unmounted.
+All three classes maintain an ``init()`` method that yields the volumes below it. You should call ``clean()`` on the parser as soon as you are done; you may also call ``unmount()`` on separate volumes or disks, which will also unmount all volumes below it. Warning: unmounting one of the RAID volumes in a RAID array, causes the entire array to be unmounted.
 
 Reference
 ---------
@@ -92,6 +90,10 @@ The best example of the use of the Python interface is the :command:`imount` com
    .. attribute:: name
 
       Pretty name of the disk.
+
+   .. attribute:: index
+
+      Disk index. May be None if it is the only disk of this type.
 
    .. attribute:: mountpoint
 
