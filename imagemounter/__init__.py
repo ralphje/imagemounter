@@ -2,7 +2,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 __ALL__ = ['Volume', 'Disk', 'ImageParser']
-__version__ = '1.5.0'
+__version__ = '1.5.1'
 
 BLOCK_SIZE = 512
 VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
@@ -52,8 +52,13 @@ class ImageParser(object):
         self.args = args
 
         self.disks = []
+        index = 0
         for path in self.paths:
-            self.disks.append(Disk(self, path, **self.args))
+            if len(self.paths) == 1:
+                index = None
+            else:
+                index += 1
+            self.disks.append(Disk(self, path, index=index, **self.args))
 
     def _debug(self, val):
         if self.verbose:

@@ -123,7 +123,7 @@ While :mod:`imagemounter` will try to automatically detect as much as possible, 
 
    Forces the use of the filesystem type specified with :option:`--fsfallback` for all volumes. In other words, disables the automatic filesystem detection.
 
-.. cmdoption:: --fstypes
+.. cmdoption:: --fstypes <types>
 
    Allows the specification of filesystem type for each volume separately. You can use subvolumes, examples including::
 

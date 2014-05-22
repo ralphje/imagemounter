@@ -15,7 +15,7 @@ class Disk(object):
 
     #noinspection PyUnusedLocal
     def __init__(self, parser, path, offset=0, vstype='detect', read_write=False, method='auto', detection='auto',
-                 multifile=True, **args):
+                 multifile=True, index=None, **args):
         """Instantiation of this class does not automatically mount, detect or analyse the disk. You will need the
         :func:`init` method for this.
 
@@ -70,6 +70,7 @@ class Disk(object):
         self.read_write = read_write
         self.rwpath = None
         self.multifile = multifile
+        self.index = index
         self.args = args
 
         self.name = os.path.split(path)[1]
@@ -320,7 +321,10 @@ class Disk(object):
 
         volume = Volume(disk=self, **self.args)
         volume.offset = 0
-        volume.index = 0
+        if self.index is None:
+            volume.index = 0
+        else:
+            volume.index = '{0}.0'.format(self.index)
 
         description = util.check_output_(['file', '-sL', self.get_fs_path()]).strip()
         if description:
@@ -403,7 +407,10 @@ class Disk(object):
             # Fill volume with more information
             volume.offset = p.start * BLOCK_SIZE
             volume.fsdescription = p.desc
-            volume.index = p.addr
+            if self.index is not None:
+                volume.index = '{0}.{1}'.format(self.index, p.addr)
+            else:
+                volume.index = p.addr
             volume.size = p.len * BLOCK_SIZE
 
             if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
@@ -448,7 +455,10 @@ class Disk(object):
 
                 volume.offset = int(start) * BLOCK_SIZE
                 volume.fsdescription = description
-                volume.index = int(index[:-1])
+                if self.index is not None:
+                    volume.index = '{0}.{1}'.format(self.index, int(index[:-1]))
+                else:
+                    volume.index = int(index[:-1])
                 volume.size = int(length) * BLOCK_SIZE
             except Exception as e:
                 self._debug("[-] Error while parsing mmls output")
