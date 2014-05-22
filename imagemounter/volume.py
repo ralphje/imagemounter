@@ -12,12 +12,26 @@ from imagemounter import util, BLOCK_SIZE
 
 
 class Volume(object):
-    """Information about a partition. Note that the mountpoint may be set, or not. If it is not set, exception may be
-    set. Either way, if mountpoint is set, you can use the partition. Call unmount when you're done!
+    """Information about a volume. Note that every detected volume gets their own Volume object, though it may or may
+    not be mounted. This can be seen through the :attr:`mountpoint` attribute -- if it is not set, perhaps the
+    :attr:`exception` attribute is set with an exception.
     """
 
     def __init__(self, disk=None, stats=False, fsforce=False, fsfallback=None, fstypes=None, pretty=False,
                  mountdir=None, **args):
+        """Creates a Volume object that is not mounted yet.
+
+        :param disk: the parent disk
+        :type disk: :class:`Disk`
+        :param bool stats: indicates whether :func:`init` should try to fill statistics
+        :param bool fsforce: indicates whether the file system type in *fsfallback* should be used for all file systems
+        :param str fsfallback: the file system type to use when automatic detection fails
+        :param dict fstypes: dict mapping volume indices to file system types to (forcibly) use
+        :param bool pretty: indicates whether pretty names should be used for the mountpoints
+        :param str mountdir: location where mountpoints are created, defaulting to a temporary location
+        :param args: additional arguments
+        """
+
         self.disk = disk
         self.stats = stats
         self.fsforce = fsforce
@@ -72,6 +86,10 @@ class Volume(object):
             self.disk._debug(val)
 
     def get_description(self, with_size=True):
+        """Obtains a generic description of the volume, containing the file system type, index, label and NTFS version.
+        If *with_size* is provided, the volume size is also included.
+        """
+
         desc = ''
 
         if with_size and self.size:
@@ -88,6 +106,8 @@ class Volume(object):
         return desc
 
     def get_size_gib(self):
+        """Obtains the size of the volume in a human-readable format (i.e. in TiBs, GiBs or MiBs)."""
+
         # Python 3 compatibility
         if sys.version_info[0] == 2:
             integer_types = (int, long)
@@ -110,7 +130,9 @@ class Volume(object):
             return self.size
 
     def get_fs_type(self):
-        """Determines the FS type for this partition. Used internally to determine which mount system to use."""
+        """Determines the FS type for this partition. This function is used internally to determine which mount system
+        to use, based on the file system description. Return values include *ext*, *bsd*, *ntfs*, *lvm* and *luks*.
+        """
 
         # Determine fs type. If forced, always use provided type.
         if str(self.index) in self.fstypes:
@@ -144,7 +166,9 @@ class Volume(object):
         return fstype
 
     def get_raw_base_path(self):
-        """Retrieves the base mount path. Used to determine source mount."""
+        """Retrieves the base mount path of the volume. Typically equals to :func:`Disk.get_fs_path` but may also be the
+        path to a logical volume. This is used to determine the source path for a mount call.
+        """
 
         if self.lv_path:
             return self.lv_path
@@ -156,7 +180,7 @@ class Volume(object):
             return self.disk.get_fs_path()
 
     def get_safe_label(self):
-        """Returns a label to be added to a path in the fs for this volume."""
+        """Returns a label that is safe to add to a path in the mountpoint for this volume."""
 
         if self.label == '/':
             return 'root'
@@ -169,8 +193,11 @@ class Volume(object):
         return suffix
 
     def init(self, no_stats=False):
-        """Calls all methods required to fully mount the volume. Yields all subvolumes, or the volume itself,
-        if none.
+        """Generator that mounts this volume and either yields itself or recursively generates its subvolumes.
+
+        More specifically, this function will call :func:`fill_stats` (iff *no_stats* is False), followed by
+        :func:`mount`, followed by a call to :func:`detect_mountpoint`, after which ``self`` is yielded, or the result
+        of the :func:`init` call on each subvolume is yielded
         """
 
         if self.stats and not no_stats:
@@ -190,7 +217,16 @@ class Volume(object):
                     yield s
 
     def mount(self):
-        """Mounts the partition locally."""
+        """Based on the file system type as determined by :func:`get_fs_type`, the proper mount command is executed
+        for this volume. The volume is mounted in a temporary path (or a pretty path if :attr:`pretty` is enabled) in
+        the mountpoint as specified by :attr:`mountpoint`.
+
+        If the file system type is a LUKS container, :func:`open_luks_container` is called only. If it is a LVM volume,
+        :func:`find_lvm_volumes` is called after the LVM has been mounted. Both methods will add subvolumes to
+        :attr:`volumes`
+
+        :return: boolean indicating whether the mount succeeded
+        """
 
         raw_path = self.get_raw_base_path()
         fstype = self.get_fs_type()
@@ -303,7 +339,11 @@ class Volume(object):
             return False
 
     def bindmount(self, mountpoint):
-        """Bind mounts the volume to another mountpoint."""
+        """Bind mounts the volume to another mountpoint. Only works if the volume is already mounted. Note that only the
+        last bindmountpoint is remembered and cleaned.
+
+        :return: bool indicating whether the bindmount succeeded
+        """
 
         if not self.mountpoint:
             return False
@@ -318,7 +358,11 @@ class Volume(object):
             return False
 
     def open_luks_container(self):
-        """Alternative to the mount command, trying to open a LUKS container"""
+        """Command that is an alternative to the :func:`mount` command that opens a LUKS container. The opened volume is
+        added to the subvolume set of this volume. Requires the user to enter the key manually.
+
+        :return: the Volume contained in the LUKS container, or None on failure.
+        """
 
         # Open a loopback device
         #noinspection PyBroadException
@@ -387,10 +431,10 @@ class Volume(object):
         return container
 
     def find_lvm_volumes(self, force=False):
-        """Performs post-mount actions on a LVM.
+        """Performs post-mount actions on a LVM. Scans for active volume groups from the loopback device, activates it
+        and fills :attr:`volumes` with the logical volumes.
 
-        Scans for active volume groups from the loopback device, activates it and fills self.volumes with the logical
-        volumes
+        If *force* is true, the LVM detection is ran even when the LVM is not mounted on a loopback device.
         """
 
         if not self.loopback and not force:
@@ -434,7 +478,7 @@ class Volume(object):
         return self.volumes
 
     def get_volumes(self):
-        """Gets a list of all subvolumes and the current volume. (Recursive.)"""
+        """Recursively gets a list of all subvolumes and the current volume."""
 
         if self.volumes:
             volumes = []
@@ -446,7 +490,7 @@ class Volume(object):
             return [self]
 
     def fill_stats(self):
-        """Fills some additional fields from the object using fsstat."""
+        """Using :command:`fsstat`, adds some additional information of the volume to the Volume."""
 
         process = None
 
@@ -506,8 +550,8 @@ class Volume(object):
             self._debug("    Killed fsstat after {0}s".format(duration))
 
     def detect_mountpoint(self):
-        """Attempts to detect the previous mountpoint if the stats are failing on doing so. The volume must be mounted
-        first.
+        """Attempts to detect the previous mountpoint if this was not done through :func:`fill_stats`. This detection
+        does some heuristic method on the mounted volume.
         """
 
         if self.lastmountpoint:
@@ -543,7 +587,7 @@ class Volume(object):
 
     #noinspection PyBroadException
     def unmount(self):
-        """Unounts the partition from the filesystem."""
+        """Unounts the volume from the filesystem."""
 
         for volume in self.volumes:
             volume.unmount()

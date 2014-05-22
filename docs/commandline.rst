@@ -1,35 +1,13 @@
 Command-line usage
 ==================
 
-In its most basic form, the installed command line utility (`imount`) accepts a positional argument pointing to
-the disk image, e.g.::
+One of the core functionalities of :mod:`imagemounter` is  the command-line utility :command:`imount` that eases the mounting and unmounting of different types of disks and volumes. In its most basic form, the utility accepts a positional argument pointing to a disk image, disk or volume, e.g.::
 
     imount disk.E01
 
-You can pass multiple disks to the same command. This allows the command to mount across multiple disks,
-which is useful when you wish to reconstruct volumes split across multiple disks, or for reconstructing a RAID array.
+Multiple files can be passed to this command, allowing the mounting of volume systems that span multiple disks, which can be useful for those wishing to reconstruct a system that entailed multiple disks or for reconstructing RAID arrays.
 
-imount will by default mount each volume in /tmp/ and ask you whether you want to keep it mounted, or want to unmount
-this. After the entire image has been processed, all volumes must be unmounted. You can change the default mount point
-with `--mountdir`. You can prettify the automatically generated name with `--pretty`.
-
-You can use `--keep` to not unmount the volume after the program stops. However, you are recommended to not use this in
-combination with `--mountdir` or `--pretty`, as `--clean` can not detect volumes with non-default naming.
-
-If you wish to reconstruct an image with UFS/Ext volumes with known former mountpoints, you can reconstruct the image
-with its former mountpoints using `--reconstruct`. For instance, if you have partitions previously mounted at /, /var
-and /home, /var and /home will be bind-mounted in /, providing you with a single filesystem tree.
-
-
-
-
-
-Some volumes may not be automatically detected. If you know the type, you could use --fstypes to specify for each volume
-index the specific type, e.g. --fstypes=6=luks,6.0=lvm,6.0.0=ext. With --fsfallback you can specify a fallback if no
-type was detected, e.g. --fstypes=ext (use unknown to just mount and see what happens). --fsforce can be used to
-override automatic detection (--fstypes is not overriden).
-
-Use ``imount --help`` to discover more options.
+By default, :command:`imount` will mount each single volume in :file:`/tmp` and wait until you confirm an unmount operation. Common usage is therefore to keep :command:`imount` running in a separate window and perform other operations in a second window.
 
 Arguments
 ---------
@@ -40,10 +18,11 @@ The :command:`imount` utility requires one (or more) positional arguments and of
 
    The positional argument(s) should provide the path(s) to the disk images you want to mount. Many different formats are supported, including the EnCase evidence format, split dd files, mounted hard drives, etc. In the case of split files, you can refer to the folder containing these files.
 
-   If you specify more than one file, all files are considered to be part of the same originating system, which is relevant for the ``--reconstruct`` command-line option.
+   If you specify more than one file, all files are considered to be part of the same originating system, which is relevant for the :option:`--reconstruct` command-line option.
 
 Arguments that immediately exit
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Some useful facilities.
 
 .. cmdoption:: --help
                -h
@@ -60,6 +39,7 @@ Arguments that immediately exit
 
 CLI behaviour
 ^^^^^^^^^^^^^
+The next four command-line options alter the behaviour of the :command:`imount` utility, but does not affect the behaviour of the underlying :mod:`imagemounter` module.
 
 .. cmdoption:: --color
                -c
@@ -83,16 +63,20 @@ CLI behaviour
 
 Additional features
 ^^^^^^^^^^^^^^^^^^^
+This command-line option enables an additional and useful feature.
 
 .. cmdoption:: --reconstruct
                -r
 
-   Attempts to reconstruct the full filesystem tree by identifying the last mountpoint of each identified volume and bindmounting this in the previous root directory. This only works with Linux-based filesystems and only if :file:`/` can be identified.
+   Attempts to reconstruct the full filesystem tree by identifying the last mountpoint of each identified volume and bindmounting this in the previous root directory. For instance, if volumes have previously been mounted at :file:`/` , :file:`/var` and :file:`/home` ; :file:`/var` and :file:`/home` will be bind-mounted in :file:`/` , providing you with a single filesystem tree in the mount location of :file:`/` that is easily traversible.
+
+   This only works with Linux-based filesystems and only if :file:`/` can be identified.
 
    Implies :option:`--stats`.
 
 Mount behaviour
 ^^^^^^^^^^^^^^^
+These arguments alter some pieces of the mount behaviour of :mod:`imagemounter`, mostly to ease your work.
 
 .. cmdoption:: --mountdir <directory>
                -md <directory>
@@ -113,6 +97,7 @@ Mount behaviour
 
 Advanced options
 ^^^^^^^^^^^^^^^^
+While :mod:`imagemounter` will try to automatically detect as much as possible, there are some cases where you may wish to override the automatically detected options. You can specify which detection methods should be used and override the volume system and file system types if needed.
 
 .. cmdoption:: --method <method>
                -m <method>
@@ -138,7 +123,7 @@ Advanced options
 
    Forces the use of the filesystem type specified with :option:`--fsfallback` for all volumes. In other words, disables the automatic filesystem detection.
 
-.. cmdoptions:: --fstypes
+.. cmdoption:: --fstypes
 
    Allows the specification of filesystem type for each volume separately. You can use subvolumes, examples including::
 
@@ -148,35 +133,23 @@ Advanced options
 
 Advanced toggles
 ^^^^^^^^^^^^^^^^
-
-If :option:`--stats` is enabled, additional volume information is obtained from the :command:`fsstat` command. This could possibly slow down mounting and may cause random issues such as partitions being unreadable. However, this additional information will probably include some useful information related to the volume system and is required for commands such as :option:`--reconstruct`.
+:command:`imount` has some facilities that automatically detect some types of disks and volumes. However, these facilities may sometimes fail and can be disabled if needed.
 
 .. cmdoption:: --stats
-               -s
+               --no-stats
 
-   Although stats retrieval is enabled by default, :option:`--stats` can be used to override :option:`--no-stats`.
+   With stats rerieval is enabled, additional volume information is obtained from the :command:`fsstat` command. This could possibly slow down mounting and may cause random issues such as partitions being unreadable. However, this additional information will probably include some useful information related to the volume system and is required for commands such as :option:`--reconstruct`.
 
-.. cmdoption:: --no-stats
-               -n
-
-   Disables the retrieval of statistics (see :option:`--stats`)
-
-By default, a detection is ran to detect whether the volume is part of a (former) RAID array. You can disable the RAID check with :option:`--no-raid`.
+   Stats retrieval is enabled by default, but :option:`--stats` can be used to override :option:`--no-stats`.
 
 .. cmdoption:: --raid
+               --no-raid
 
-   Enables the detection of RAID arrays, which is enabled by default (can be used to override :option:`--no-raid`).
-
-.. cmdoption:: --no-raid
-
-   Disables the detection of RAID arrays.
-
-:command:`imount` will, by default, try to detect whether the disk that is being mounted, contains an entire volume system, or only a single volume. If you know your volumes are not single volumes, or you know they are, use :option:`--no-single` and :option:`--single` respectively.
+   By default, a detection is ran to detect whether the volume is part of a (former) RAID array. You can disable the RAID check with :option:`--no-raid`. If you provide both :option:`--raid` and :option:`--no-raid`, :option:`raid` wins.
 
 .. cmdoption:: --single
+               --no-single
 
-   Forces the mounting of the disk as a single volume.
+   :command:`imount` will, by default, try to detect whether the disk that is being mounted, contains an entire volume system, or only a single volume. If you know your volumes are not single volumes, or you know they are, use :option:`--no-single` and :option:`--single` respectively.
 
-.. cmdoption:: --no-single
-
-   Prevents trying to identify the disk as a single volume if no volume system is found.
+   Where :option:`--single` forces the mounting of the disk as a single volume, :option:`--no-single` will prevent the identification of the disk as a single volume if no volume system is found.
