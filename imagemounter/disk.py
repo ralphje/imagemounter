@@ -11,11 +11,26 @@ from imagemounter.volume import Volume
 
 
 class Disk(object):
-    """Parses an image and mounts it."""
+    """Representation of a disk, image file or anything else that can be considered a disk. """
 
     #noinspection PyUnusedLocal
     def __init__(self, parser, path, offset=0, vstype='detect', read_write=False, method='auto', detection='auto',
                  multifile=True, **args):
+        """Instantiation of this class does not automatically mount, detect or analyse the disk. You will need the
+        :func:`init` method for this.
+
+        :param parser: the parent parser
+        :type parser: :class:`ImageParser`
+        :param int offset: offset of the disk where the volume (system) resides
+        :param str vstype: the volume system type
+        :param bool read_write: indicates whether the disk should be mounted with a read-write cache enabled
+        :param str method: the method to mount the base image with
+        :param str detection: the method to detect volumes in the volume system with
+        :param bool multifile: indicates whether :func:`mount` should attempt to call the underlying mount method with
+                all files of a split file when passing a single file does not work
+        :param args: arguments that should be passed down to :class:`Volume` objects
+        """
+
 
         self.parser = parser
 
@@ -76,8 +91,14 @@ class Disk(object):
         return self.parser._debug(val)
 
     def init(self, single=None, raid=True):
-        """Performs a full initialization. If single is None, mount_volumes is performed. If this returns nothing,
-        mount_single_volume is used in addition."""
+        """Calls several methods required to perform a full initialisation: :func:`mount`, :func:`add_to_raid` and
+        :func:`mount_volumes` and yields all detected volumes.
+
+        :param bool|None single: indicates whether the disk should be mounted as a single disk, not as a single disk or
+            whether it should try both (defaults to :const:`None`)
+        :param bool raid: indicates whether RAID detection is enabled
+        :rtype: generator
+        """
 
         self.mount()
         if raid:
@@ -87,7 +108,14 @@ class Disk(object):
             yield v
 
     def mount(self):
-        """Mount the image at a temporary path for analysis"""
+        """Mounts the base image on a temporary location using the mount method stored in :attr:`method`. If mounting
+        was successful, :attr:`mountpoint` is set to the temporary mountpoint.
+
+        If :attr:`read_write` is enabled, a temporary read-write cache is also created and stored in :attr:`rwpath`.
+
+        :return: whether the mounting was successful
+        :rtype: bool
+        """
 
         self.mountpoint = tempfile.mkdtemp(prefix='image_mounter_')
 
@@ -148,7 +176,11 @@ class Disk(object):
         return False
 
     def get_raw_path(self):
-        """Returns the raw path to the disk image"""
+        """Returns the raw path to the mounted disk image, i.e. the raw :file:`.dd`, :file:`.raw` or :file:`ewf1`
+        file.
+
+        :rtype: str
+        """
 
         if self.method == 'dummy':
             return self.paths[0]
@@ -164,6 +196,8 @@ class Disk(object):
     def get_fs_path(self):
         """Returns the path to the filesystem. Most of the times this is the image file, but may instead also return
         the MD device or loopback device the filesystem is mounted to.
+
+        :rtype: str
         """
 
         if self.md_device:
@@ -174,7 +208,7 @@ class Disk(object):
             return self.get_raw_path()
 
     def is_raid(self):
-        """Tests whether this image is in RAID."""
+        """Tests whether this image (was) part of a RAID array. Requires :command:`mdadm` to be installed."""
 
         if not util.command_exists('mdadm'):
             self._debug("    mdadm not installed, could not detect RAID")
@@ -196,7 +230,12 @@ class Disk(object):
         return True
 
     def add_to_raid(self):
-        """Adds the disk to the main RAID"""
+        """Adds the disk to a central RAID volume.
+
+        This function will first test whether it is actually a RAID volume by using :func:`is_raid` and, if so, will
+        add the disk to the array via a loopback device.
+
+        :return: whether the addition succeeded"""
 
         if not self.is_raid():
             return False
@@ -237,12 +276,21 @@ class Disk(object):
         return True
 
     def get_volumes(self):
+        """Gets a list of all volumes in this disk, including volumes that are contained in other volumes."""
+
         volumes = []
         for v in self.volumes:
             volumes.extend(v.get_volumes())
         return volumes
 
     def mount_volumes(self, single=None):
+        """Generator that detects and mounts all volumes in the disk.
+
+        If *single* is :const:`True`, this method will call :Func:`mount_single_volumes`. If *single* is False, only
+        :func:`mount_multiple_volumes` is called. If *single* is None, :func:`mount_multiple_volumes` is always called,
+        being followed by :func:`mount_single_volume` if no volumes were detected.
+        """
+
         if single:
             # if single, then only use single_Volume
             for v in self.mount_single_volume():
@@ -261,7 +309,14 @@ class Disk(object):
                     yield v
 
     def mount_single_volume(self):
-        """Assumes the mounted image does not contain a full disk image, but only a single volume."""
+        """Mounts a volume assuming that the mounted image does not contain a full disk image, but only a
+        single volume.
+
+        A new :class:`Volume` object is created based on the disk file and :func:`init` is called on this object.
+
+        This function will typically yield one volume, although if the volume contains other volumes, multiple volumes
+        may be returned.
+        """
 
         volume = Volume(disk=self, **self.args)
         volume.offset = 0
@@ -284,7 +339,10 @@ class Disk(object):
             yield v
 
     def mount_multiple_volumes(self):
-        """Generator that mounts every partition of this image and yields the mountpoint."""
+        """Generator that will detect volumes in the disk file, generate :class:`Volume` objects based on this
+        information and call :func:`init` on these.
+        """
+
         if self.detection == 'mmls':
             for v in self._mount_mmls_volumes():
                 yield v
@@ -413,12 +471,14 @@ class Disk(object):
                 yield v
 
     def rw_active(self):
-        """Indicates whether the rw-path is active."""
+        """Indicates whether anything has been written to a read-write cache."""
 
         return self.rwpath and os.path.getsize(self.rwpath)
 
     def unmount(self, remove_rw=False):
-        """Method that removes all ties to the filesystem, so the image can be unmounted successfully. Warning: """
+        """Removes all ties of this disk to the filesystem, so the image can be unmounted successfully. Warning: this
+        method will destruct the entire RAID array in which this disk takes part.
+        """
 
         for m in list(sorted(self.volumes, key=lambda v: v.mountpoint or "", reverse=True)):
             if not m.unmount():
