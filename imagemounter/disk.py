@@ -331,7 +331,7 @@ class Disk(object):
             # description is the part after the :, until the first comma
             volume.fsdescription = description.split(': ', 1)[1].split(',', 1)[0].strip()
             if 'size' in description:
-                volume.size = re.findall(r'size: (\d+)', description)[0]
+                volume.size = int(re.findall(r'size: (\d+)', description)[0])
             else:
                 volume.size = os.path.getsize(self.get_fs_path())
 
