@@ -6,6 +6,8 @@ import os
 import re
 import subprocess
 import tempfile
+import time
+
 from imagemounter import util, BLOCK_SIZE
 from imagemounter.volume import Volume
 
@@ -158,6 +160,8 @@ class Disk(object):
                     cmd.extend(paths)
                     cmd.append(self.mountpoint)
                     util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                    # mounting does not seem to be instant at a timer here
+                    time.sleep(.1)
                 except Exception:
                     if fallbackcmd:
                         fallbackcmd.extend(paths)
@@ -188,6 +192,7 @@ class Disk(object):
         else:
             raw_path = glob.glob(os.path.join(self.mountpoint, '*.dd'))
             raw_path.extend(glob.glob(os.path.join(self.mountpoint, '*.raw')))
+            raw_path.extend(glob.glob(os.path.join(self.mountpoint, '*.dmg')))
             raw_path.extend(glob.glob(os.path.join(self.mountpoint, 'ewf1')))
             if not raw_path:
                 self._debug("No mount found in {}.".format(self.mountpoint))
