@@ -1,6 +1,9 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import magic
+import io
+
 import os
 import random
 import subprocess
@@ -129,6 +132,25 @@ class Volume(object):
         else:
             return self.size
 
+    def __extended_fs_type(self):
+        """Obtains a the fs type of the volume, based the first 4 KiB of the partition. 
+        lib_magic / python_magic is used for this test
+        """ 
+        header = "";
+        with io.open(self.disk.get_fs_path(), "rb") as file:
+            file.seek(self.offset)
+            header = file.read(4096) 
+
+        file_type = magic.from_buffer(header)
+
+        if file_type.startswith(b"SGI XFS"):
+            return "xfs"
+        elif re.search(r'\bext[0-9]*\b', file_type):
+            return 'ext'
+
+        self._debug("    magic detected {0} as '{1}' but not yet supported.".format(self.index, file_type))
+        return "unknown"
+
     def get_fs_type(self):
         """Determines the FS type for this partition. This function is used internally to determine which mount system
         to use, based on the file system description. Return values include *ext*, *bsd*, *ntfs*, *lvm* and *luks*.
@@ -146,9 +168,11 @@ class Volume(object):
                 fsdesc = ''
             if not fsdesc and self.fstype:
                 fsdesc = self.fstype.lower()
-
-            if '0x83' in fsdesc or '0xfd' in fsdesc or re.search(r'\bext[0-9]*\b', fsdesc):
+            
+            if re.search(r'\bext[0-9]*\b', fsdesc):
                 fstype = 'ext'
+            elif '0x83' in fsdesc or '0xfd' in fsdesc:
+                fstype = self.__extended_fs_type()
             elif 'bsd' in fsdesc:
                 fstype = 'bsd'
             elif '0x07' in fsdesc or 'ntfs' in fsdesc:
@@ -232,7 +256,7 @@ class Volume(object):
         fstype = self.get_fs_type()
 
         # we need a mountpoint if it is not a lvm
-        if fstype in ('ext', 'bsd', 'ntfs', 'unknown'):
+        if fstype in ('ext', 'bsd', 'ntfs', 'xfs', 'unknown'):
             if self.pretty:
                 md = self.mountdir or tempfile.tempdir
                 pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]),
@@ -275,6 +299,15 @@ class Volume(object):
                 # NTFS
                 cmd = ['mount', raw_path, self.mountpoint, '-t', 'ntfs', '-o',
                        'loop,noexec,offset=' + str(self.offset)]
+                if not self.disk.read_write:
+                    cmd[-1] += ',ro'
+
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            if fstype == 'xfs':
+                # ext
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'xfs', '-o',
+                       'loop,norecovery,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
