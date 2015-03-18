@@ -133,17 +133,17 @@ class Volume(object):
             return self.size
 
     def __extended_fs_type(self):
-        """Obtains a the fs type of the volume, based the first 4 KiB of the partition. 
+        """Obtains a the fs type of the volume, based the first 4 KiB of the partition.
         lib_magic / python_magic is used for this test
-        """ 
+        """
         header = "";
         with io.open(self.disk.get_fs_path(), "rb") as file:
             file.seek(self.offset)
-            header = file.read(4096) 
+            header = file.read(4096)
 
-        file_type = magic.from_buffer(header)
+        file_type = magic.from_buffer(header).decode()
 
-        if file_type.startswith(b"SGI XFS"):
+        if file_type.startswith("SGI XFS"):
             return "xfs"
         elif re.search(r'\bext[0-9]*\b', file_type):
             return 'ext'
@@ -168,7 +168,7 @@ class Volume(object):
                 fsdesc = ''
             if not fsdesc and self.fstype:
                 fsdesc = self.fstype.lower()
-            
+
             if re.search(r'\bext[0-9]*\b', fsdesc):
                 fstype = 'ext'
             elif '0x83' in fsdesc or '0xfd' in fsdesc:
@@ -304,7 +304,7 @@ class Volume(object):
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
-            if fstype == 'xfs':
+            elif fstype == 'xfs':
                 # ext
                 cmd = ['mount', raw_path, self.mountpoint, '-t', 'xfs', '-o',
                        'loop,norecovery,offset=' + str(self.offset)]
