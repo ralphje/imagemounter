@@ -138,6 +138,7 @@ class Disk(object):
             try:
                 fallbackcmd = None
                 if self.method == 'avfs':
+                    util.check_call_(['mountavfs'], self, stdout=subprocess.PIPE)
                     for path in paths:
                         cmd = ['ln -s $HOME/.avfs'+path+'# ' + self.mountpoint + '/avfs.raw']
                         util.check_call_(cmd, self, stdout=subprocess.PIPE, shell=True)
