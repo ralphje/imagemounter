@@ -11,11 +11,14 @@ import os
 def clean_unmount(cmd, mountpoint, tries=20, rmdir=True, parser=None):
     cmd.append(mountpoint)
 
-    # Perform unmount
-    try:
-        check_call_(cmd, parser)
-    except:
-        return False
+    if os.path.isfile(os.path.join(mountpoint, 'avfs.raw')):
+        os.remove(os.path.join(mountpoint, 'avfs.raw'))
+    else:
+        # Perform unmount
+        try:
+            check_call_(cmd, parser)
+        except:
+            return False
 
     # Remove mountpoint only if needed
     if not rmdir:
@@ -37,6 +40,8 @@ def clean_unmount(cmd, mountpoint, tries=20, rmdir=True, parser=None):
 def is_encase(path):
     return re.match(r'^.*\.E\w\w$', path)
 
+def is_compressed(path):
+    return re.match(r'^.*\.((zip)|((t(ar\.)?)?gz))$', path)
 
 def expand_path(path):
     '''

@@ -21,7 +21,7 @@ Installation
 ------------
 Just perform the following commands for a full install, including all optional dependencies:
 
-    apt-get install python-setuptools xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm cryptsetup
+    apt-get install python-setuptools xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm cryptsetup avfs 
     pip install imagemounter
 
 ### Python packages

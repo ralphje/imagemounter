@@ -181,6 +181,8 @@ class Volume(object):
                 fstype = 'lvm'
             elif 'luks' in fsdesc:
                 fstype = 'luks'
+            elif 'iso 9660' in fsdesc:
+                fstype = 'iso9660'
             else:
                 fstype = self.fsfallback
 
@@ -256,7 +258,7 @@ class Volume(object):
         fstype = self.get_fs_type()
 
         # we need a mountpoint if it is not a lvm
-        if fstype in ('ext', 'bsd', 'ntfs', 'xfs', 'unknown'):
+        if fstype in ('ext', 'bsd', 'ntfs', 'xfs', 'iso9660', 'unknown'):
             if self.pretty:
                 md = self.mountdir or tempfile.tempdir
                 pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]),
@@ -310,6 +312,13 @@ class Volume(object):
                        'loop,norecovery,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
+
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            elif fstype == 'iso9660':
+                # iso9660
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'iso9660', '-o',
+                       'loop,offset=' + str(self.offset)]
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
