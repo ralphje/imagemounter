@@ -466,7 +466,13 @@ class Disk(object):
             if not line:
                 continue
             try:
-                index, slot, start, end, length, description = line.split(None, 5)
+                values = line.split(None, 5)
+
+                # sometime there are only 5 elements available
+                description = ''
+                index, slot, start, end, length = values[0:5]
+                if 4 in values: description = values[4]
+
                 volume = Volume(disk=self, **self.args)
                 self.volumes.append(volume)
 
@@ -488,6 +494,11 @@ class Disk(object):
                 volume.flag = 'unalloc'
             else:
                 volume.flag = 'alloc'
+                if ":" in slot:
+                    table, tslot = slot.split(':')
+                    volume.slot = int(table) * 4 + int(tslot)
+                else:
+                    volume.slot = int(slot)
 
             # unalloc / meta partitions do not have stats and can not be mounted
             if volume.flag != 'alloc':
