@@ -2,7 +2,6 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import io
-
 import os
 import random
 import subprocess
@@ -78,11 +77,6 @@ class Volume(object):
 
         self.args = args
 
-        try:
-            import magic
-        except ImportError:
-            pass
-
 
     def __unicode__(self):
         return '{0}:{1}'.format(self.index, self.fsdescription)
@@ -145,7 +139,11 @@ class Volume(object):
         """
 
         # if we were able to load the module magic
-        if not magic or not magic.from_buffer:
+        try:
+            # noinspection PyUnresolvedReferences
+            import magic
+            magic.from_buffer('')
+        except ImportError:
             self._debug("    The python-magic module is not available, falling back to old behavoir.")
             return 'ext'
 
@@ -181,7 +179,9 @@ class Volume(object):
         filesystem-type if available.
         """
 
-        if not util.command_exists('disktype'): return None
+        if not util.command_exists('disktype'): 
+            self._debug("    disktype not installed, could not detect volume type")
+            return None
 
         disktype = util.check_output_(['disktype', self.disk.get_raw_path()], self).strip()
 
@@ -237,11 +237,9 @@ class Volume(object):
 
             if self.fstype == 'ext' or re.search(r'\bext[0-9]*\b', fsdesc):
                 self.fstype = 'ext'
-            elif '0x83' in fsdesc or '0xfd' in fsdesc or self.fstype == None:
-                self.fstype = self.__extended_fs_type()
             elif 'bsd' in fsdesc:
                 self.fstype = 'bsd'
-            elif self.fstype.lower() == 'ntfs' or '0x07' in fsdesc or 'ntfs' in fsdesc:
+            elif (self.fstype != None and self.fstype.lower() == 'ntfs') or '0x07' in fsdesc or 'ntfs' in fsdesc:
                 self.fstype = 'ntfs'
             elif self.fstype == 'vfat' or self.fstype == 'FAT32' or self.fstype == 'FAT16' or self.fstype == 'FAT12':
                 self.fstype = 'vfat'
@@ -251,6 +249,8 @@ class Volume(object):
                 self.fstype = 'luks'
             elif 'iso 9660' in fsdesc:
                 self.fstype = 'iso9660'
+            elif '0x83' in fsdesc or '0xfd' in fsdesc or self.fstype == None:
+                self.fstype = self.__extended_fs_type()
             else:
                 self.fstype = self.fsfallback
 
@@ -629,7 +629,7 @@ class Volume(object):
 
         def stats_thread():
             try:
-                cmd = ['fsstat', self.get_raw_base_path(), '-o', str(round(self.offset / BLOCK_SIZE))]
+                cmd = ['fsstat', self.get_raw_base_path(), '-o', str(int(round(self.offset / BLOCK_SIZE)))]
                 self._debug('    {0}'.format(' '.join(cmd)))
                 #noinspection PyShadowingNames
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
