@@ -46,8 +46,10 @@ class Volume(object):
         self.size = 0
         self.offset = 0
         self.index = 0
+        self.slot = 0
         self.size = 0
         self.flag = 'alloc'
+        self.guid = None
         self.fsdescription = None
 
         # Should be filled by fill_stats
@@ -138,7 +140,7 @@ class Volume(object):
             return self.size
 
     def __extended_fs_type(self):
-        """Obtains a the fs type of the volume, based the first 4 KiB of the partition.
+        """Obtains the fs type of the volume, based the first 4 KiB of the partition.
         lib_magic / python_magic is used for this test
         """
 
@@ -159,9 +161,58 @@ class Volume(object):
             return "xfs"
         elif re.search(r'\bext[0-9]*\b', file_type):
             return 'ext'
+        elif re.search(r'\bswap file\b', file_type):
+            return 'swap'
+        elif re.search(r'\bsquashfs\b', file_type.lower()):
+            return 'squashfs'
+        elif re.search(r'\bjffs2 filesystem\b', file_type.lower()):
+            return 'jffs2'
+        else:
+            fstype = self.__inspect_disktype()
+            if fstype != None: return fstype
 
         self._debug("    magic detected {0} as '{1}' but not yet supported.".format(self.index, file_type))
         return "unknown"
+
+
+    def __inspect_disktype(self):
+        """Obtains the fs type of the volume, based on the output from disktype, the guid
+        and the label are extracted and based on type GUID which is also converted to a
+        filesystem-type if available.
+        """
+
+        if not util.command_exists('disktype'): return None
+
+        disktype = util.check_output_(['disktype', self.disk.get_raw_path()], self).strip()
+
+        partition_nr = self.slot + 1
+
+        # make sure we have a gpt table
+        disktype = disktype.split("GPT partition map", 1)[-1]
+        matchFound = False
+        for line in disktype.splitlines():
+            if not line:
+                continue
+            try:
+                if line.startswith('Partition'):
+                    matchFound = line.startswith('Partition '+str(partition_nr)+':')
+
+                if matchFound:
+                    line = line.strip()
+
+                    if line.startswith("Type "):
+                        self.guid = line[line.index('GUID') + 5:-1].strip()
+                    elif line.startswith("Partition Name ") and not self.label:
+                        self.label = line[line.index('Name ') + 6:-1].strip()
+
+            except Exception as e:
+                self._debug("[-] Error while parsing disktype output")
+                self._debug(e)
+                continue
+
+        if self.guid:
+            return util.lookup_guid(self.guid, self)
+
 
     def get_fs_type(self):
         """Determines the FS type for this partition. This function is used internally to determine which mount system
@@ -170,9 +221,9 @@ class Volume(object):
 
         # Determine fs type. If forced, always use provided type.
         if str(self.index) in self.fstypes:
-            fstype = self.fstypes[str(self.index)]
+            self.fstype = self.fstypes[str(self.index)]
         elif self.fsforce:
-            fstype = self.fsfallback
+            self.fstype = self.fsfallback
         else:
             fsdesc = self.fsdescription.lower()
             # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info.
@@ -181,25 +232,32 @@ class Volume(object):
             if not fsdesc and self.fstype:
                 fsdesc = self.fstype.lower()
 
-            if re.search(r'\bext[0-9]*\b', fsdesc):
-                fstype = 'ext'
-            elif '0x83' in fsdesc or '0xfd' in fsdesc:
-                fstype = self.__extended_fs_type()
+            if self.fstype == None:
+                self.fill_stats()
+
+            if self.fstype == 'ext' or re.search(r'\bext[0-9]*\b', fsdesc):
+                self.fstype = 'ext'
+            elif '0x83' in fsdesc or '0xfd' in fsdesc or self.fstype == None:
+                self.fstype = self.__extended_fs_type()
             elif 'bsd' in fsdesc:
-                fstype = 'bsd'
-            elif '0x07' in fsdesc or 'ntfs' in fsdesc:
-                fstype = 'ntfs'
+                self.fstype = 'bsd'
+            elif self.fstype.lower() == 'ntfs' or '0x07' in fsdesc or 'ntfs' in fsdesc:
+                self.fstype = 'ntfs'
+            elif self.fstype == 'vfat' or self.fstype == 'FAT32' or self.fstype == 'FAT16' or self.fstype == 'FAT12':
+                self.fstype = 'vfat'
             elif '0x8e' in fsdesc or 'lvm' in fsdesc:
-                fstype = 'lvm'
+                self.fstype = 'lvm'
             elif 'luks' in fsdesc:
-                fstype = 'luks'
+                self.fstype = 'luks'
+            elif 'iso 9660' in fsdesc:
+                self.fstype = 'iso9660'
             else:
-                fstype = self.fsfallback
+                self.fstype = self.fsfallback
 
-            if fstype:
-                self._debug("    Detected {0} as {1}".format(fsdesc, fstype))
+            if self.fstype:
+                self._debug("    Detected {0} as {1}".format(fsdesc, self.fstype))
 
-        return fstype
+        return self.fstype
 
     def get_raw_base_path(self):
         """Retrieves the base mount path of the volume. Typically equals to :func:`Disk.get_fs_path` but may also be the
@@ -268,7 +326,7 @@ class Volume(object):
         fstype = self.get_fs_type()
 
         # we need a mountpoint if it is not a lvm
-        if fstype in ('ext', 'bsd', 'ntfs', 'xfs', 'unknown'):
+        if fstype in ('ext', 'bsd', 'ntfs', 'xfs', 'iso9660', 'vfat', 'vmfs', 'squashfs', 'jffs2', 'unknown'):
             if self.pretty:
                 md = self.mountdir or tempfile.tempdir
                 pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]),
@@ -316,7 +374,7 @@ class Volume(object):
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
-            if fstype == 'xfs':
+            elif fstype == 'xfs':
                 # ext
                 cmd = ['mount', raw_path, self.mountpoint, '-t', 'xfs', '-o',
                        'loop,norecovery,offset=' + str(self.offset)]
@@ -324,6 +382,37 @@ class Volume(object):
                     cmd[-1] += ',ro'
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            elif fstype == 'iso9660':
+                # iso9660
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'iso9660', '-o',
+                       'loop,offset=' + str(self.offset)]
+
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            elif fstype == 'vfat':
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'vfat', '-o',
+                       'loop,noexec,offset=' + str(self.offset)]
+                if not self.disk.read_write:
+                    cmd[-1] += ',ro'
+
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            elif fstype == 'vmfs':
+                self.loopback = self.setup_loopback()
+
+                cmd = ['vmfs-fuse', self.loopback, self.mountpoint]
+
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            elif fstype == 'squashfs':
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'squashfs', '-o',
+                       'loop,offset=' + str(self.offset)]
+
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            elif fstype == 'jffs2':
+                self.open_jffs2()
 
             elif fstype == 'luks':
                 self.open_luks_container()
@@ -339,19 +428,7 @@ class Volume(object):
                 # LVM
                 os.environ['LVM_SUPPRESS_FD_WARNINGS'] = '1'
 
-                # find free loopback device
-                #noinspection PyBroadException
-                try:
-                    self.loopback = util.check_output_(['losetup', '-f'], self).strip()
-                except Exception:
-                    self._debug("[-] No free loopback device found for LVM")
-                    return False
-
-                cmd = ['losetup', '-o', str(self.offset), self.loopback, raw_path]
-                if not self.disk.read_write:
-                    cmd.insert(1, '-r')
-
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                self.loopback = self.setup_loopback()
 
                 self.find_lvm_volumes()
 
@@ -362,7 +439,7 @@ class Volume(object):
                     size = self.size
 
                 self._debug("[-] Unknown filesystem {0} (block offset: {1}, length: {2})"
-                            .format(self, self.offset / BLOCK_SIZE, size))
+                            .format(fstype, self.offset / BLOCK_SIZE, size))
                 return False
 
             self.was_mounted = True
@@ -475,6 +552,17 @@ class Volume(object):
 
         return container
 
+    def open_jffs2(self):
+        size_in_kb = int((self.size / 1024) * 1.2)
+        util.check_call_(['modprobe', '-v', 'mtd'], self)
+        util.check_call_(['modprobe', '-v', 'jffs2'], self)
+        util.check_call_(['modprobe', '-v', 'mtdram', 'total_size={}'.format(size_in_kb), 'erase_size=256'], self)
+        #util.check_call_(['modprobe', '-v', 'mtdchar'], self)
+        util.check_call_(['modprobe', '-v', 'mtdblock'], self)
+        util.check_call_(['dd', 'if=' + self.get_raw_base_path(), 'of=/dev/mtd0'], self)
+        util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', self.mountpoint], self)
+
+
     def find_lvm_volumes(self, force=False):
         """Performs post-mount actions on a LVM. Scans for active volume groups from the loopback device, activates it
         and fills :attr:`volumes` with the logical volumes.
@@ -541,21 +629,22 @@ class Volume(object):
 
         def stats_thread():
             try:
-                cmd = ['fsstat', self.get_raw_base_path(), '-o', str(self.offset / BLOCK_SIZE)]
+                cmd = ['fsstat', self.get_raw_base_path(), '-o', str(round(self.offset / BLOCK_SIZE))]
                 self._debug('    {0}'.format(' '.join(cmd)))
                 #noinspection PyShadowingNames
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
                 for line in iter(process.stdout.readline, b''):
+                    line = line.decode()
                     if line.startswith("File System Type:"):
                         self.fstype = line[line.index(':') + 2:].strip()
-                    if line.startswith("Last Mount Point:") or line.startswith("Last mounted on:"):
+                    elif line.startswith("Last Mount Point:") or line.startswith("Last mounted on:"):
                         self.lastmountpoint = line[line.index(':') + 2:].strip().replace("//", "/")
-                    if line.startswith("Volume Name:") and not self.label:
+                    elif line.startswith("Volume Name:") and not self.label:
                         self.label = line[line.index(':') + 2:].strip()
-                    if line.startswith("Version:"):
+                    elif line.startswith("Version:"):
                         self.version = line[line.index(':') + 2:].strip()
-                    if line.startswith("Source OS:"):
+                    elif line.startswith("Source OS:"):
                         self.version = line[line.index(':') + 2:].strip()
                     if 'CYLINDER GROUP INFORMATION' in line:
                         #noinspection PyBroadException
@@ -593,6 +682,24 @@ class Volume(object):
                 pass
             thread.join()
             self._debug("    Killed fsstat after {0}s".format(duration))
+
+    def setup_loopback(self):
+        # find free loopback device
+        #noinspection PyBroadException
+        try:
+            loopdevice = util.check_output_(['losetup', '-f'], self).strip()
+        except Exception:
+            self._debug("[-] No free loopback device found for LVM")
+            return False
+
+        cmd = ['losetup', '-o', str(self.offset), loopdevice, self.get_raw_base_path()]
+        if not self.disk.read_write:
+            cmd.insert(1, '-r')
+
+        util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+        return loopdevice
+
 
     def detect_mountpoint(self):
         """Attempts to detect the previous mountpoint if this was not done through :func:`fill_stats`. This detection
