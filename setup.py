@@ -27,7 +27,7 @@ setup(
     description='Utility to mount partitions in Encase, AFF and dd images locally on Linux operating systems.',
     long_description=long_description,
     entry_points={'console_scripts': ['imount = imagemounter.mount_images:main']},
-    install_requires=['termcolor>=1.0.0'],
+    install_requires=['termcolor>=1.0.0','python-magic>=0.4.6'],
     keywords=['encase', 'aff', 'dd', 'disk image', 'ewfmount', 'affuse', 'xmount', 'imount'],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
