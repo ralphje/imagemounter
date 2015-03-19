@@ -40,6 +40,8 @@ class Disk(object):
         path = os.path.expandvars(os.path.expanduser(path))
         if util.is_encase(path):
             self.type = 'encase'
+        elif util.is_compressed(path):
+            self.type = 'compressed'
         else:
             self.type = 'dd'
         self.paths = sorted(util.expand_path(path))
@@ -56,6 +58,8 @@ class Disk(object):
                 self.method = 'ewfmount'
             elif self.type == 'dd' and util.command_exists('affuse'):
                 self.method = 'affuse'
+            elif self.type == 'compressed' and util.command_exists('mountavfs'):
+                self.method = 'avfs'
             else:
                 self.method = 'xmount'
         else:
@@ -133,7 +137,14 @@ class Disk(object):
         for paths in pathss:
             try:
                 fallbackcmd = None
-                if self.method == 'xmount':
+                if self.method == 'avfs':
+                    util.check_call_(['mountavfs'], self, stdout=subprocess.PIPE)
+                    for path in paths:
+                        cmd = ['ln -s $HOME/.avfs'+path+'# ' + self.mountpoint + '/avfs.raw']
+                        util.check_call_(cmd, self, stdout=subprocess.PIPE, shell=True)
+                    return True
+
+                elif self.method == 'xmount':
                     cmd = ['xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']
                     if self.read_write:
                         cmd.extend(['--rw', self.rwpath])
@@ -160,9 +171,10 @@ class Disk(object):
                     cmd.extend(paths)
                     cmd.append(self.mountpoint)
                     util.check_call_(cmd, self, stdout=subprocess.PIPE)
-                    # mounting does not seem to be instant at a timer here
+                    # mounting does not seem to be instant add a timer here
                     time.sleep(.1)
                 except Exception:
+
                     if fallbackcmd:
                         fallbackcmd.extend(paths)
                         fallbackcmd.append(self.mountpoint)
@@ -454,7 +466,13 @@ class Disk(object):
             if not line:
                 continue
             try:
-                index, slot, start, end, length, description = line.split(None, 5)
+                values = line.split(None, 5)
+
+                # sometime there are only 5 elements available
+                description = ''
+                index, slot, start, end, length = values[0:5]
+                if 4 in values: description = values[4]
+
                 volume = Volume(disk=self, **self.args)
                 self.volumes.append(volume)
 
@@ -476,6 +494,11 @@ class Disk(object):
                 volume.flag = 'unalloc'
             else:
                 volume.flag = 'alloc'
+                if ":" in slot:
+                    table, tslot = slot.split(':')
+                    volume.slot = int(table) * 4 + int(tslot)
+                else:
+                    volume.slot = int(slot)
 
             # unalloc / meta partitions do not have stats and can not be mounted
             if volume.flag != 'alloc':
