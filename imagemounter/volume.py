@@ -1,7 +1,6 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import magic
 import io
 
 import os
@@ -77,6 +76,12 @@ class Volume(object):
 
         self.args = args
 
+        try:
+            import magic
+        except ImportError:
+            pass
+
+
     def __unicode__(self):
         return '{0}:{1}'.format(self.index, self.fsdescription)
 
@@ -136,6 +141,13 @@ class Volume(object):
         """Obtains a the fs type of the volume, based the first 4 KiB of the partition.
         lib_magic / python_magic is used for this test
         """
+
+        # if we were able to load the module magic
+        if not magic or not magic.from_buffer:
+            self._debug("    The python-magic module is not available, falling back to old behavoir.")
+            return 'ext'
+
+        # handle the file with some added magic.
         header = "";
         with io.open(self.disk.get_fs_path(), "rb") as file:
             file.seek(self.offset)
