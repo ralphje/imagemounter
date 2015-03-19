@@ -14,6 +14,9 @@ def clean_unmount(cmd, mountpoint, tries=20, rmdir=True, parser=None):
 
     if os.path.isfile(os.path.join(mountpoint, 'avfs.raw')):
         os.remove(os.path.join(mountpoint, 'avfs.raw'))
+    elif os.path.realpath(mountpoint).endswith('.zip#'):
+        os.remove(mountpoint)
+        return True
     else:
         # Perform unmount
         try:

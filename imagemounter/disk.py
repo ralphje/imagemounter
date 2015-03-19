@@ -139,9 +139,13 @@ class Disk(object):
                 fallbackcmd = None
                 if self.method == 'avfs':
                     util.check_call_(['mountavfs'], self, stdout=subprocess.PIPE)
-                    for path in paths:
-                        cmd = ['ln -s $HOME/.avfs'+path+'# ' + self.mountpoint + '/avfs.raw']
-                        util.check_call_(cmd, self, stdout=subprocess.PIPE, shell=True)
+                    path = paths[0]
+                    cmd = 'ln -s $HOME/.avfs'+path+'# ' + self.mountpoint
+                    if path.endswith('.zip'): 
+                        os.rmdir(self.mountpoint)
+                    else:
+                        cmd += '/avfs.raw'
+                    util.check_call_([cmd], self, stdout=subprocess.PIPE, shell=True)
                     return True
 
                 elif self.method == 'xmount':
@@ -203,6 +207,7 @@ class Disk(object):
             return self.paths[0]
         else:
             raw_path = glob.glob(os.path.join(self.mountpoint, '*.dd'))
+            raw_path.extend(glob.glob(os.path.join(self.mountpoint, '*.iso')))
             raw_path.extend(glob.glob(os.path.join(self.mountpoint, '*.raw')))
             raw_path.extend(glob.glob(os.path.join(self.mountpoint, '*.dmg')))
             raw_path.extend(glob.glob(os.path.join(self.mountpoint, 'ewf1')))
