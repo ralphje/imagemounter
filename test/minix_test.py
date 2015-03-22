@@ -9,5 +9,5 @@ class MinixTest(BaseTestFilesystemMount):
         self.assertTrue(len(volumes) == 1)
 
     def validate_types(self, volumes):
-        self.assertEquals(volumes[0].fstype, "vfat")
+        self.assertEquals(volumes[0].fstype, "minix")
 

@@ -9,7 +9,7 @@ import re
 import tempfile
 import threading
 import sys
-from imagemounter import util, BLOCK_SIZE
+from imagemounter import util, BLOCK_SIZE, FILE_SYSTEM_TYPES
 
 
 class Volume(object):
@@ -165,6 +165,8 @@ class Volume(object):
             return 'squashfs'
         elif re.search(r'\bjffs2 filesystem\b', file_type.lower()):
             return 'jffs2'
+        elif re.search(r'\bminix filesystem\b', file_type.lower()):
+            return 'minix'
         else:
             fstype = self.__inspect_disktype()
             if fstype != None: return fstype
@@ -235,13 +237,18 @@ class Volume(object):
             if self.fstype == None:
                 self.fill_stats()
 
-            if self.fstype == 'ext' or re.search(r'\bext[0-9]*\b', fsdesc):
+            if self.fstype != None:
+                self.fstype = self.fstype.lower()
+
+            if self.fstype in FILE_SYSTEM_TYPES and self.fstype != 'unknown':
+                pass
+            if re.search(r'\bext[0-9]*\b', fsdesc):
                 self.fstype = 'ext'
             elif 'bsd' in fsdesc:
                 self.fstype = 'bsd'
-            elif (self.fstype != None and self.fstype.lower() == 'ntfs') or '0x07' in fsdesc or 'ntfs' in fsdesc:
+            elif '0x07' in fsdesc or 'ntfs' in fsdesc:
                 self.fstype = 'ntfs'
-            elif self.fstype == 'vfat' or self.fstype == 'FAT32' or self.fstype == 'FAT16' or self.fstype == 'FAT12':
+            elif self.fstype == 'fat32' or self.fstype == 'fat16' or self.fstype == 'fat12':
                 self.fstype = 'vfat'
             elif '0x8e' in fsdesc or 'lvm' in fsdesc:
                 self.fstype = 'lvm'
@@ -249,6 +256,8 @@ class Volume(object):
                 self.fstype = 'luks'
             elif 'iso 9660' in fsdesc:
                 self.fstype = 'iso9660'
+            elif 'linux compressed rom file system' in fsdesc:
+                self.fstype = 'cramfs'
             elif '0x83' in fsdesc or '0xfd' in fsdesc or self.fstype == None:
                 self.fstype = self.__extended_fs_type()
             else:
@@ -256,6 +265,8 @@ class Volume(object):
 
             if self.fstype:
                 self._debug("    Detected {0} as {1}".format(fsdesc, self.fstype))
+                if self.fstype not in FILE_SYSTEM_TYPES:
+                    self._debug("[-] Detected filesystem '{0}' seems not yet to be supported")
 
         return self.fstype
 
@@ -326,7 +337,7 @@ class Volume(object):
         fstype = self.get_fs_type()
 
         # we need a mountpoint if it is not a lvm
-        if fstype in ('ext', 'bsd', 'ntfs', 'xfs', 'iso9660', 'vfat', 'vmfs', 'squashfs', 'jffs2', 'unknown'):
+        if fstype in FILE_SYSTEM_TYPES and fstype not in ('lvm', 'luks'):
             if self.pretty:
                 md = self.mountdir or tempfile.tempdir
                 pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]),
@@ -383,16 +394,11 @@ class Volume(object):
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
-            elif fstype == 'iso9660':
+            elif fstype in {'iso9660', 'vfat', 'squashfs', 'cramfs', 'minix'}:
                 # iso9660
-                cmd = ['mount', raw_path, self.mountpoint, '-t', 'iso9660', '-o',
+                cmd = ['mount', raw_path, self.mountpoint, '-t', fstype, '-o',
                        'loop,offset=' + str(self.offset)]
-
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
-
-            elif fstype == 'vfat':
-                cmd = ['mount', raw_path, self.mountpoint, '-t', 'vfat', '-o',
-                       'loop,noexec,offset=' + str(self.offset)]
+                # not always needed, only to makke command generic
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
@@ -402,12 +408,6 @@ class Volume(object):
                 self.loopback = self.setup_loopback()
 
                 cmd = ['vmfs-fuse', self.loopback, self.mountpoint]
-
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
-
-            elif fstype == 'squashfs':
-                cmd = ['mount', raw_path, self.mountpoint, '-t', 'squashfs', '-o',
-                       'loop,offset=' + str(self.offset)]
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
