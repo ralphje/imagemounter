@@ -225,7 +225,7 @@ def lookup_guid(guid, parser=None):
         return 'vmkcore-diagnostics'
     elif guid == '6A898CC3-1DD2-11B2-99A6-080020736631' or \
          guid == 'C38C896A-D21D-B211-99A6-080020736631':
-	return 'zfs-member'
+        return 'zfs-member'
     else:
         if parser:
             parser._debug('    GUID {} not yet supported'.format(guid))
