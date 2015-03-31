@@ -29,6 +29,9 @@ following tools:
 
   * :command:`mmls`, part of *sleuthkit* package
   * :mod:`pytsk3`
+  * :command:`disktype`
+  * :command:`file`, part of *libmagic1* package
+  * :mod:`python-magic`
 
 * Statistics, e.g. last mountpoint of volumes
 
@@ -45,6 +48,21 @@ following tools:
 * LUKS volumes
 
   * :command:`cryptsetup`
+
+* Compressed dd-images, iso's et al
+
+  * :command:`mountavfs`, part of *avfs* package
+
+* Other Filesystems mount tools:
+
+  * :command:`vmfs-fuse`, part of *vmfs-tools* package
+  * :command:`mount.jffs2`, :mod:`mtd`, all part of *mtd-tools* package
+  * :command:`mount.squashfs`, part of *squashfs-tools* package
+  * :command:`mount.xfs`, part of *xfsprogs* package
+  * :command:`mount.cramfs`, part of standard (Ubuntu) installation
+  * :command:`mount.minix`, part of standard (Ubuntu) installation
+  * :command:`mount.vfat`, part of standard (Ubuntu) installation
+  * :command:`mount.iso9660`, standard (Ubuntu) installation
 
 A basic installation contains at least one of the mount tools. Highly recommended is also `fsstat`, others are required
 for specific file system types.
