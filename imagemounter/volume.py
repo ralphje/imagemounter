@@ -181,7 +181,7 @@ class Volume(object):
         filesystem-type if available.
         """
 
-        if not util.command_exists('disktype'): 
+        if not util.command_exists('disktype'):
             self._debug("    disktype not installed, could not detect volume type")
             return None
 
@@ -547,20 +547,29 @@ class Volume(object):
         container.flag = 'alloc'
         container.parent = self
         container.offset = 0
-        container.size = size  # kan uit status gehaald worden
+        container.size = size  # Can be retrieved from the statuss
         self.volumes.append(container)
 
         return container
 
     def open_jffs2(self):
+        """Perform specific operations to mount a JFFS2 image, this kind of image
+        is sometimes used for things like bios images. so external tools are required
+        but given this method you don't have to memorize anything and it works fast
+        and easy.
+        Note that this module might not yet work while mounting multiple images
+        at the same time.
+        """
+        # we have to make a ram-device to store the image, we keep 20% overhead
         size_in_kb = int((self.size / 1024) * 1.2)
         util.check_call_(['modprobe', '-v', 'mtd'], self)
         util.check_call_(['modprobe', '-v', 'jffs2'], self)
         util.check_call_(['modprobe', '-v', 'mtdram', 'total_size={}'.format(size_in_kb), 'erase_size=256'], self)
-        #util.check_call_(['modprobe', '-v', 'mtdchar'], self)
         util.check_call_(['modprobe', '-v', 'mtdblock'], self)
         util.check_call_(['dd', 'if=' + self.get_raw_base_path(), 'of=/dev/mtd0'], self)
         util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', self.mountpoint], self)
+
+        return True
 
 
     def find_lvm_volumes(self, force=False):
