@@ -78,9 +78,9 @@ def command_exists(cmd):
 
 
 def module_exists(mod):
-    import imp
+    import importlib
     try:
-        imp.find_module(mod)
+        importlib.import_module(mod)
         return True
     except ImportError:
         return False
