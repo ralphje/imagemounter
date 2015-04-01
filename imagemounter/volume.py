@@ -133,27 +133,30 @@ class Volume(object):
         else:
             return self.size
 
-    def __extended_fs_type(self):
+    def __fs_type_magic(self):
         """Obtains the fs type of the volume, based the first 4 KiB of the partition.
         lib_magic / python_magic is used for this test
         """
+
+        file_type = ""
 
         # if we were able to load the module magic
         try:
             # noinspection PyUnresolvedReferences
             import magic
-            magic.from_buffer('')
+            # handle the file with some added magic.
+            header = "";
+            with io.open(self.disk.get_fs_path(), "rb") as file:
+                file.seek(self.offset)
+                header = file.read(4096)
+
+            file_type = magic.from_buffer(header).decode()
         except ImportError:
-            self._debug("    The python-magic module is not available, falling back to old behavoir.")
-            return 'ext'
+            self._debug("    The python-magic module is not available.")
+        except AttributeError:
+            self._debug("    The python-magic module is not available, instead another module named magic is available.")
 
-        # handle the file with some added magic.
-        header = "";
-        with io.open(self.disk.get_fs_path(), "rb") as file:
-            file.seek(self.offset)
-            header = file.read(4096)
-
-        file_type = magic.from_buffer(header).decode()
+        # another exception occurs here, if the wrong magic module is used
 
         if file_type.startswith("SGI XFS"):
             return "xfs"
@@ -259,7 +262,7 @@ class Volume(object):
             elif 'linux compressed rom file system' in fsdesc:
                 self.fstype = 'cramfs'
             elif '0x83' in fsdesc or '0xfd' in fsdesc or self.fstype == None:
-                self.fstype = self.__extended_fs_type()
+                self.fstype = self.__fs_type_magic()
             else:
                 self.fstype = self.fsfallback
 

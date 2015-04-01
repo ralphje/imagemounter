@@ -1,13 +1,12 @@
-from basetest import BaseTestFilesystemMount
+from .basetest import BaseTestFilesystemMount
 
 class Ext3Test(BaseTestFilesystemMount):
 
     def setUp(self):
-        self.filename = 'images/test.ext3' 
+        self.filename = 'images/test.ext3'
 
     def validate_count(self, volumes):
-        self.assertTrue(len(volumes) == 1)
+        self.assertEquals(len(volumes), 1)
 
     def validate_types(self, volumes):
-        self.assertTrue(volumes[0].fstype == "ext")
-
+        self.assertEquals(volumes[0].fstype, "ext")
