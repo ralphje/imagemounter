@@ -15,10 +15,11 @@ class BaseTestFilesystemMount(unittest.TestCase):
         for v in parser.init():
             volumes.append(v)
 
+        parser.clean()
+
         self.validate_count(volumes)
         self.validate_types(volumes)
 
-        parser.clean()
 
     def validate_count(self, volumes):
         self.assertTrue(False)

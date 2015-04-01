@@ -6,7 +6,7 @@ class ZipTest(BaseTestFilesystemMount):
         self.filename = 'images/test.zip'
 
     def validate_count(self, volumes):
-        self.assertEquals(len(volumes), 1)
+        self.assertEqual(len(volumes), 1)
 
     def validate_types(self, volumes):
-        self.assertEquals(volumes[0].fstype, "iso9660")
+        self.assertEqual(volumes[0].fstype, "iso9660")
