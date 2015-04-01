@@ -18,7 +18,7 @@ install:
 
 # Command to run tests, e.g. python setup.py test
 script:
-  - coverage run test_imagemoutner.py
+  - coverage run test_imagemounter.py
 
 # Report to coveralls
 after_success:
