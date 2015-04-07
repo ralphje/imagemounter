@@ -8,7 +8,7 @@ import re
 import tempfile
 import threading
 import sys
-from imagemounter import util, BLOCK_SIZE
+from imagemounter import util
 
 
 class Volume(object):
@@ -312,12 +312,12 @@ class Volume(object):
 
             else:
                 try:
-                    size = self.size / BLOCK_SIZE
+                    size = self.size / self.disk.block_size
                 except TypeError:
                     size = self.size
 
                 self._debug("[-] Unknown filesystem {0} (block offset: {1}, length: {2})"
-                            .format(self, self.offset / BLOCK_SIZE, size))
+                            .format(self, self.offset / self.disk.block_size, size))
                 return False
 
             self.was_mounted = True
@@ -414,7 +414,7 @@ class Volume(object):
             result = util.check_output_(["cryptsetup", "status", self.luks_path], self)
             for l in result.splitlines():
                 if "size:" in l and "key" not in l:
-                    size = int(l.replace("size:", "").replace("sectors", "").strip()) * BLOCK_SIZE
+                    size = int(l.replace("size:", "").replace("sectors", "").strip()) * self.disk.block_size
         except Exception:
             pass
 
@@ -496,7 +496,7 @@ class Volume(object):
 
         def stats_thread():
             try:
-                cmd = ['fsstat', self.get_raw_base_path(), '-o', str(self.offset / BLOCK_SIZE)]
+                cmd = ['fsstat', self.get_raw_base_path(), '-o', str(self.offset / self.disk.block_size)]
                 self._debug('    {0}'.format(' '.join(cmd)))
                 #noinspection PyShadowingNames
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

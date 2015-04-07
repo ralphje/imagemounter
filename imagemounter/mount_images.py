@@ -138,9 +138,12 @@ def main():
         args.stats = True
 
     # Make args.raid default to True
+    explicit_raid = False
     if not args.raid and args.no_raid:
         args.raid = False
     else:
+        if args.raid:
+            explicit_raid = True
         args.raid = True
 
     # Make args.single default to None
@@ -161,7 +164,8 @@ def main():
         print(col("[-] {0} is not installed!".format(args.method), 'red'))
         sys.exit(1)
     elif args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount'))):
-        print(col("[-] No tools installed to mount the image base!", 'red'))
+        print(col("[-] No tools installed to mount the image base! Please install xmount, affuse (afflib-tools) or "
+                  "ewfmount (ewf-tools) first.", 'red'))
         sys.exit(1)
 
     # Check if detection method is available
@@ -172,12 +176,13 @@ def main():
         print(col("[-] {0} is not installed!".format(args.detection), 'red'))
         sys.exit(1)
     elif args.detection == 'auto' and not util.module_exists('pytsk3') and not util.command_exists('mmls'):
-        print(col("[-] No tools installed to detect volumes!", 'red'))
+        print(col("[-] No tools installed to detect volumes! Please install mmls (sleuthkit) or pytsk3 first.", 'red'))
         sys.exit(1)
 
     # Check if raid is available
     if args.raid and not util.command_exists('mdadm'):
-        print(col("[!] RAID mount requires the mdadm command.", 'yellow'))
+        if explicit_raid:
+            print(col("[!] RAID mount requires the mdadm command.", 'yellow'))
         args.raid = False
 
     if args.reconstruct and not args.stats:  # Reconstruct implies use of fsstat
@@ -220,11 +225,6 @@ def main():
 
     if args.vstype != 'detect' and args.single:
         print("[!] There's no point in using --single in combination with --vstype.")
-
-    elif args.vstype == 'any':
-        print("[!] You are using the 'any' volume system type. This may cause unexpected results. It is recommended "
-              "to use either 'detect' or explicitly specify the correct volume system. However, 'any' may provide "
-              "some hints on the volume system to use (e.g. GPT mounted as DOS lists a GPT safety partition).")
 
     # Enumerate over all images in the CLI
     images = []
