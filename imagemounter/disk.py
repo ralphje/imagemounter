@@ -45,6 +45,8 @@ class Disk(object):
         self.offset = offset
         self.vstype = vstype.lower()
 
+        self.block_size = BLOCK_SIZE
+
         self.read_write = read_write
 
         if method == 'auto':
@@ -405,13 +407,13 @@ class Disk(object):
             self.volumes.append(volume)
 
             # Fill volume with more information
-            volume.offset = p.start * BLOCK_SIZE
+            volume.offset = p.start * self.block_size
             volume.fsdescription = p.desc
             if self.index is not None:
                 volume.index = '{0}.{1}'.format(self.index, p.addr)
             else:
                 volume.index = p.addr
-            volume.size = p.len * BLOCK_SIZE
+            volume.size = p.len * self.block_size
 
             if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
                 volume.flag = 'alloc'
@@ -453,13 +455,13 @@ class Disk(object):
                 volume = Volume(disk=self, **self.args)
                 self.volumes.append(volume)
 
-                volume.offset = int(start) * BLOCK_SIZE
+                volume.offset = int(start) * self.block_size
                 volume.fsdescription = description
                 if self.index is not None:
                     volume.index = '{0}.{1}'.format(self.index, int(index[:-1]))
                 else:
                     volume.index = int(index[:-1])
-                volume.size = int(length) * BLOCK_SIZE
+                volume.size = int(length) * self.block_size
             except Exception as e:
                 self._debug("[-] Error while parsing mmls output")
                 self._debug(e)
