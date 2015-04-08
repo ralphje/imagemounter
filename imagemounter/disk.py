@@ -388,9 +388,24 @@ class Disk(object):
                 self.volume_source = 'multi'
                 return volumes
             except Exception as e:
-                self._debug("[-] Failed retrieving volume info (possible empty image).")
-                self._debug(e)
-                return []
+                # some bug in sleuthkit makes detection sometimes difficult, so we hack around it:
+                if "(GPT or DOS at 0)" in e.message and self.vstype != 'gpt':
+                    self.vstype = 'gpt'
+                    try:
+                        self._debug("[-] Error in retrieving volume info: TSK couldn't decide between GPT and DOS, "
+                                    "choosing GPT for you. Use --vstype=dos to force DOS.")
+                        self._debug(e)
+                        volumes = pytsk3.Volume_Info(baseimage, getattr(pytsk3, 'TSK_VS_TYPE_' + self.vstype.upper()))
+                        self.volume_source = 'multi'
+                        return volumes
+                    except Exception as e:
+                        self._debug("[-] Failed retrieving volume info (possible empty image).")
+                        self._debug(e)
+                        return []
+                else:
+                    self._debug("[-] Failed retrieving volume info (possible empty image).")
+                    self._debug(e)
+                    return []
         finally:
             if baseimage:
                 baseimage.close()
@@ -439,12 +454,27 @@ class Disk(object):
             if self.vstype != 'detect':
                 cmd.extend(['-t', self.vstype])
             cmd.append(self.get_raw_path())
-            output = util.check_output_(cmd, self.parser)
+            output = util.check_output_(cmd, self.parser, stderr=subprocess.STDOUT)
             self.volume_source = 'multi'
         except Exception as e:
-            self._debug("[-] Failed executing mmls command")
-            self._debug(e)
-            return
+            # some bug in sleuthkit makes detection sometimes difficult, so we hack around it:
+            if hasattr(e, 'output') and "(GPT or DOS at 0)" in e.output and self.vstype != 'gpt':
+                self.vstype = 'gpt'
+                try:
+                    self._debug("[-] Error in retrieving volume info: mmls couldn't decide between GPT and DOS, "
+                                "choosing GPT for you. Use --vstype=dos to force DOS.")
+                    self._debug(e)
+                    cmd = ['mmls', '-t', self.vstype, self.get_raw_path()]
+                    output = util.check_output_(cmd, self.parser, stderr=subprocess.STDOUT)
+                    self.volume_source = 'multi'
+                except Exception as e:
+                    self._debug("[-] Failed executing mmls command")
+                    self._debug(e)
+                    return
+            else:
+                self._debug("[-] Failed executing mmls command")
+                self._debug(e)
+                return
 
         output = output.split("Description", 1)[-1]
         for line in output.splitlines():
