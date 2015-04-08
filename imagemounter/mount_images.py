@@ -76,7 +76,8 @@ def main():
     parser.add_argument('-rw', '--read-write', action='store_true', default=False,
                         help='mount image read-write by creating a local write-cache file in a temp directory; '
                              'implies --method=xmount')
-    parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'auto', 'dummy'], default='auto',
+    parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'vmware-mount', 'auto', 'dummy'],
+                        default='auto',
                         help='use other tool to mount the initial images; results may vary between methods and if '
                              'something doesn\'t work, try another method; dummy can be used when base should not be '
                              'mounted (default: auto)')
@@ -114,7 +115,7 @@ def main():
 
     # Check some prerequisites
     if os.geteuid():  # Not run as root
-        print('[-] This program needs to be ran as root!')
+        print('[-] This program needs to be run as root!')
         #os.execvp('sudo', ['sudo'] + sys.argv)
         sys.exit(1)
 
@@ -163,9 +164,9 @@ def main():
     if args.method not in ('auto', 'dummy') and not util.command_exists(args.method):
         print(col("[-] {0} is not installed!".format(args.method), 'red'))
         sys.exit(1)
-    elif args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount'))):
-        print(col("[-] No tools installed to mount the image base! Please install xmount, affuse (afflib-tools) or "
-                  "ewfmount (ewf-tools) first.", 'red'))
+    elif args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount', 'vmware-mount'))):
+        print(col("[-] No tools installed to mount the image base! Please install xmount, affuse (afflib-tools), "
+                  "ewfmount (ewf-tools) or vmware-mount first.", 'red'))
         sys.exit(1)
 
     # Check if detection method is available

@@ -38,6 +38,8 @@ class Disk(object):
         path = os.path.expandvars(os.path.expanduser(path))
         if util.is_encase(path):
             self.type = 'encase'
+        elif util.is_vmware(path):
+            self.type = 'vmdk'
         else:
             self.type = 'dd'
         self.paths = sorted(util.expand_path(path))
@@ -54,6 +56,11 @@ class Disk(object):
                 self.method = 'xmount'
             elif self.type == 'encase' and util.command_exists('ewfmount'):
                 self.method = 'ewfmount'
+            elif self.type == 'vmdk':
+                if util.command_exists('vmware-mount'):
+                    self.method = 'vmware-mount'
+                elif util.command_exists('affuse'):
+                    self.method = 'affuse'
             elif self.type == 'dd' and util.command_exists('affuse'):
                 self.method = 'affuse'
             else:
@@ -146,6 +153,9 @@ class Disk(object):
                     cmd = ['ewfmount', '-X', 'allow_other']
                     fallbackcmd = ['ewfmount']
 
+                elif self.method == 'vmware-mount':
+                    cmd = ['vmware-mount', '-f']
+
                 elif self.method == 'dummy':
                     # remove basemountpoint
                     os.rmdir(self.mountpoint)
@@ -191,6 +201,7 @@ class Disk(object):
             raw_path = glob.glob(os.path.join(self.mountpoint, '*.dd'))
             raw_path.extend(glob.glob(os.path.join(self.mountpoint, '*.raw')))
             raw_path.extend(glob.glob(os.path.join(self.mountpoint, 'ewf1')))
+            raw_path.extend(glob.glob(os.path.join(self.mountpoint, 'flat')))
             if not raw_path:
                 self._debug("No mount found in {}.".format(self.mountpoint))
                 return None
