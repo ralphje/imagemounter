@@ -223,6 +223,58 @@ class Volume(object):
                 for s in v.init():
                     yield s
 
+    def _make_mountpoint(self):
+        """Creates a directory that can be used as a mountpoint. The directory is stored in :attr:`mountpoint`
+
+        :return: boolean indicating whether the mountpoint was successfully created.
+        """
+
+        if self.pretty:
+            md = self.mountdir or tempfile.tempdir
+            pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]),
+                                            self.get_safe_label() or self.index)
+            path = os.path.join(md, pretty_label)
+            #noinspection PyBroadException
+            try:
+                os.mkdir(path, 777)
+                self.mountpoint = path
+                return True
+            except:
+                self._debug("[-] Could not create mountdir.")
+                return False
+        else:
+            self.mountpoint = tempfile.mkdtemp(prefix='im_' + str(self.index) + '_',
+                                               suffix='_' + self.get_safe_label(),
+                                               dir=self.mountdir)
+            return True
+
+    def _find_loopback(self, use_loopback=True):
+        """Finds a free loopback device that can be used. The loopback is stored in :attr:`loopback`. If *use_loopback*
+        is True, the loopback will also be used directly.
+
+        :return: boolean indicating whether a loopback device was found
+        """
+
+        # noinspection PyBroadException
+        try:
+            self.loopback = util.check_output_(['losetup', '-f'], self).strip()
+        except Exception:
+            self._debug("[-] No free loopback device found.")
+            return False
+
+        # noinspection PyBroadException
+        if use_loopback:
+            try:
+                cmd = ['losetup', '-o', str(self.offset), self.loopback, self.get_raw_base_path()]
+                if not self.disk.read_write:
+                    cmd.insert(1, '-r')
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+            except Exception as e:
+                self._debug("[-] Loopback device could not be mounted.")
+                self._debug(e)
+                return False
+        return True
+
     def mount(self):
         """Based on the file system type as determined by :func:`get_fs_type`, the proper mount command is executed
         for this volume. The volume is mounted in a temporary path (or a pretty path if :attr:`pretty` is enabled) in
@@ -239,23 +291,8 @@ class Volume(object):
         fstype = self.get_fs_type()
 
         # we need a mountpoint if it is not a lvm or luks volume
-        if fstype not in ('luks', 'lvm') and fstype in FILE_SYSTEM_TYPES:
-            if self.pretty:
-                md = self.mountdir or tempfile.tempdir
-                pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]),
-                                                self.get_safe_label() or self.index)
-                path = os.path.join(md, pretty_label)
-                #noinspection PyBroadException
-                try:
-                    os.mkdir(path, 777)
-                    self.mountpoint = path
-                except:
-                    self._debug("[-] Could not create mountdir.")
-                    return False
-            else:
-                self.mountpoint = tempfile.mkdtemp(prefix='im_' + str(self.index) + '_',
-                                                   suffix='_' + self.get_safe_label(),
-                                                   dir=self.mountdir)
+        if fstype not in ('luks', 'lvm') and fstype in FILE_SYSTEM_TYPES and not self._make_mountpoint():
+            return False
 
         # Prepare mount command
         try:
@@ -311,18 +348,8 @@ class Volume(object):
                 os.environ['LVM_SUPPRESS_FD_WARNINGS'] = '1'
 
                 # find free loopback device
-                #noinspection PyBroadException
-                try:
-                    self.loopback = util.check_output_(['losetup', '-f'], self).strip()
-                except Exception:
-                    self._debug("[-] No free loopback device found for LVM")
+                if not self._find_loopback():
                     return False
-
-                cmd = ['losetup', '-o', str(self.offset), self.loopback, raw_path]
-                if not self.disk.read_write:
-                    cmd.insert(1, '-r')
-
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
                 self.find_lvm_volumes()
 
@@ -381,18 +408,8 @@ class Volume(object):
         """
 
         # Open a loopback device
-        #noinspection PyBroadException
-        try:
-            self.loopback = util.check_output_(['losetup', '-f'], self).strip()
-        except Exception:
-            self._debug("[-] No free loopback device found for LUKS")
+        if not self._find_loopback():
             return None
-
-        cmd = ['losetup', '-o', str(self.offset), self.loopback, self.get_raw_base_path()]
-        if not self.disk.read_write:
-            cmd.insert(1, '-r')
-
-        util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
         # Check if this is a LUKS device
         # noinspection PyBroadException
