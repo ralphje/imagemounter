@@ -114,7 +114,7 @@ def main():
 
     # Check some prerequisites
     if os.geteuid():  # Not run as root
-        print('[-] This program needs to be ran as root!')
+        print('[-] This program needs to be run as root!')
         #os.execvp('sudo', ['sudo'] + sys.argv)
         sys.exit(1)
 
