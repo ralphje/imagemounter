@@ -47,13 +47,13 @@ class Volume(object):
         self.size = 0
         self.flag = 'alloc'
         self.fsdescription = None
-        self._internal_fstype = None
+        self.fstype = None
 
         # Should be filled by fill_stats
         self.lastmountpoint = None
         self.label = None
         self.version = None
-        self.fstype = None
+        self.statfstype = None
 
         # Should be filled by mount
         self.mountpoint = None
@@ -96,7 +96,7 @@ class Volume(object):
         if with_size and self.size:
             desc += '{0} '.format(self.get_size_gib())
 
-        desc += '{1}:{0}'.format(self.fstype or self.fsdescription, self.index)
+        desc += '{1}:{0}'.format(self.statfstype or self.fsdescription, self.index)
 
         if self.label:
             desc += ' {0}'.format(self.label)
@@ -130,47 +130,51 @@ class Volume(object):
         else:
             return self.size
 
-    def get_fs_type(self):
+    def determine_fs_type(self):
         """Determines the FS type for this partition. This function is used internally to determine which mount system
         to use, based on the file system description. Return values include *ext*, *bsd*, *ntfs*, *lvm* and *luks*.
         """
 
         # Determine fs type. If forced, always use provided type.
-        if self._internal_fstype is not None:
-            fstype = self._internal_fstype
-        elif str(self.index) in self.fstypes:
-            fstype = self.fstypes[str(self.index)]
+        if str(self.index) in self.fstypes:
+            self.fstype = self.fstypes[str(self.index)]
         elif self.fsforce:
-            fstype = self.fsfallback
+            self.fstype = self.fsfallback
         else:
-            fsdesc = self.fsdescription.lower()
-            # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info.
-            if fsdesc in ('logical volume', 'luks container', 'primary', 'basic data partition'):
-                fsdesc = ''
-            if not fsdesc and self.fstype:
-                fsdesc = self.fstype.lower()
+            # we have two possible sources for determining the FS type: the description given to us by the detection
+            # method, and the type given to us by the stat function
+            for fsdesc in (self.fsdescription, self.statfstype):
+                if not fsdesc:
+                    continue
+                fsdesc = fsdesc.lower()
+                # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info
+                if fsdesc in ('logical volume', 'luks container', 'primary', 'basic data partition'):
+                    continue
 
-            if '0x83' in fsdesc or '0xfd' in fsdesc or re.search(r'\bext[0-9]*\b', fsdesc):
-                fstype = 'ext'
-            elif 'bsd' in fsdesc:
-                fstype = 'bsd'
-            elif '0x07' in fsdesc or 'ntfs' in fsdesc:
-                fstype = 'ntfs'
-            elif '0x8e' in fsdesc or 'lvm' in fsdesc:
-                fstype = 'lvm'
-            elif 'luks' in fsdesc:
-                fstype = 'luks'
-            elif 'fat' in fsdesc or 'efi system partition' in fsdesc:
-                # based on http://en.wikipedia.org/wiki/EFI_System_partition, efi is always fat.
-                fstype = 'fat'
-            else:
-                fstype = self.fsfallback
+                if '0x83' in fsdesc or '0xfd' in fsdesc or re.search(r'\bext[0-9]*\b', fsdesc):
+                    self.fstype = 'ext'
+                elif 'bsd' in fsdesc:
+                    self.fstype = 'bsd'
+                elif '0x07' in fsdesc or 'ntfs' in fsdesc:
+                    self.fstype = 'ntfs'
+                elif '0x8e' in fsdesc or 'lvm' in fsdesc:
+                    self.fstype = 'lvm'
+                elif 'luks' in fsdesc:
+                    self.fstype = 'luks'
+                elif 'fat' in fsdesc or 'efi system partition' in fsdesc:
+                    # based on http://en.wikipedia.org/wiki/EFI_System_partition, efi is always fat.
+                    self.fstype = 'fat'
+                else:
+                    continue  # this loop failed
 
-            if fstype:
-                self._debug("    Detected {0} as {1}".format(fsdesc, fstype))
+                self._debug("    Detected {0} as {1}".format(fsdesc, self.fstype))
+                break  # we found something
+            else:  # we found nothing
+                self.fstype = self.fsfallback
 
-        self._internal_fstype = fstype
-        return fstype
+        return self.fstype
+
+    get_fs_type = determine_fs_type  # backwards compatibility, remove in 2.0
 
     def get_raw_base_path(self):
         """Retrieves the base mount path of the volume. Typically equals to :func:`Disk.get_fs_path` but may also be the
@@ -276,7 +280,7 @@ class Volume(object):
         return True
 
     def mount(self):
-        """Based on the file system type as determined by :func:`get_fs_type`, the proper mount command is executed
+        """Based on the file system type as determined by :func:`determine_fs_type`, the proper mount command is executed
         for this volume. The volume is mounted in a temporary path (or a pretty path if :attr:`pretty` is enabled) in
         the mountpoint as specified by :attr:`mountpoint`.
 
@@ -288,15 +292,15 @@ class Volume(object):
         """
 
         raw_path = self.get_raw_base_path()
-        fstype = self.get_fs_type()
+        self.determine_fs_type()
 
         # we need a mountpoint if it is not a lvm or luks volume
-        if fstype not in ('luks', 'lvm') and fstype in FILE_SYSTEM_TYPES and not self._make_mountpoint():
+        if self.fstype not in ('luks', 'lvm') and self.fstype in FILE_SYSTEM_TYPES and not self._make_mountpoint():
             return False
 
         # Prepare mount command
         try:
-            if fstype == 'ext':
+            if self.fstype == 'ext':
                 # ext
                 cmd = ['mount', raw_path, self.mountpoint, '-t', 'ext4', '-o',
                        'loop,noexec,noload,offset=' + str(self.offset)]
@@ -305,7 +309,7 @@ class Volume(object):
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
-            elif fstype == 'bsd':
+            elif self.fstype == 'bsd':
                 # ufs
                 #mount -t ufs -o ufstype=ufs2,loop,ro,offset=4294967296 /tmp/image/ewf1 /media/a
                 cmd = ['mount', raw_path, self.mountpoint, '-t', 'ufs', '-o',
@@ -315,7 +319,7 @@ class Volume(object):
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
-            elif fstype == 'ntfs':
+            elif self.fstype == 'ntfs':
                 # NTFS
                 cmd = ['mount', raw_path, self.mountpoint, '-t', 'ntfs', '-o',
                        'loop,noexec,offset=' + str(self.offset)]
@@ -324,7 +328,7 @@ class Volume(object):
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
-            elif fstype == 'fat':
+            elif self.fstype == 'fat':
                 # FAT
                 cmd = ['mount', raw_path, self.mountpoint, '-t', 'vfat', '-o',
                        'loop,offset=' + str(self.offset)]
@@ -333,17 +337,17 @@ class Volume(object):
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
-            elif fstype == 'unknown':  # mounts without specifying the filesystem type
+            elif self.fstype == 'unknown':  # mounts without specifying the filesystem type
                 cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
-            elif fstype == 'luks':
+            elif self.fstype == 'luks':
                 self.open_luks_container()
 
-            elif fstype == 'lvm':
+            elif self.fstype == 'lvm':
                 # LVM
                 os.environ['LVM_SUPPRESS_FD_WARNINGS'] = '1'
 
@@ -359,8 +363,8 @@ class Volume(object):
                 except TypeError:
                     size = self.size
 
-                self._debug("[-] Unknown filesystem {0} (block offset: {1}, length: {2})"
-                            .format(self, self.offset / self.disk.block_size, size))
+                self._debug("[-] Unknown filesystem {0} (type: {1}, block offset: {2}, length: {3})"
+                            .format(self, self.fstype, self.offset / self.disk.block_size, size))
                 return False
 
             self.was_mounted = True
@@ -458,7 +462,7 @@ class Volume(object):
         container.flag = 'alloc'
         container.parent = self
         container.offset = 0
-        container.size = size  # kan uit status gehaald worden
+        container.size = size
         self.volumes.append(container)
 
         return container
@@ -536,16 +540,16 @@ class Volume(object):
 
                 for line in iter(process.stdout.readline, b''):
                     if line.startswith("File System Type:"):
-                        self.fstype = line[line.index(':') + 2:].strip()
-                    if line.startswith("Last Mount Point:") or line.startswith("Last mounted on:"):
+                        self.statfstype = line[line.index(':') + 2:].strip()
+                    elif line.startswith("Last Mount Point:") or line.startswith("Last mounted on:"):
                         self.lastmountpoint = line[line.index(':') + 2:].strip().replace("//", "/")
-                    if line.startswith("Volume Name:") and not self.label:
+                    elif line.startswith("Volume Name:") and not self.label:
                         self.label = line[line.index(':') + 2:].strip()
-                    if line.startswith("Version:"):
+                    elif line.startswith("Version:"):
                         self.version = line[line.index(':') + 2:].strip()
-                    if line.startswith("Source OS:"):
+                    elif line.startswith("Source OS:"):
                         self.version = line[line.index(':') + 2:].strip()
-                    if 'CYLINDER GROUP INFORMATION' in line:
+                    elif 'CYLINDER GROUP INFORMATION' in line:
                         #noinspection PyBroadException
                         try:
                             process.terminate()  # some attempt
