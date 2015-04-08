@@ -2,7 +2,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 __ALL__ = ['Volume', 'Disk', 'ImageParser']
-__version__ = '1.5.2'
+__version__ = '1.5.3'
 
 BLOCK_SIZE = 512
 VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')

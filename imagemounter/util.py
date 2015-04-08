@@ -34,8 +34,13 @@ def clean_unmount(cmd, mountpoint, tries=20, rmdir=True, parser=None):
     else:
         return True
 
+
 def is_encase(path):
     return re.match(r'^.*\.E\w\w$', path)
+
+
+def is_vmware(path):
+    return re.match(r'^.*\.vmdk', path)
 
 
 def expand_path(path):

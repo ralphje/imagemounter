@@ -24,6 +24,7 @@ following tools:
   * :command:`xmount`
   * :command:`ewfmount`, part of *ewf-tools* package, see note below
   * :command:`affuse`, part of *afflib-tools* package
+  * :command:`vmware-mount`, part of VMware Workstation
 
 * Volume detection
 
