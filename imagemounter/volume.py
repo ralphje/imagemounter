@@ -8,7 +8,7 @@ import re
 import tempfile
 import threading
 import sys
-from imagemounter import util
+from imagemounter import util, FILE_SYSTEM_TYPES
 
 
 class Volume(object):
@@ -142,7 +142,7 @@ class Volume(object):
         else:
             fsdesc = self.fsdescription.lower()
             # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info.
-            if fsdesc in ('logical volume', 'luks container', 'primary'):
+            if fsdesc in ('logical volume', 'luks container', 'primary', 'basic data partition'):
                 fsdesc = ''
             if not fsdesc and self.fstype:
                 fsdesc = self.fstype.lower()
@@ -157,6 +157,9 @@ class Volume(object):
                 fstype = 'lvm'
             elif 'luks' in fsdesc:
                 fstype = 'luks'
+            elif 'fat' in fsdesc or 'efi system partition' in fsdesc:
+                # based on http://en.wikipedia.org/wiki/EFI_System_partition, efi is always fat.
+                fstype = 'fat'
             else:
                 fstype = self.fsfallback
 
@@ -231,8 +234,8 @@ class Volume(object):
         raw_path = self.get_raw_base_path()
         fstype = self.get_fs_type()
 
-        # we need a mountpoint if it is not a lvm
-        if fstype in ('ext', 'bsd', 'ntfs', 'unknown'):
+        # we need a mountpoint if it is not a lvm or luks volume
+        if fstype not in ('luks', 'lvm') and fstype in FILE_SYSTEM_TYPES:
             if self.pretty:
                 md = self.mountdir or tempfile.tempdir
                 pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]),
@@ -280,8 +283,14 @@ class Volume(object):
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
-            elif fstype == 'luks':
-                self.open_luks_container()
+            elif fstype == 'fat':
+                # FAT
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'vfat', '-o',
+                       'loop,offset=' + str(self.offset)]
+                if not self.disk.read_write:
+                    cmd[-1] += ',ro'
+
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
             elif fstype == 'unknown':  # mounts without specifying the filesystem type
                 cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset)]
@@ -289,6 +298,9 @@ class Volume(object):
                     cmd[-1] += ',ro'
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            elif fstype == 'luks':
+                self.open_luks_container()
 
             elif fstype == 'lvm':
                 # LVM
