@@ -47,6 +47,7 @@ class Volume(object):
         self.size = 0
         self.flag = 'alloc'
         self.fsdescription = None
+        self._internal_fstype = None
 
         # Should be filled by fill_stats
         self.lastmountpoint = None
@@ -135,7 +136,9 @@ class Volume(object):
         """
 
         # Determine fs type. If forced, always use provided type.
-        if str(self.index) in self.fstypes:
+        if self._internal_fstype is not None:
+            fstype = self._internal_fstype
+        elif str(self.index) in self.fstypes:
             fstype = self.fstypes[str(self.index)]
         elif self.fsforce:
             fstype = self.fsfallback
@@ -166,6 +169,7 @@ class Volume(object):
             if fstype:
                 self._debug("    Detected {0} as {1}".format(fsdesc, fstype))
 
+        self._internal_fstype = fstype
         return fstype
 
     def get_raw_base_path(self):
