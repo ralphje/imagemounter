@@ -143,7 +143,7 @@ The best example of the use of the Python interface is the :command:`imount` com
 
    These functions offer access to some internals:
 
-   .. automethod:: get_fs_type
+   .. automethod:: determine_fs_type
    .. automethod:: get_raw_base_path
    .. automethod:: mount
    .. automethod:: bindmount
@@ -188,9 +188,13 @@ The best example of the use of the Python interface is the :command:`imount` com
 
       The volume version as detected by :func:`fill_stats`.
 
-   .. attribute:: fstype
+   .. attribute:: statfstype
 
       The volume file system type as detected by :func:`fill_stats`.
+
+   .. attribute:: fstype
+
+      The volume file system type used internally as determined by :func:`determine_fs_type`.
 
    .. attribute:: mountpoint
 
