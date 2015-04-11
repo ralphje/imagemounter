@@ -505,7 +505,7 @@ class Disk(object):
             self.volume_source = 'multi'
         except Exception as e:
             # some bug in sleuthkit makes detection sometimes difficult, so we hack around it:
-            if hasattr(e, 'output') and "(GPT or DOS at 0)" in e.output and self.vstype != 'gpt':
+            if hasattr(e, 'output') and "(GPT or DOS at 0)" in e.output.decode() and self.vstype != 'gpt':
                 self.vstype = 'gpt'
                 try:
                     self._debug("[-] Error in retrieving volume info: mmls couldn't decide between GPT and DOS, "
