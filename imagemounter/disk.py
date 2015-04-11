@@ -239,7 +239,6 @@ class Disk(object):
             raw_path.extend(glob.glob(os.path.join(mountpoint, 'flat')))
             if not raw_path:
                 self._debug("[-] No viable mount file found in {}.".format(mountpoint))
-                raw_input()
                 return None
             return raw_path[0]
 
