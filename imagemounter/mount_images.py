@@ -60,7 +60,7 @@ def main():
     parser.add_argument('-w', '--wait', action='store_true', default=False, help='pause on some additional warnings')
     parser.add_argument('-k', '--keep', action='store_true', default=False,
                         help='keep volumes mounted after program exits')
-    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='enable verbose output')
+    parser.add_argument('-v', '--verbose', action='count', default=False, help='enable verbose output')
 
     # Additional options
     parser.add_argument('-r', '--reconstruct', action='store_true', default=False,
@@ -76,7 +76,8 @@ def main():
     parser.add_argument('-rw', '--read-write', action='store_true', default=False,
                         help='mount image read-write by creating a local write-cache file in a temp directory; '
                              'implies --method=xmount')
-    parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'vmware-mount', 'auto', 'dummy'],
+    parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'vmware-mount', 'avfs',
+                                                   'auto', 'dummy'],
                         default='auto',
                         help='use other tool to mount the initial images; results may vary between methods and if '
                              'something doesn\'t work, try another method; dummy can be used when base should not be '
@@ -159,12 +160,14 @@ def main():
         args.read_write = False
 
     # Check if mount method is available
-    if args.method not in ('auto', 'dummy') and not util.command_exists(args.method):
+    mount_command = 'avfsd' if args.method == 'avfs' else args.method
+    if args.method not in ('auto', 'dummy') and not util.command_exists(mount_command):
         print(col("[-] {0} is not installed!".format(args.method), 'red'))
         sys.exit(1)
-    elif args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount', 'vmware-mount'))):
+    elif args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount', 'vmware-mount',
+                                                                     'avfsd'))):
         print(col("[-] No tools installed to mount the image base! Please install xmount, affuse (afflib-tools), "
-                  "ewfmount (ewf-tools) or vmware-mount first.", 'red'))
+                  "ewfmount (ewf-tools), vmware-mount or avfs first.", 'red'))
         sys.exit(1)
 
     # Check if detection method is available

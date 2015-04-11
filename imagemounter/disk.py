@@ -67,7 +67,7 @@ class Disk(object):
                     self.method = 'affuse'
             elif self.type == 'dd' and util.command_exists('affuse'):
                 self.method = 'affuse'
-            elif self.type == 'compressed' and util.command_exists('mountavfs'):
+            elif self.type == 'compressed' and util.command_exists('avfsd'):
                 self.method = 'avfs'
             else:
                 self.method = 'xmount'
@@ -90,6 +90,7 @@ class Disk(object):
 
         self.name = os.path.split(path)[1]
         self.mountpoint = ''
+        self.avfs_mountpoint = ''
         self.volumes = []
         self.volume_source = None
 
@@ -102,9 +103,9 @@ class Disk(object):
     def __str__(self):
         return self.__unicode__()
 
-    def _debug(self, val):
+    def _debug(self, val, level=1):
         #noinspection PyProtectedMember
-        return self.parser._debug(val)
+        return self.parser._debug(val, level)
 
     def init(self, single=None, raid=True):
         """Calls several methods required to perform a full initialisation: :func:`mount`, :func:`add_to_raid` and
@@ -135,6 +136,7 @@ class Disk(object):
 
         self.mountpoint = tempfile.mkdtemp(prefix='image_mounter_')
 
+        # this is an attempt at mounting using split files. this mostly is not needed.
         if self.multifile:
             pathss = (self.paths[:1], self.paths)
         else:
@@ -147,15 +149,18 @@ class Disk(object):
             try:
                 fallbackcmd = None
                 if self.method == 'avfs':
-                    util.check_call_(['mountavfs'], self, stdout=subprocess.PIPE)
-                    path = paths[0]
-                    cmd = 'ln -s $HOME/.avfs'+path+'# ' + self.mountpoint
-                    if path.endswith('.zip'): 
-                        os.rmdir(self.mountpoint)
-                    else:
-                        cmd += '/avfs.raw'
-                    util.check_call_([cmd], self, stdout=subprocess.PIPE, shell=True)
-                    return True
+                    self.avfs_mountpoint = tempfile.mkdtemp(prefix='image_mounter_avfs_')
+
+                    # start by calling the mountavfs command to initialize avfs
+                    util.check_call_(['avfsd', self.avfs_mountpoint, '-o', 'allow_other'], self, stdout=subprocess.PIPE)
+
+                    # no multifile support for avfs
+                    avfspath = self.avfs_mountpoint + '/' + os.path.abspath(paths[0]) + '#'
+                    targetraw = os.path.join(self.mountpoint, 'avfs')
+
+                    os.symlink(avfspath, targetraw)
+                    self._debug("    Symlinked {} with {}".format(avfspath, targetraw))
+                    return self.get_raw_path() is not None
 
                 elif self.method == 'xmount':
                     cmd = ['xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']
@@ -197,7 +202,7 @@ class Disk(object):
                         util.check_call_(fallbackcmd, self, stdout=subprocess.PIPE)
                     else:
                         raise
-                return True
+                return self.get_raw_path() is not None
 
             except Exception as e:
                 self._debug('[-] Could not mount {0} (see below), will try multi-file method'.format(paths[0]))
@@ -218,14 +223,22 @@ class Disk(object):
         if self.method == 'dummy':
             return self.paths[0]
         else:
-            raw_path = glob.glob(os.path.join(self.mountpoint, '*.dd'))
-            raw_path.extend(glob.glob(os.path.join(self.mountpoint, '*.iso')))
-            raw_path.extend(glob.glob(os.path.join(self.mountpoint, '*.raw')))
-            raw_path.extend(glob.glob(os.path.join(self.mountpoint, '*.dmg')))
-            raw_path.extend(glob.glob(os.path.join(self.mountpoint, 'ewf1')))
-            raw_path.extend(glob.glob(os.path.join(self.mountpoint, 'flat')))
+            if self.method == 'avfs' and os.path.isdir(os.path.join(self.mountpoint, 'avfs')):
+                self._debug("    AVFS mounted as a directory, will look in directory for (random) file.", 2)
+                # there is no support for disks inside disks, so this will fail to work for zips containing
+                # E01 files or so.
+                mountpoint = os.path.join(self.mountpoint, 'avfs')
+            else:
+                mountpoint = self.mountpoint
+            raw_path = glob.glob(os.path.join(mountpoint, '*.dd'))
+            raw_path.extend(glob.glob(os.path.join(mountpoint, '*.iso')))
+            raw_path.extend(glob.glob(os.path.join(mountpoint, '*.raw')))
+            raw_path.extend(glob.glob(os.path.join(mountpoint, '*.dmg')))
+            raw_path.extend(glob.glob(os.path.join(mountpoint, 'ewf1')))
+            raw_path.extend(glob.glob(os.path.join(mountpoint, 'flat')))
             if not raw_path:
-                self._debug("No mount found in {}.".format(self.mountpoint))
+                self._debug("[-] No viable mount file found in {}.".format(mountpoint))
+                raw_input()
                 return None
             return raw_path[0]
 
@@ -591,6 +604,10 @@ class Disk(object):
 
         if self.mountpoint and not util.clean_unmount(['fusermount', '-u'], self.mountpoint, parser=self):
             self._debug("[-] Error unmounting base {0}".format(self.mountpoint))
+            return False
+
+        if self.avfs_mountpoint and not util.clean_unmount(['fusermount', '-u'], self.avfs_mountpoint, parser=self):
+            self._debug("[-] Error unmounting AVFS mountpoint {0}".format(self.avfs_mountpoint))
             return False
 
         if self.rw_active() and remove_rw:
