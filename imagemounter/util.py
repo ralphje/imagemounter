@@ -5,17 +5,24 @@ import time
 import subprocess
 import re
 import glob
+import logging
 import os
 
 
 def clean_unmount(cmd, mountpoint, tries=20, rmdir=True, parser=None):
     cmd.append(mountpoint)
 
-    # Perform unmount
-    try:
-        check_call_(cmd, parser)
-    except:
-        return False
+    if os.path.isfile(os.path.join(mountpoint, 'avfs.raw')):
+        os.remove(os.path.join(mountpoint, 'avfs.raw'))
+    elif os.path.realpath(mountpoint).endswith('.zip#'):
+        os.remove(mountpoint)
+        return True
+    else:
+        # Perform unmount
+        try:
+            check_call_(cmd, parser)
+        except:
+            return False
 
     # Remove mountpoint only if needed
     if not rmdir:
@@ -38,6 +45,8 @@ def clean_unmount(cmd, mountpoint, tries=20, rmdir=True, parser=None):
 def is_encase(path):
     return re.match(r'^.*\.E\w\w$', path)
 
+def is_compressed(path):
+    return re.match(r'^.*\.((zip)|((t(ar\.)?)?gz))$', path)
 
 def is_vmware(path):
     return re.match(r'^.*\.vmdk', path)
@@ -74,9 +83,9 @@ def command_exists(cmd):
 
 
 def module_exists(mod):
-    import imp
+    import importlib
     try:
-        imp.find_module(mod)
+        importlib.import_module(mod)
         return True
     except ImportError:
         return False
@@ -210,3 +219,19 @@ def force_clean(execute=True):
                 pass
 
     return commands
+
+
+def lookup_guid(guid, parser=None):
+    # VMFS Datastore
+    if guid == '2AE031AA-0F40-DB11-9590-000C2911D1B8':
+        return 'vmfs'
+    # VMKCore Diagnostic
+    elif guid == '8053279D-AD40-DB11-BF97-000C2911D1B8':
+        return 'vmkcore-diagnostics'
+    elif guid == '6A898CC3-1DD2-11B2-99A6-080020736631' or \
+         guid == 'C38C896A-D21D-B211-99A6-080020736631':
+        return 'zfs-member'
+    else:
+        if parser:
+            parser._debug('    GUID {} not yet supported'.format(guid))
+        return 'unknown'
