@@ -9,6 +9,7 @@ import tempfile
 import time
 
 from imagemounter import util, BLOCK_SIZE
+from imagemounter.util import determine_slot
 from imagemounter.volume import Volume
 
 
@@ -478,6 +479,7 @@ class Disk(object):
 
             if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
                 volume.flag = 'alloc'
+                volume.slot = determine_slot(p.table_num, p.slot_num)
             elif p.flags == pytsk3.TSK_VS_PART_FLAG_UNALLOC:
                 volume.flag = 'unalloc'
                 self._debug("    Unallocated space: block offset: {0}, length: {1} ".format(p.start, p.len))
@@ -557,10 +559,9 @@ class Disk(object):
             else:
                 volume.flag = 'alloc'
                 if ":" in slot:
-                    table, tslot = slot.split(':')
-                    volume.slot = int(table) * 4 + int(tslot)
+                    volume.slot = determine_slot(*slot.split(':'))
                 else:
-                    volume.slot = int(slot)
+                    volume.slot = determine_slot(-1, slot)
 
             # unalloc / meta partitions do not have stats and can not be mounted
             if volume.flag != 'alloc':
