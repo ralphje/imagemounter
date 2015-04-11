@@ -641,6 +641,9 @@ class Volume(object):
         partition_nr = self.slot + 1
 
         # Only works if we have a GPT partition table
+        if "GPT partition map" not in disktype:
+            self._debug("    Not a GPT partition table, no GUID available.")
+            return None
         disktype_gpt = disktype.split("GPT partition map", 1)[-1]
         match_found = False
         for line in disktype_gpt.splitlines():
@@ -653,15 +656,17 @@ class Volume(object):
                     match_found = line.startswith('Partition '+str(partition_nr)+':')
 
                 if match_found:
-                    if line.startswith("Type ") and not self.guid:
-                        self.guid = line[line.index('GUID') + 5:-1].strip()
+                    if line.startswith("Type ") and "GUID" in line and not self.guid:
+                        self.guid = line[line.index('GUID') + 5:-1].strip()  # output is between ()
                     elif line.startswith("Partition Name ") and not self.label:
-                        self.label = line[line.index('Name ') + 6:-1].strip()
+                        self.label = line[line.index('Name ') + 6:-1].strip()  # output is between ""
 
             except Exception as e:
                 self._debug("[-] Error while parsing disktype output")
                 self._debug(e)
                 continue
+
+        self._debug("    GUID of volume is {}".format(self.guid), 2)
 
         return self.guid
 
