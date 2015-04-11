@@ -1,6 +1,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import io
 import os
 import random
 import subprocess
@@ -44,8 +45,10 @@ class Volume(object):
         self.size = 0
         self.offset = 0
         self.index = 0
+        self.slot = 0
         self.size = 0
         self.flag = 'alloc'
+        self.guid = None
         self.fsdescription = None
         self.fstype = None
 
@@ -130,6 +133,91 @@ class Volume(object):
         else:
             return self.size
 
+    def __fs_type_magic(self):
+        """Obtains the fs type of the volume, based the first 4 KiB of the partition.
+        lib_magic / python_magic is used for this test
+        """
+
+        file_type = ""
+
+        # if we were able to load the module magic
+        try:
+            # noinspection PyUnresolvedReferences
+            import magic
+            # handle the file with some added magic.
+            header = "";
+            with io.open(self.disk.get_fs_path(), "rb") as file:
+                file.seek(self.offset)
+                header = file.read(4096)
+
+            file_type = magic.from_buffer(header).decode()
+        except ImportError:
+            self._debug("    The python-magic module is not available.")
+        except AttributeError:
+            self._debug("    The python-magic module is not available, instead another module named magic is available.")
+
+        # another exception occurs here, if the wrong magic module is used
+
+        if file_type.startswith("SGI XFS"):
+            return "xfs"
+        elif re.search(r'\bext[0-9]*\b', file_type):
+            return 'ext'
+        elif re.search(r'\bswap file\b', file_type):
+            return 'swap'
+        elif re.search(r'\bsquashfs\b', file_type.lower()):
+            return 'squashfs'
+        elif re.search(r'\bjffs2 filesystem\b', file_type.lower()):
+            return 'jffs2'
+        elif re.search(r'\bminix filesystem\b', file_type.lower()):
+            return 'minix'
+        else:
+            fstype = self.__inspect_disktype()
+            if fstype != None: return fstype
+
+        self._debug("    magic detected {0} as '{1}' but not yet supported.".format(self.index, file_type))
+        return "unknown"
+
+    def __inspect_disktype(self):
+        """Obtains the fs type of the volume, based on the output from disktype, the guid
+        and the label are extracted and based on type GUID which is also converted to a
+        filesystem-type if available.
+        """
+
+        if not util.command_exists('disktype'):
+            self._debug("    disktype not installed, could not detect volume type")
+            return None
+
+        disktype = util.check_output_(['disktype', self.disk.get_raw_path()], self).strip()
+
+        partition_nr = self.slot + 1
+
+        # make sure we have a gpt table
+        disktype = disktype.split("GPT partition map", 1)[-1]
+        matchFound = False
+        for line in disktype.splitlines():
+            if not line:
+                continue
+            try:
+                if line.startswith('Partition'):
+                    matchFound = line.startswith('Partition '+str(partition_nr)+':')
+
+                if matchFound:
+                    line = line.strip()
+
+                    if line.startswith("Type "):
+                        self.guid = line[line.index('GUID') + 5:-1].strip()
+                    elif line.startswith("Partition Name ") and not self.label:
+                        self.label = line[line.index('Name ') + 6:-1].strip()
+
+            except Exception as e:
+                self._debug("[-] Error while parsing disktype output")
+                self._debug(e)
+                continue
+
+        if self.guid:
+            return util.lookup_guid(self.guid, self)
+
+
     def determine_fs_type(self):
         """Determines the FS type for this partition. This function is used internally to determine which mount system
         to use, based on the file system description. Return values include *ext*, *bsd*, *ntfs*, *lvm* and *luks*.
@@ -164,10 +252,18 @@ class Volume(object):
                 elif 'fat' in fsdesc or 'efi system partition' in fsdesc:
                     # based on http://en.wikipedia.org/wiki/EFI_System_partition, efi is always fat.
                     self.fstype = 'fat'
+                elif 'iso 9660' in fsdesc:
+                    self.fstype = 'iso9660'
+                elif 'linux compressed rom file system' in fsdesc:
+                    self.fstype = 'cramfs'
+                elif '0x83' in fsdesc or '0xfd' in fsdesc or self.fstype == None:
+                    self.fstype = self.__fs_type_magic()
                 else:
                     continue  # this loop failed
 
                 self._debug("    Detected {0} as {1}".format(fsdesc, self.fstype))
+                if self.fstype not in FILE_SYSTEM_TYPES:
+                    self._debug("[-] Detected filesystem is not yet to be supported")
                 break  # we found something
             else:  # we found nothing
                 self.fstype = self.fsfallback
@@ -328,6 +424,15 @@ class Volume(object):
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
+            elif self.fstype == 'xfs':
+                # ext
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'xfs', '-o',
+                       'loop,norecovery,offset=' + str(self.offset)]
+                if not self.disk.read_write:
+                    cmd[-1] += ',ro'
+
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
             elif self.fstype == 'fat':
                 # FAT
                 cmd = ['mount', raw_path, self.mountpoint, '-t', 'vfat', '-o',
@@ -336,6 +441,26 @@ class Volume(object):
                     cmd[-1] += ',ro'
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            elif self.fstype in ('iso9660', 'squashfs', 'cramfs', 'minix'):
+                cmd = ['mount', raw_path, self.mountpoint, '-t', self.fstype, '-o',
+                       'loop,offset=' + str(self.offset)]
+                # not always needed, only to make command generic
+                if not self.disk.read_write:
+                    cmd[-1] += ',ro'
+
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            elif self.fstype == 'vmfs':
+                self.loopback = self.setup_loopback()
+
+                cmd = ['vmfs-fuse', self.loopback, self.mountpoint]
+
+                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            elif self.fstype == 'jffs2':
+                self.open_jffs2()
+
 
             elif self.fstype == 'unknown':  # mounts without specifying the filesystem type
                 cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset)]
@@ -467,6 +592,25 @@ class Volume(object):
 
         return container
 
+    def open_jffs2(self):
+        """Perform specific operations to mount a JFFS2 image, this kind of image
+        is sometimes used for things like bios images. so external tools are required
+        but given this method you don't have to memorize anything and it works fast
+        and easy.
+        Note that this module might not yet work while mounting multiple images
+        at the same time.
+        """
+        # we have to make a ram-device to store the image, we keep 20% overhead
+        size_in_kb = int((self.size / 1024) * 1.2)
+        util.check_call_(['modprobe', '-v', 'mtd'], self)
+        util.check_call_(['modprobe', '-v', 'jffs2'], self)
+        util.check_call_(['modprobe', '-v', 'mtdram', 'total_size={}'.format(size_in_kb), 'erase_size=256'], self)
+        util.check_call_(['modprobe', '-v', 'mtdblock'], self)
+        util.check_call_(['dd', 'if=' + self.get_raw_base_path(), 'of=/dev/mtd0'], self)
+        util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', self.mountpoint], self)
+
+        return True
+
     def find_lvm_volumes(self, force=False):
         """Performs post-mount actions on a LVM. Scans for active volume groups from the loopback device, activates it
         and fills :attr:`volumes` with the logical volumes.
@@ -533,12 +677,13 @@ class Volume(object):
 
         def stats_thread():
             try:
-                cmd = ['fsstat', self.get_raw_base_path(), '-o', str(self.offset / self.disk.block_size)]
+                cmd = ['fsstat', self.get_raw_base_path(), '-o', str(self.offset // self.disk.block_size)]
                 self._debug('    {0}'.format(' '.join(cmd)))
                 #noinspection PyShadowingNames
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
                 for line in iter(process.stdout.readline, b''):
+                    line = line.decode()
                     if line.startswith("File System Type:"):
                         self.statfstype = line[line.index(':') + 2:].strip()
                     elif line.startswith("Last Mount Point:") or line.startswith("Last mounted on:"):
