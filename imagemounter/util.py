@@ -11,11 +11,16 @@ import os
 def clean_unmount(cmd, mountpoint, tries=20, rmdir=True, parser=None):
     cmd.append(mountpoint)
 
-    # Perform unmount
-    try:
-        check_call_(cmd, parser)
-    except:
-        return False
+    # AVFS mounts are not actually unmountable, but are symlinked.
+    if os.path.exists(os.path.join(mountpoint, 'avfs')):
+        os.remove(os.path.join(mountpoint, 'avfs'))
+        parser._debug("    Removed {}".format(os.path.join(mountpoint, 'avfs')))
+    else:
+        # Perform unmount
+        try:
+            check_call_(cmd, parser)
+        except:
+            return False
 
     # Remove mountpoint only if needed
     if not rmdir:
@@ -39,18 +44,22 @@ def is_encase(path):
     return re.match(r'^.*\.E\w\w$', path)
 
 
+def is_compressed(path):
+    return re.match(r'^.*\.((zip)|(rar)|((t(ar\.)?)?gz))$', path)
+
+
 def is_vmware(path):
     return re.match(r'^.*\.vmdk', path)
 
 
 def expand_path(path):
-    '''
+    """
     Expand the given path to either an Encase image or a dd image
     i.e. if path is '/path/to/image.E01' then the result of this method will be
     /path/to/image.E*'
     and if path is '/path/to/image.001' then the result of this method will be
     '/path/to/image.[0-9][0-9]?'
-    '''
+    """
     if is_encase(path):
         return glob.glob(path[:-2] + '??')
     elif re.match(r'^.*\.\d{2,3}$', path):
@@ -74,9 +83,9 @@ def command_exists(cmd):
 
 
 def module_exists(mod):
-    import imp
+    import importlib
     try:
-        imp.find_module(mod)
+        importlib.import_module(mod)
         return True
     except ImportError:
         return False
@@ -210,3 +219,10 @@ def force_clean(execute=True):
                 pass
 
     return commands
+
+
+def determine_slot(table, slot):
+    if int(table) >= 0:
+        return int(table) * 4 + int(slot)
+    else:
+        return int(slot)
