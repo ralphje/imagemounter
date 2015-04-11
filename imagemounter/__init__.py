@@ -6,7 +6,7 @@ __version__ = '1.5.3'
 
 BLOCK_SIZE = 512
 VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
-FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'luks', 'lvm', 'xfs', 'iso9660', 'fat',
+FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'luks', 'lvm', 'xfs', 'iso', 'udf', 'fat',
                      'vmfs', 'squashfs', 'jffs2', 'cramfs', 'minix', 'unknown')
 
 import sys
