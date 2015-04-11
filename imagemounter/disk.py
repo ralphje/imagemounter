@@ -529,11 +529,11 @@ class Disk(object):
             try:
                 values = line.split(None, 5)
 
-                # sometime there are only 5 elements available
-                description = ''
+                # sometimes there are only 5 elements available
+                description = '-'
                 index, slot, start, end, length = values[0:5]
-                if len(values) > 4:
-                    description = values[4]
+                if len(values) > 5:
+                    description = values[5]
 
                 volume = Volume(disk=self, **self.args)
                 self.volumes.append(volume)
