@@ -12,6 +12,14 @@ import sys
 from imagemounter import util, FILE_SYSTEM_TYPES
 
 
+FILE_SYSTEM_GUIDS = {
+    '2AE031AA-0F40-DB11-9590-000C2911D1B8': 'vmfs',
+    '8053279D-AD40-DB11-BF97-000C2911D1B8': 'vmkcore-diagnostics',
+    '6A898CC3-1DD2-11B2-99A6-080020736631': 'zfs-member',
+    'C38C896A-D21D-B211-99A6-080020736631': 'zfs-member'
+}
+
+
 class Volume(object):
     """Information about a volume. Note that every detected volume gets their own Volume object, though it may or may
     not be mounted. This can be seen through the :attr:`mountpoint` attribute -- if it is not set, perhaps the
@@ -133,89 +141,25 @@ class Volume(object):
         else:
             return self.size
 
-    def __fs_type_magic(self):
-        """Obtains the fs type of the volume, based the first 4 KiB of the partition.
-        lib_magic / python_magic is used for this test
-        """
-
-        file_type = ""
+    def get_magic_type(self):
+        """Checks the volume for its magic bytes and returns the magic."""
 
         # if we were able to load the module magic
         try:
             # noinspection PyUnresolvedReferences
             import magic
-            # handle the file with some added magic.
-            header = "";
+
             with io.open(self.disk.get_fs_path(), "rb") as file:
                 file.seek(self.offset)
                 header = file.read(4096)
-
-            file_type = magic.from_buffer(header).decode()
+            result = magic.from_buffer(header).decode()
+            self._debug("    Magic detection returned {}".format(result), 2)
+            return result
         except ImportError:
             self._debug("    The python-magic module is not available.")
         except AttributeError:
-            self._debug("    The python-magic module is not available, instead another module named magic is available.")
-
-        # another exception occurs here, if the wrong magic module is used
-
-        if file_type.startswith("SGI XFS"):
-            return "xfs"
-        elif re.search(r'\bext[0-9]*\b', file_type):
-            return 'ext'
-        elif re.search(r'\bswap file\b', file_type):
-            return 'swap'
-        elif re.search(r'\bsquashfs\b', file_type.lower()):
-            return 'squashfs'
-        elif re.search(r'\bjffs2 filesystem\b', file_type.lower()):
-            return 'jffs2'
-        elif re.search(r'\bminix filesystem\b', file_type.lower()):
-            return 'minix'
-        else:
-            fstype = self.__inspect_disktype()
-            if fstype != None: return fstype
-
-        self._debug("    magic detected {0} as '{1}' but not yet supported.".format(self.index, file_type))
-        return "unknown"
-
-    def __inspect_disktype(self):
-        """Obtains the fs type of the volume, based on the output from disktype, the guid
-        and the label are extracted and based on type GUID which is also converted to a
-        filesystem-type if available.
-        """
-
-        if not util.command_exists('disktype'):
-            self._debug("    disktype not installed, could not detect volume type")
-            return None
-
-        disktype = util.check_output_(['disktype', self.disk.get_raw_path()], self).strip()
-
-        partition_nr = self.slot + 1
-
-        # make sure we have a gpt table
-        disktype = disktype.split("GPT partition map", 1)[-1]
-        matchFound = False
-        for line in disktype.splitlines():
-            if not line:
-                continue
-            try:
-                if line.startswith('Partition'):
-                    matchFound = line.startswith('Partition '+str(partition_nr)+':')
-
-                if matchFound:
-                    line = line.strip()
-
-                    if line.startswith("Type "):
-                        self.guid = line[line.index('GUID') + 5:-1].strip()
-                    elif line.startswith("Partition Name ") and not self.label:
-                        self.label = line[line.index('Name ') + 6:-1].strip()
-
-            except Exception as e:
-                self._debug("[-] Error while parsing disktype output")
-                self._debug(e)
-                continue
-
-        if self.guid:
-            return util.lookup_guid(self.guid, self)
+            self._debug("    The python-magic module is not available, but another module named magic was found.")
+        return None
 
     def determine_fs_type(self):
         """Determines the FS type for this partition. This function is used internally to determine which mount system
@@ -230,15 +174,19 @@ class Volume(object):
         else:
             # we have two possible sources for determining the FS type: the description given to us by the detection
             # method, and the type given to us by the stat function
-            for fsdesc in (self.fsdescription, self.statfstype):
+            for fsdesc in (self.fsdescription, self.statfstype, self.get_magic_type, self.fill_guid):
+                # For efficiency reasons, not all functions are called instantly.
+                if callable(fsdesc):
+                    fsdesc = fsdesc()
                 if not fsdesc:
                     continue
                 fsdesc = fsdesc.lower()
+
                 # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info
                 if fsdesc in ('logical volume', 'luks container', 'primary', 'basic data partition'):
                     continue
 
-                if '0x83' in fsdesc or '0xfd' in fsdesc or re.search(r'\bext[0-9]*\b', fsdesc):
+                if re.search(r'\bext[0-9]*\b', fsdesc):
                     self.fstype = 'ext'
                 elif 'bsd' in fsdesc:
                     self.fstype = 'bsd'
@@ -255,14 +203,25 @@ class Volume(object):
                     self.fstype = 'iso9660'
                 elif 'linux compressed rom file system' in fsdesc:
                     self.fstype = 'cramfs'
-                elif '0x83' in fsdesc or '0xfd' in fsdesc or self.fstype == None:
-                    self.fstype = self.__fs_type_magic()
+                elif fsdesc.startswith("sgi xfs"):
+                    self.fstype = "xfs"
+                elif re.search(r'\bswap file\b', fsdesc):
+                    self.fstype = 'swap'
+                elif re.search(r'\bsquashfs\b', fsdesc):
+                    self.fstype = 'squashfs'
+                elif "jffs2" in fsdesc:
+                    self.fstype = 'jffs2'
+                elif re.search(r'\bminix filesystem\b', fsdesc):
+                    self.fstype = 'minix'
+                elif fsdesc in FILE_SYSTEM_GUIDS:
+                    # this is a bit of a workaround for the fill_guid method
+                    self.fstype = FILE_SYSTEM_GUIDS[fsdesc]
                 else:
                     continue  # this loop failed
 
                 self._debug("    Detected {0} as {1}".format(fsdesc, self.fstype))
                 if self.fstype not in FILE_SYSTEM_TYPES:
-                    self._debug("[-] Detected filesystem is not yet to be supported")
+                    self._debug("[-] Detected filesystem is not yet supported")
                 break  # we found something
             else:  # we found nothing
                 self.fstype = self.fsfallback
@@ -457,16 +416,15 @@ class Volume(object):
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
-            elif self.fstype == 'jffs2':
-                self.open_jffs2()
-
-
             elif self.fstype == 'unknown':  # mounts without specifying the filesystem type
                 cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
+
+            elif self.fstype == 'jffs2':
+                self.open_jffs2()
 
             elif self.fstype == 'luks':
                 self.open_luks_container()
@@ -592,12 +550,11 @@ class Volume(object):
         return container
 
     def open_jffs2(self):
-        """Perform specific operations to mount a JFFS2 image, this kind of image
-        is sometimes used for things like bios images. so external tools are required
-        but given this method you don't have to memorize anything and it works fast
-        and easy.
-        Note that this module might not yet work while mounting multiple images
-        at the same time.
+        """Perform specific operations to mount a JFFS2 image. This kind of image is sometimes used for things like
+        bios images. so external tools are required but given this method you don't have to memorize anything and it
+        works fast and easy.
+
+        Note that this module might not yet work while mounting multiple images at the same time.
         """
         # we have to make a ram-device to store the image, we keep 20% overhead
         size_in_kb = int((self.size / 1024) * 1.2)
@@ -668,6 +625,45 @@ class Volume(object):
             return volumes
         else:
             return [self]
+
+    def fill_guid(self):
+        """Calls the :command:`disktype` command and obtains the disk GUID from GPT volume systems. As we
+        are running the tool anyway, the label is also extracted from the tool if it is not yet set.
+
+        :return: None if an exception occurred or the GUID if succeeded.
+        """
+
+        if not util.command_exists('disktype'):
+            self._debug("    disktype not installed, could not detect volume type")
+            return None
+
+        disktype = util.check_output_(['disktype', self.disk.get_raw_path()], self).strip()
+        partition_nr = self.slot + 1
+
+        # Only works if we have a GPT partition table
+        disktype_gpt = disktype.split("GPT partition map", 1)[-1]
+        match_found = False
+        for line in disktype_gpt.splitlines():
+            if not line:
+                continue
+            try:
+                line = line.strip()
+
+                if line.startswith('Partition'):
+                    match_found = line.startswith('Partition '+str(partition_nr)+':')
+
+                if match_found:
+                    if line.startswith("Type ") and not self.guid:
+                        self.guid = line[line.index('GUID') + 5:-1].strip()
+                    elif line.startswith("Partition Name ") and not self.label:
+                        self.label = line[line.index('Name ') + 6:-1].strip()
+
+            except Exception as e:
+                self._debug("[-] Error while parsing disktype output")
+                self._debug(e)
+                continue
+
+        return self.guid
 
     def fill_stats(self):
         """Using :command:`fsstat`, adds some additional information of the volume to the Volume."""
