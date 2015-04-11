@@ -228,17 +228,20 @@ class Disk(object):
                 self._debug("    AVFS mounted as a directory, will look in directory for (random) file.", 2)
                 # there is no support for disks inside disks, so this will fail to work for zips containing
                 # E01 files or so.
-                mountpoint = os.path.join(self.mountpoint, 'avfs')
+                searchdir = os.path.join(self.mountpoint, 'avfs')
             else:
-                mountpoint = self.mountpoint
-            raw_path = glob.glob(os.path.join(mountpoint, '*.dd'))
-            raw_path.extend(glob.glob(os.path.join(mountpoint, '*.iso')))
-            raw_path.extend(glob.glob(os.path.join(mountpoint, '*.raw')))
-            raw_path.extend(glob.glob(os.path.join(mountpoint, '*.dmg')))
-            raw_path.extend(glob.glob(os.path.join(mountpoint, 'ewf1')))
-            raw_path.extend(glob.glob(os.path.join(mountpoint, 'flat')))
+                searchdir = self.mountpoint
+
+            raw_path = glob.glob(os.path.join(searchdir, '*.dd'))
+            raw_path.extend(glob.glob(os.path.join(searchdir, '*.iso')))
+            raw_path.extend(glob.glob(os.path.join(searchdir, '*.raw')))
+            raw_path.extend(glob.glob(os.path.join(searchdir, '*.dmg')))
+            raw_path.extend(glob.glob(os.path.join(searchdir, 'ewf1')))
+            raw_path.extend(glob.glob(os.path.join(searchdir, 'flat')))
+            raw_path.extend(glob.glob(os.path.join(searchdir, 'avfs')))  # apparently it is not a dir
+
             if not raw_path:
-                self._debug("[-] No viable mount file found in {}.".format(mountpoint))
+                self._debug("[-] No viable mount file found in {}.".format(searchdir))
                 return None
             return raw_path[0]
 
