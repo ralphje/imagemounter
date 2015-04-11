@@ -391,7 +391,7 @@ class Volume(object):
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
-            elif self.fstype in ('iso', 'udf', 'squashfs', 'cramfs', 'minix'):
+            elif self.fstype in ('iso', 'udf', 'squashfs', 'cramfs', 'minix', 'fat'):
                 command = {'iso': 'iso9660', 'fat': 'vfat'}.get(self.fstype, self.fstype)
                 cmd = ['mount', raw_path, self.mountpoint, '-t', command, '-o',
                        'loop,offset=' + str(self.offset)]
