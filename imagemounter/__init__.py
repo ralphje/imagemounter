@@ -61,8 +61,8 @@ class ImageParser(object):
                 index += 1
             self.disks.append(Disk(self, path, index=index, **self.args))
 
-    def _debug(self, val):
-        if self.verbose:
+    def _debug(self, val, level=1):
+        if self.verbose and int(self.verbose) >= level:
             if self.verbose_color:
                 from termcolor import colored
                 print(colored(val, "cyan"), file=self.out)

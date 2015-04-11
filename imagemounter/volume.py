@@ -85,9 +85,9 @@ class Volume(object):
         return str(self.__unicode__())
 
     # noinspection PyProtectedMember
-    def _debug(self, val):
+    def _debug(self, val, level=1):
         if self.disk:
-            self.disk._debug(val)
+            self.disk._debug(val, level)
 
     def get_description(self, with_size=True):
         """Obtains a generic description of the volume, containing the file system type, index, label and NTFS version.
@@ -216,7 +216,6 @@ class Volume(object):
 
         if self.guid:
             return util.lookup_guid(self.guid, self)
-
 
     def determine_fs_type(self):
         """Determines the FS type for this partition. This function is used internally to determine which mount system

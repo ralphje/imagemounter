@@ -5,18 +5,16 @@ import time
 import subprocess
 import re
 import glob
-import logging
 import os
 
 
 def clean_unmount(cmd, mountpoint, tries=20, rmdir=True, parser=None):
     cmd.append(mountpoint)
 
-    if os.path.isfile(os.path.join(mountpoint, 'avfs.raw')):
-        os.remove(os.path.join(mountpoint, 'avfs.raw'))
-    elif os.path.realpath(mountpoint).endswith('.zip#'):
-        os.remove(mountpoint)
-        return True
+    # AVFS mounts are not actually unmountable, but are symlinked.
+    if os.path.exists(os.path.join(mountpoint, 'avfs')):
+        os.remove(os.path.join(mountpoint, 'avfs'))
+        parser._debug("    Removed {}".format(os.path.join(mountpoint, 'avfs')))
     else:
         # Perform unmount
         try:
@@ -45,21 +43,23 @@ def clean_unmount(cmd, mountpoint, tries=20, rmdir=True, parser=None):
 def is_encase(path):
     return re.match(r'^.*\.E\w\w$', path)
 
+
 def is_compressed(path):
-    return re.match(r'^.*\.((zip)|((t(ar\.)?)?gz))$', path)
+    return re.match(r'^.*\.((zip)|(rar)|((t(ar\.)?)?gz))$', path)
+
 
 def is_vmware(path):
     return re.match(r'^.*\.vmdk', path)
 
 
 def expand_path(path):
-    '''
+    """
     Expand the given path to either an Encase image or a dd image
     i.e. if path is '/path/to/image.E01' then the result of this method will be
     /path/to/image.E*'
     and if path is '/path/to/image.001' then the result of this method will be
     '/path/to/image.[0-9][0-9]?'
-    '''
+    """
     if is_encase(path):
         return glob.glob(path[:-2] + '??')
     elif re.match(r'^.*\.\d{2,3}$', path):
