@@ -6,7 +6,10 @@ import os
 import re
 import subprocess
 import tempfile
+import time
+
 from imagemounter import util, BLOCK_SIZE
+from imagemounter.util import determine_slot
 from imagemounter.volume import Volume
 
 
@@ -40,6 +43,8 @@ class Disk(object):
             self.type = 'encase'
         elif util.is_vmware(path):
             self.type = 'vmdk'
+        elif util.is_compressed(path):
+            self.type = 'compressed'
         else:
             self.type = 'dd'
         self.paths = sorted(util.expand_path(path))
@@ -63,6 +68,8 @@ class Disk(object):
                     self.method = 'affuse'
             elif self.type == 'dd' and util.command_exists('affuse'):
                 self.method = 'affuse'
+            elif self.type == 'compressed' and util.command_exists('avfsd'):
+                self.method = 'avfs'
             else:
                 self.method = 'xmount'
         else:
@@ -84,6 +91,7 @@ class Disk(object):
 
         self.name = os.path.split(path)[1]
         self.mountpoint = ''
+        self.avfs_mountpoint = ''
         self.volumes = []
         self.volume_source = None
 
@@ -96,9 +104,9 @@ class Disk(object):
     def __str__(self):
         return self.__unicode__()
 
-    def _debug(self, val):
+    def _debug(self, val, level=1):
         #noinspection PyProtectedMember
-        return self.parser._debug(val)
+        return self.parser._debug(val, level)
 
     def init(self, single=None, raid=True):
         """Calls several methods required to perform a full initialisation: :func:`mount`, :func:`add_to_raid` and
@@ -129,6 +137,7 @@ class Disk(object):
 
         self.mountpoint = tempfile.mkdtemp(prefix='image_mounter_')
 
+        # this is an attempt at mounting using split files. this mostly is not needed.
         if self.multifile:
             pathss = (self.paths[:1], self.paths)
         else:
@@ -140,7 +149,21 @@ class Disk(object):
         for paths in pathss:
             try:
                 fallbackcmd = None
-                if self.method == 'xmount':
+                if self.method == 'avfs':
+                    self.avfs_mountpoint = tempfile.mkdtemp(prefix='image_mounter_avfs_')
+
+                    # start by calling the mountavfs command to initialize avfs
+                    util.check_call_(['avfsd', self.avfs_mountpoint, '-o', 'allow_other'], self, stdout=subprocess.PIPE)
+
+                    # no multifile support for avfs
+                    avfspath = self.avfs_mountpoint + '/' + os.path.abspath(paths[0]) + '#'
+                    targetraw = os.path.join(self.mountpoint, 'avfs')
+
+                    os.symlink(avfspath, targetraw)
+                    self._debug("    Symlinked {} with {}".format(avfspath, targetraw))
+                    return self.get_raw_path() is not None
+
+                elif self.method == 'xmount':
                     cmd = ['xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']
                     if self.read_write:
                         cmd.extend(['--rw', self.rwpath])
@@ -170,14 +193,17 @@ class Disk(object):
                     cmd.extend(paths)
                     cmd.append(self.mountpoint)
                     util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                    # mounting does not seem to be instant add a timer here
+                    time.sleep(.1)
                 except Exception:
+
                     if fallbackcmd:
                         fallbackcmd.extend(paths)
                         fallbackcmd.append(self.mountpoint)
                         util.check_call_(fallbackcmd, self, stdout=subprocess.PIPE)
                     else:
                         raise
-                return True
+                return self.get_raw_path() is not None
 
             except Exception as e:
                 self._debug('[-] Could not mount {0} (see below), will try multi-file method'.format(paths[0]))
@@ -198,12 +224,22 @@ class Disk(object):
         if self.method == 'dummy':
             return self.paths[0]
         else:
-            raw_path = glob.glob(os.path.join(self.mountpoint, '*.dd'))
-            raw_path.extend(glob.glob(os.path.join(self.mountpoint, '*.raw')))
-            raw_path.extend(glob.glob(os.path.join(self.mountpoint, 'ewf1')))
-            raw_path.extend(glob.glob(os.path.join(self.mountpoint, 'flat')))
+            if self.method == 'avfs' and os.path.isdir(os.path.join(self.mountpoint, 'avfs')):
+                self._debug("    AVFS mounted as a directory, will look in directory for (random) file.", 2)
+                # there is no support for disks inside disks, so this will fail to work for zips containing
+                # E01 files or so.
+                mountpoint = os.path.join(self.mountpoint, 'avfs')
+            else:
+                mountpoint = self.mountpoint
+            raw_path = glob.glob(os.path.join(mountpoint, '*.dd'))
+            raw_path.extend(glob.glob(os.path.join(mountpoint, '*.iso')))
+            raw_path.extend(glob.glob(os.path.join(mountpoint, '*.raw')))
+            raw_path.extend(glob.glob(os.path.join(mountpoint, '*.dmg')))
+            raw_path.extend(glob.glob(os.path.join(mountpoint, 'ewf1')))
+            raw_path.extend(glob.glob(os.path.join(mountpoint, 'flat')))
             if not raw_path:
-                self._debug("No mount found in {}.".format(self.mountpoint))
+                self._debug("[-] No viable mount file found in {}.".format(mountpoint))
+                raw_input()
                 return None
             return raw_path[0]
 
@@ -344,7 +380,7 @@ class Disk(object):
             # description is the part after the :, until the first comma
             volume.fsdescription = description.split(': ', 1)[1].split(',', 1)[0].strip()
             if 'size' in description:
-                volume.size = int(re.findall(r'size: (\d+)', description)[0])
+                volume.size = int(re.findall(r'size:? (\d+)', description)[0])
             else:
                 volume.size = os.path.getsize(self.get_fs_path())
 
@@ -443,6 +479,7 @@ class Disk(object):
 
             if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
                 volume.flag = 'alloc'
+                volume.slot = determine_slot(p.table_num, p.slot_num)
             elif p.flags == pytsk3.TSK_VS_PART_FLAG_UNALLOC:
                 volume.flag = 'unalloc'
                 self._debug("    Unallocated space: block offset: {0}, length: {1} ".format(p.start, p.len))
@@ -492,7 +529,14 @@ class Disk(object):
             if not line:
                 continue
             try:
-                index, slot, start, end, length, description = line.split(None, 5)
+                values = line.split(None, 5)
+
+                # sometimes there are only 5 elements available
+                description = '-'
+                index, slot, start, end, length = values[0:5]
+                if len(values) > 5:
+                    description = values[5]
+
                 volume = Volume(disk=self, **self.args)
                 self.volumes.append(volume)
 
@@ -514,6 +558,10 @@ class Disk(object):
                 volume.flag = 'unalloc'
             else:
                 volume.flag = 'alloc'
+                if ":" in slot:
+                    volume.slot = determine_slot(*slot.split(':'))
+                else:
+                    volume.slot = determine_slot(-1, slot)
 
             # unalloc / meta partitions do not have stats and can not be mounted
             if volume.flag != 'alloc':
@@ -558,6 +606,10 @@ class Disk(object):
 
         if self.mountpoint and not util.clean_unmount(['fusermount', '-u'], self.mountpoint, parser=self):
             self._debug("[-] Error unmounting base {0}".format(self.mountpoint))
+            return False
+
+        if self.avfs_mountpoint and not util.clean_unmount(['fusermount', '-u'], self.avfs_mountpoint, parser=self):
+            self._debug("[-] Error unmounting AVFS mountpoint {0}".format(self.avfs_mountpoint))
             return False
 
         if self.rw_active() and remove_rw:
