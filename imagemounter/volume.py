@@ -200,7 +200,7 @@ class Volume(object):
                     # based on http://en.wikipedia.org/wiki/EFI_System_partition, efi is always fat.
                     self.fstype = 'fat'
                 elif 'iso 9660' in fsdesc:
-                    self.fstype = 'iso9660'
+                    self.fstype = 'iso'
                 elif 'linux compressed rom file system' in fsdesc:
                     self.fstype = 'cramfs'
                 elif fsdesc.startswith("sgi xfs"):
@@ -391,17 +391,9 @@ class Volume(object):
 
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
-            elif self.fstype == 'fat':
-                # FAT
-                cmd = ['mount', raw_path, self.mountpoint, '-t', 'vfat', '-o',
-                       'loop,offset=' + str(self.offset)]
-                if not self.disk.read_write:
-                    cmd[-1] += ',ro'
-
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
-
-            elif self.fstype in ('iso9660', 'squashfs', 'cramfs', 'minix'):
-                cmd = ['mount', raw_path, self.mountpoint, '-t', self.fstype, '-o',
+            elif self.fstype in ('iso', 'udf', 'squashfs', 'cramfs', 'minix'):
+                command = {'iso': 'iso9660', 'fat': 'vfat'}.get(self.fstype, self.fstype)
+                cmd = ['mount', raw_path, self.mountpoint, '-t', command, '-o',
                        'loop,offset=' + str(self.offset)]
                 # not always needed, only to make command generic
                 if not self.disk.read_write:
