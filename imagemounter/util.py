@@ -219,3 +219,10 @@ def force_clean(execute=True):
                 pass
 
     return commands
+
+
+def determine_slot(table, slot):
+    if int(table) >= 0:
+        return int(table) * 4 + int(slot)
+    else:
+        return int(slot)
