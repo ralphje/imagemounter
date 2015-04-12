@@ -186,7 +186,9 @@ class Volume(object):
                 if fsdesc in ('logical volume', 'luks container', 'primary', 'basic data partition'):
                     continue
 
-                if re.search(r'\bext[0-9]*\b', fsdesc):
+                if fsdesc == 'directory':
+                    self.fstype = 'dir'  # dummy fs type
+                elif re.search(r'\bext[0-9]*\b', fsdesc):
                     self.fstype = 'ext'
                 elif 'bsd' in fsdesc:
                     self.fstype = 'bsd'
@@ -430,6 +432,10 @@ class Volume(object):
                     return False
 
                 self.find_lvm_volumes()
+
+            elif self.fstype == 'dir':
+                os.rmdir(self.mountpoint)
+                os.symlink(raw_path, self.mountpoint)
 
             else:
                 try:
