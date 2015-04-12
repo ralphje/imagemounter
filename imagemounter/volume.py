@@ -87,7 +87,7 @@ class Volume(object):
         self.args = args
 
     def __unicode__(self):
-        return '{0}:{1}'.format(self.index, self.fsdescription)
+        return '{0}:{1}'.format(self.index, self.fsdescription or '-')
 
     def __str__(self):
         return str(self.__unicode__())
@@ -107,7 +107,7 @@ class Volume(object):
         if with_size and self.size:
             desc += '{0} '.format(self.get_size_gib())
 
-        desc += '{1}:{0}'.format(self.statfstype or self.fsdescription, self.index)
+        desc += '{1}:{0}'.format(self.statfstype or self.fsdescription or '-', self.index)
 
         if self.label:
             desc += ' {0}'.format(self.label)
@@ -175,11 +175,11 @@ class Volume(object):
             last_resort = None  # use this if we can't determine the FS type more reliably
             # we have two possible sources for determining the FS type: the description given to us by the detection
             # method, and the type given to us by the stat function
-            for fsdesc in (self.fsdescription, self.statfstype, self.get_magic_type, self.fill_guid):
+            for fsdesc in (self.fsdescription, self.statfstype, self.guid, self.get_magic_type):
                 # For efficiency reasons, not all functions are called instantly.
                 if callable(fsdesc):
                     fsdesc = fsdesc()
-                self._debug("    Current fsdesc is {}".format(fsdesc))
+                self._debug("    Current fsdesc is {}".format(fsdesc), 3)
                 if not fsdesc:
                     continue
                 fsdesc = fsdesc.lower()
@@ -634,50 +634,6 @@ class Volume(object):
         else:
             return [self]
 
-    def fill_guid(self):
-        """Calls the :command:`disktype` command and obtains the disk GUID from GPT volume systems. As we
-        are running the tool anyway, the label is also extracted from the tool if it is not yet set.
-
-        :return: None if an exception occurred or the GUID if succeeded.
-        """
-
-        if not util.command_exists('disktype'):
-            self._debug("    disktype not installed, could not detect volume type")
-            return None
-
-        disktype = util.check_output_(['disktype', self.disk.get_raw_path()], self).strip()
-        partition_nr = self.slot + 1
-
-        # Only works if we have a GPT partition table
-        if "GPT partition map" not in disktype:
-            self._debug("    Not a GPT partition table, no GUID available.")
-            return None
-        disktype_gpt = disktype.split("GPT partition map", 1)[-1]
-        match_found = False
-        for line in disktype_gpt.splitlines():
-            if not line:
-                continue
-            try:
-                line = line.strip()
-
-                if line.startswith('Partition'):
-                    match_found = line.startswith('Partition '+str(partition_nr)+':')
-
-                if match_found:
-                    if line.startswith("Type ") and "GUID" in line and not self.guid:
-                        self.guid = line[line.index('GUID') + 5:-1].strip()  # output is between ()
-                    elif line.startswith("Partition Name ") and not self.label:
-                        self.label = line[line.index('Name ') + 6:-1].strip()  # output is between ""
-
-            except Exception as e:
-                self._debug("[-] Error while parsing disktype output")
-                self._debug(e)
-                continue
-
-        self._debug("    GUID of volume is {}".format(self.guid), 2)
-
-        return self.guid
-
     def fill_stats(self):
         """Using :command:`fsstat`, adds some additional information of the volume to the Volume."""
 
@@ -686,7 +642,7 @@ class Volume(object):
         def stats_thread():
             try:
                 cmd = ['fsstat', self.get_raw_base_path(), '-o', str(self.offset // self.disk.block_size)]
-                self._debug('    {0}'.format(' '.join(cmd)))
+                self._debug('  $ {0}'.format(' '.join(cmd)), 2)
                 #noinspection PyShadowingNames
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
