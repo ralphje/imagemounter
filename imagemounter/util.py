@@ -8,13 +8,15 @@ import glob
 import os
 
 
-def clean_unmount(cmd, mountpoint, tries=20, rmdir=True, parser=None):
+def clean_unmount(cmd, mountpoint, tries=5, rmdir=True, parser=None):
     cmd.append(mountpoint)
 
     # AVFS mounts are not actually unmountable, but are symlinked.
     if os.path.exists(os.path.join(mountpoint, 'avfs')):
         os.remove(os.path.join(mountpoint, 'avfs'))
         parser._debug("    Removed {}".format(os.path.join(mountpoint, 'avfs')))
+    elif os.path.islink(mountpoint):
+        pass  # if it is a symlink, we can simply skip to removing it
     else:
         # Perform unmount
         try:
@@ -27,9 +29,12 @@ def clean_unmount(cmd, mountpoint, tries=20, rmdir=True, parser=None):
         return True
 
     for _ in range(tries):
-        if not os.listdir(mountpoint):
+        if not os.path.ismount(mountpoint):
             # Unmount was successful, remove mountpoint
-            os.rmdir(mountpoint)
+            if os.path.islink(mountpoint):
+                os.unlink(mountpoint)
+            else:
+                os.rmdir(mountpoint)
             break
         else:
             time.sleep(1)

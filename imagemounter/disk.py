@@ -18,7 +18,7 @@ class Disk(object):
 
     #noinspection PyUnusedLocal
     def __init__(self, parser, path, offset=0, vstype='detect', read_write=False, method='auto', detection='auto',
-                 multifile=True, index=None, **args):
+                 multifile=True, index=None, mount_directories=True, **args):
         """Instantiation of this class does not automatically mount, detect or analyse the disk. You will need the
         :func:`init` method for this.
 
@@ -31,9 +31,10 @@ class Disk(object):
         :param str detection: the method to detect volumes in the volume system with
         :param bool multifile: indicates whether :func:`mount` should attempt to call the underlying mount method with
                 all files of a split file when passing a single file does not work
+        :param str index: the base index of this Disk
+        :param bool mount_directories: indicates whether directories should also be 'mounted'
         :param args: arguments that should be passed down to :class:`Volume` objects
         """
-
 
         self.parser = parser
 
@@ -87,6 +88,7 @@ class Disk(object):
         self.rwpath = None
         self.multifile = multifile
         self.index = index
+        self.mount_directories = mount_directories
         self.args = args
 
         self.name = os.path.split(path)[1]
@@ -228,21 +230,24 @@ class Disk(object):
                 self._debug("    AVFS mounted as a directory, will look in directory for (random) file.", 2)
                 # there is no support for disks inside disks, so this will fail to work for zips containing
                 # E01 files or so.
-                searchdir = os.path.join(self.mountpoint, 'avfs')
+                searchdirs = (os.path.join(self.mountpoint, 'avfs'), self.mountpoint)
             else:
-                searchdir = self.mountpoint
+                searchdirs = (self.mountpoint, )
 
-            raw_path = glob.glob(os.path.join(searchdir, '*.dd'))
-            raw_path.extend(glob.glob(os.path.join(searchdir, '*.iso')))
-            raw_path.extend(glob.glob(os.path.join(searchdir, '*.raw')))
-            raw_path.extend(glob.glob(os.path.join(searchdir, '*.dmg')))
-            raw_path.extend(glob.glob(os.path.join(searchdir, 'ewf1')))
-            raw_path.extend(glob.glob(os.path.join(searchdir, 'flat')))
-            raw_path.extend(glob.glob(os.path.join(searchdir, 'avfs')))  # apparently it is not a dir
+            raw_path = []
+            for searchdir in searchdirs:
+                raw_path.extend(glob.glob(os.path.join(searchdir, '*.dd')))
+                raw_path.extend(glob.glob(os.path.join(searchdir, '*.iso')))
+                raw_path.extend(glob.glob(os.path.join(searchdir, '*.raw')))
+                raw_path.extend(glob.glob(os.path.join(searchdir, '*.dmg')))
+                raw_path.extend(glob.glob(os.path.join(searchdir, 'ewf1')))
+                raw_path.extend(glob.glob(os.path.join(searchdir, 'flat')))
+                raw_path.extend(glob.glob(os.path.join(searchdir, 'avfs')))  # apparently it is not a dir
 
             if not raw_path:
                 self._debug("[-] No viable mount file found in {}.".format(searchdir))
                 return None
+            self._debug("    Raw path is {}".format(raw_path[0]), 3)
             return raw_path[0]
 
     def get_fs_path(self):
@@ -343,7 +348,12 @@ class Disk(object):
         being followed by :func:`mount_single_volume` if no volumes were detected.
         """
 
-        if single:
+        if os.path.isdir(self.get_raw_path()) and self.mount_directories:
+            self._debug("    Raw path is a directory: using directory mount method")
+            for v in self.mount_directory():
+                yield v
+
+        elif single:
             # if single, then only use single_Volume
             for v in self.mount_single_volume():
                 yield v
@@ -359,6 +369,33 @@ class Disk(object):
                 self._debug("    Mounting as single volume instead")
                 for v in self.mount_single_volume():
                     yield v
+
+    def mount_directory(self):
+        """Method that 'mounts' a directory. It actually just symlinks it. It is useful for AVFS mounts, that
+        are not otherwise detected. This is a last resort method.
+        """
+
+        if not self.mount_directories:
+            return
+
+        volume = Volume(disk=self, **self.args)
+        volume.offset = 0
+        if self.index is None:
+            volume.index = 0
+        else:
+            volume.index = '{0}.0'.format(self.index)
+
+        filesize = util.check_output_(['du', '-scDb', self.get_fs_path()], self).strip()
+        if filesize:
+            volume.size = int(filesize.splitlines()[-1].split()[0])
+
+        volume.flag = 'alloc'
+        volume.fsdescription = 'Directory'
+        self.volumes = [volume]
+        self.volume_source = 'directory'
+
+        for v in volume.init(no_stats=True):  # stats can't be retrieved from directory
+            yield v
 
     def mount_single_volume(self):
         """Mounts a volume assuming that the mounted image does not contain a full disk image, but only a
@@ -377,7 +414,7 @@ class Disk(object):
         else:
             volume.index = '{0}.0'.format(self.index)
 
-        description = util.check_output_(['file', '-sL', self.get_fs_path()]).strip()
+        description = util.check_output_(['file', '-sL', self.get_fs_path()], self).strip()
         if description:
             # description is the part after the :, until the first comma
             volume.fsdescription = description.split(': ', 1)[1].split(',', 1)[0].strip()
