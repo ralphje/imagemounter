@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import unicode_literals
+from collections import defaultdict
 
 import glob
 import os
@@ -97,6 +98,8 @@ class Disk(object):
         self.volumes = []
         self.volume_source = None
 
+        self._disktype = defaultdict(dict)
+
         self.loopback = None
         self.md_device = None
 
@@ -110,16 +113,19 @@ class Disk(object):
         #noinspection PyProtectedMember
         return self.parser._debug(val, level)
 
-    def init(self, single=None, raid=True):
+    def init(self, single=None, raid=True, disktype=True):
         """Calls several methods required to perform a full initialisation: :func:`mount`, :func:`add_to_raid` and
         :func:`mount_volumes` and yields all detected volumes.
 
         :param bool|None single: indicates whether the disk should be mounted as a single disk, not as a single disk or
             whether it should try both (defaults to :const:`None`)
         :param bool raid: indicates whether RAID detection is enabled
+        :param bool disktype: indicates whether disktype data should be loaded and used
         :rtype: generator
         """
 
+        if disktype:
+            self.load_disktype_data()
         self.mount()
         if raid:
             self.add_to_raid()
@@ -227,7 +233,7 @@ class Disk(object):
             return self.paths[0]
         else:
             if self.method == 'avfs' and os.path.isdir(os.path.join(self.mountpoint, 'avfs')):
-                self._debug("    AVFS mounted as a directory, will look in directory for (random) file.", 2)
+                self._debug("    AVFS mounted as a directory, will look in directory for (random) file.", 3)
                 # there is no support for disks inside disks, so this will fail to work for zips containing
                 # E01 files or so.
                 searchdirs = (os.path.join(self.mountpoint, 'avfs'), self.mountpoint)
@@ -332,6 +338,56 @@ class Disk(object):
 
         return True
 
+    def load_disktype_data(self):
+        """Calls the :command:`disktype` command and obtains the disk GUID from GPT volume systems. As we
+        are running the tool anyway, the label is also extracted from the tool if it is not yet set.
+
+        The disktype data is only loaded and not assigned to volumes yet.
+        """
+
+        if not util.command_exists('disktype'):
+            self._debug("    disktype not installed, could not detect volume type")
+            return None
+
+        disktype = util.check_output_(['disktype', self.get_raw_path()], self).strip()
+
+        current_partition = None
+        for line in disktype.splitlines():
+            if not line:
+                continue
+            try:
+                line = line.strip()
+
+                find_partition_nr = re.match(r"^Partition (\d+):", line)
+                if find_partition_nr:
+                    current_partition = int(find_partition_nr.group(1))
+                elif current_partition is not None:
+                    if line.startswith("Type ") and "GUID" in line:
+                        self._disktype[current_partition]['guid'] = \
+                            line[line.index('GUID') + 5:-1].strip()  # output is between ()
+                    elif line.startswith("Partition Name "):
+                        self._disktype[current_partition]['label'] = \
+                            line[line.index('Name ') + 6:-1].strip()  # output is between ""
+            except Exception as e:
+                self._debug("[-] Error while parsing disktype output")
+                self._debug(e)
+                return
+
+        self._debug("    Disktype data: {}".format(self._disktype), 3)
+
+    def _assign_disktype_data(self, volume, slot=None):
+        """Assigns cached disktype data to a volume."""
+
+        if slot is None:
+            slot = volume.slot
+        partition_nr = slot + 1
+        if partition_nr in self._disktype:
+            data = self._disktype[partition_nr]
+            if not volume.guid and 'guid' in data:
+                volume.guid = data['guid']
+            if not volume.label and 'label' in data:
+                volume.label = data['label']
+
     def get_volumes(self):
         """Gets a list of all volumes in this disk, including volumes that are contained in other volumes."""
 
@@ -426,6 +482,7 @@ class Disk(object):
         volume.flag = 'alloc'
         self.volumes = [volume]
         self.volume_source = 'single'
+        self._assign_disktype_data(volume)
 
         for v in volume.init(no_stats=True):  # stats can't  be retrieved from single volumes
             yield v
@@ -509,7 +566,7 @@ class Disk(object):
 
             # Fill volume with more information
             volume.offset = p.start * self.block_size
-            volume.fsdescription = p.desc
+            volume.fsdescription = p.desc.strip()
             if self.index is not None:
                 volume.index = '{0}.{1}'.format(self.index, p.addr)
             else:
@@ -519,6 +576,7 @@ class Disk(object):
             if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
                 volume.flag = 'alloc'
                 volume.slot = determine_slot(p.table_num, p.slot_num)
+                self._assign_disktype_data(volume)
             elif p.flags == pytsk3.TSK_VS_PART_FLAG_UNALLOC:
                 volume.flag = 'unalloc'
                 self._debug("    Unallocated space: block offset: {0}, length: {1} ".format(p.start, p.len))
@@ -571,7 +629,7 @@ class Disk(object):
                 values = line.split(None, 5)
 
                 # sometimes there are only 5 elements available
-                description = '-'
+                description = ''
                 index, slot, start, end, length = values[0:5]
                 if len(values) > 5:
                     description = values[5]
@@ -601,6 +659,7 @@ class Disk(object):
                     volume.slot = determine_slot(*slot.split(':'))
                 else:
                     volume.slot = determine_slot(-1, slot)
+                self._assign_disktype_data(volume)
 
             # unalloc / meta partitions do not have stats and can not be mounted
             if volume.flag != 'alloc':

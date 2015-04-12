@@ -98,7 +98,7 @@ def module_exists(mod):
 
 def check_call_(cmd, parser=None, *args, **kwargs):
     if parser:
-        parser._debug('    {0}'.format(' '.join(cmd)))
+        parser._debug('  $ {0}'.format(' '.join(cmd)), 2)
     return subprocess.check_call(cmd, *args, **kwargs)
 
 import locale
@@ -107,7 +107,7 @@ encoding = locale.getdefaultlocale()[1]
 
 def check_output_(cmd, parser=None, *args, **kwargs):
     if parser:
-        parser._debug('    {0}'.format(' '.join(cmd)))
+        parser._debug('  $ {0}'.format(' '.join(cmd)), 2)
     result = subprocess.check_output(cmd, *args, **kwargs)
     if result:
         result = result.decode(encoding)

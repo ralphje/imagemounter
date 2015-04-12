@@ -104,6 +104,10 @@ def main():
                              'random issues such as partitions being unreadable (default)')
     parser.add_argument('-n', '--no-stats', action='store_true', default=False,
                         help='do not show limited information from fsstat')
+    parser.add_argument('--disktype', action='store_true', default=False,
+                        help='use the disktype command to get even more information about the volumes (default)')
+    parser.add_argument('--no-disktype', action='store_true', default=False,
+                        help='do not use disktype to get more information')
     parser.add_argument('--raid', action='store_true', default=False,
                         help="try to detect whether the volume is part of a RAID array (default)")
     parser.add_argument('--no-raid', action='store_true', default=False,
@@ -136,6 +140,15 @@ def main():
         args.stats = False
     else:
         args.stats = True
+
+    # Make args.disktype default to True
+    explicit_disktype = False
+    if not args.disktype and args.no_disktype:
+        args.disktype = False
+    else:
+        if args.disktype:
+            explicit_disktype = True
+        args.disktype = True
 
     # Make args.raid default to True
     explicit_raid = False
@@ -190,6 +203,12 @@ def main():
     if args.reconstruct and not args.stats:  # Reconstruct implies use of fsstat
         print("[!] You explicitly disabled stats, but --reconstruct implies the use of stats. Stats are re-enabled.")
         args.stats = True
+
+    # Check if raid is available
+    if args.disktype and not util.command_exists('disktype'):
+        if explicit_disktype:
+            print(col("[-] The disktype command can not be used in this session, as it is not installed.", 'yellow'))
+        args.disktype = False
 
     if args.stats and not util.command_exists('fsstat'):
         print(col("[-] The fsstat command (part of sleuthkit package) is required to obtain stats, but is not "
@@ -271,6 +290,9 @@ def main():
 
                 if args.read_write:
                     print('[+] Created read-write cache at {0}'.format(disk.rwpath))
+
+                if args.disktype:
+                    disk.load_disktype_data()
                 print('[+] Mounted raw image [{num}/{total}]'.format(num=num, total=len(args.images)))
 
             sys.stdout.write("[+] Mounting volume...\r")
