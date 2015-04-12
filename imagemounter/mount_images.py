@@ -82,7 +82,7 @@ def main():
                         help='use other tool to mount the initial images; results may vary between methods and if '
                              'something doesn\'t work, try another method; dummy can be used when base should not be '
                              'mounted (default: auto)')
-    parser.add_argument('-d', '--detection', choices=['pytsk3', 'mmls', 'auto'], default='auto',
+    parser.add_argument('-d', '--detection', choices=['pytsk3', 'mmls', 'parted', 'auto'], default='auto',
                         help='use other volume detection method; pytsk3 and mmls should provide identical results, '
                              'though pytsk3 is using the direct C API of mmls, but requires pytsk3 to be installed; '
                              'auto distinguishes between pytsk3 and mmls only '
@@ -187,11 +187,13 @@ def main():
     if args.detection == 'pytsk3' and not util.module_exists('pytsk3'):
         print(col("[-] pytsk3 module does not exist!", 'red'))
         sys.exit(1)
-    elif args.detection == 'mmls' and not util.command_exists(args.detection):
+    elif args.detection in ('mmls', 'parted') and not util.command_exists(args.detection):
         print(col("[-] {0} is not installed!".format(args.detection), 'red'))
         sys.exit(1)
-    elif args.detection == 'auto' and not util.module_exists('pytsk3') and not util.command_exists('mmls'):
-        print(col("[-] No tools installed to detect volumes! Please install mmls (sleuthkit) or pytsk3 first.", 'red'))
+    elif args.detection == 'auto' and not any((util.module_exists('pytsk3'), util.command_exists('mmls'),
+                                               util.command_exists('parted'))):
+        print(col("[-] No tools installed to detect volumes! Please install mmls (sleuthkit), pytsk3 or parted first.",
+                  'red'))
         sys.exit(1)
 
     # Check if raid is available

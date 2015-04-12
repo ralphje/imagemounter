@@ -80,8 +80,10 @@ class Disk(object):
         if detection == 'auto':
             if util.module_exists('pytsk3'):
                 self.detection = 'pytsk3'
-            else:
+            elif util.command_exists('mmls'):
                 self.detection = 'mmls'
+            else:
+                self.detection = 'parted'
         else:
             self.detection = detection
 
@@ -495,6 +497,9 @@ class Disk(object):
         if self.detection == 'mmls':
             for v in self._mount_mmls_volumes():
                 yield v
+        elif self.detection == 'parted':
+            for v in self._mount_parted_volumes():
+                yield v
         elif self.detection == 'pytsk3':
             for v in self._mount_pytsk3_volumes():
                 yield v
@@ -660,6 +665,64 @@ class Disk(object):
                 else:
                     volume.slot = determine_slot(-1, slot)
                 self._assign_disktype_data(volume)
+
+            # unalloc / meta partitions do not have stats and can not be mounted
+            if volume.flag != 'alloc':
+                yield volume
+                continue
+
+            for v in volume.init():
+                yield v
+
+    def _mount_parted_volumes(self):
+        """Finds and mounts all volumes based on parted."""
+
+        try:
+            # parted does not support passing in the vstype. It either works, or it doesn't.
+            cmd = ['parted', self.get_raw_path(), '-sm', 'unit s', 'print free']
+            output = util.check_output_(cmd, self.parser)
+            self.volume_source = 'multi'
+        except Exception as e:
+            self._debug("[-] Failed executing parted command")
+            self._debug(e)
+            return
+
+        num = 0
+        for line in output.splitlines():
+            if line.startswith("Warning") or not line or ':' not in line or line.startswith(self.get_raw_path()):
+                continue
+            line = line[:-1]  # remove last ;
+            try:
+                slot, start, end, length, description = line.split(':', 4)
+                if ':' in description:
+                    description, label, flags = description.split(':', 2)
+                else:
+                    description, label, flags = description, '', ''
+
+                volume = Volume(disk=self, **self.args)
+                self.volumes.append(volume)
+                volume.offset = int(start[:-1]) * self.block_size  # remove last s
+                volume.size = int(length[:-1]) * self.block_size
+                volume.fsdescription = description
+                if self.index is not None:
+                    volume.index = '{0}.{1}'.format(self.index, num)
+                else:
+                    volume.index = num
+
+                # TODO: detection of meta volumes
+
+                if description == 'free':
+                    volume.flag = 'unalloc'
+                else:
+                    volume.flag = 'alloc'
+                    volume.slot = int(slot) - 1
+                    self._assign_disktype_data(volume)
+            except AttributeError as e:
+                self._debug("[-] Error while parsing parted output")
+                self._debug(e)
+                continue
+
+            num += 1
 
             # unalloc / meta partitions do not have stats and can not be mounted
             if volume.flag != 'alloc':
