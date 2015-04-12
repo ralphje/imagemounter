@@ -17,7 +17,7 @@ from imagemounter.volume import Volume
 class Disk(object):
     """Representation of a disk, image file or anything else that can be considered a disk. """
 
-    #noinspection PyUnusedLocal
+    # noinspection PyUnusedLocal
     def __init__(self, parser, path, offset=0, vstype='detect', read_write=False, method='auto', detection='auto',
                  multifile=True, index=None, mount_directories=True, **args):
         """Instantiation of this class does not automatically mount, detect or analyse the disk. You will need the
@@ -86,7 +86,7 @@ class Disk(object):
             self.detection = detection
 
         self.read_write = read_write
-        self.rwpath = None
+        self.rwpath = ""
         self.multifile = multifile
         self.index = index
         self.mount_directories = mount_directories
@@ -96,12 +96,12 @@ class Disk(object):
         self.mountpoint = ''
         self.avfs_mountpoint = ''
         self.volumes = []
-        self.volume_source = None
+        self.volume_source = ""
 
         self._disktype = defaultdict(dict)
 
-        self.loopback = None
-        self.md_device = None
+        self.loopback = ""
+        self.md_device = ""
 
     def __unicode__(self):
         return self.name
@@ -110,7 +110,7 @@ class Disk(object):
         return self.__unicode__()
 
     def _debug(self, val, level=1):
-        #noinspection PyProtectedMember
+        # noinspection PyProtectedMember
         return self.parser._debug(val, level)
 
     def init(self, single=None, raid=True, disktype=True):
@@ -188,9 +188,9 @@ class Disk(object):
                     cmd = ['vmware-mount', '-f']
 
                 elif self.method == 'dummy':
-                    # remove basemountpoint
+                    # remove base mountpoint
                     os.rmdir(self.mountpoint)
-                    self.mountpoint = None
+                    self.mountpoint = ""
                     return True
 
                 else:
@@ -218,7 +218,7 @@ class Disk(object):
                 self._debug(e)
 
         os.rmdir(self.mountpoint)
-        self.mountpoint = None
+        self.mountpoint = ""
 
         return False
 
@@ -251,7 +251,7 @@ class Disk(object):
                 raw_path.extend(glob.glob(os.path.join(searchdir, 'avfs')))  # apparently it is not a dir
 
             if not raw_path:
-                self._debug("[-] No viable mount file found in {}.".format(searchdir))
+                self._debug("[-] No viable mount file found in {}.".format(searchdirs))
                 return None
             self._debug("    Raw path is {}".format(raw_path[0]), 3)
             return raw_path[0]
@@ -304,7 +304,7 @@ class Disk(object):
             return False
 
         # find free loopback device
-        #noinspection PyBroadException
+        # noinspection PyBroadException
         try:
             self.loopback = util.check_output_(['losetup', '-f'], self).strip()
         except Exception:
@@ -516,7 +516,7 @@ class Disk(object):
 
         baseimage = None
         try:
-            # ewf raw image is now available on basemountpoint
+            # ewf raw image is now available on base mountpoint
             # either as ewf1 file or as .dd file
             raw_path = self.get_raw_path()
             try:
@@ -532,7 +532,7 @@ class Disk(object):
                 return volumes
             except Exception as e:
                 # some bug in sleuthkit makes detection sometimes difficult, so we hack around it:
-                if "(GPT or DOS at 0)" in e.message and self.vstype != 'gpt':
+                if "(GPT or DOS at 0)" in str(e) and self.vstype != 'gpt':
                     self.vstype = 'gpt'
                     try:
                         self._debug("[-] Error in retrieving volume info: TSK couldn't decide between GPT and DOS, "

@@ -119,7 +119,7 @@ def main():
     args = parser.parse_args()
 
     if not args.color:
-        #noinspection PyUnusedLocal,PyShadowingNames
+        # noinspection PyUnusedLocal,PyShadowingNames
         def col(s, *args, **kwargs):
             return s
     else:

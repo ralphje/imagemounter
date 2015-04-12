@@ -56,20 +56,20 @@ class Volume(object):
         self.slot = 0
         self.size = 0
         self.flag = 'alloc'
-        self.guid = None
-        self.fsdescription = None
-        self.fstype = None
+        self.guid = ""
+        self.fsdescription = ""
+        self.fstype = ""
 
         # Should be filled by fill_stats
-        self.lastmountpoint = None
-        self.label = None
-        self.version = None
-        self.statfstype = None
+        self.lastmountpoint = ""
+        self.label = ""
+        self.version = ""
+        self.statfstype = ""
 
         # Should be filled by mount
-        self.mountpoint = None
-        self.bindmountpoint = None
-        self.loopback = None
+        self.mountpoint = ""
+        self.bindmountpoint = ""
+        self.loopback = ""
         self.exception = None
         self.was_mounted = False
 
@@ -78,11 +78,11 @@ class Volume(object):
         self.parent = None
 
         # Used by lvm specific functions
-        self.volume_group = None
-        self.lv_path = None
+        self.volume_group = ""
+        self.lv_path = ""
 
         # Used by LUKS
-        self.luks_path = None
+        self.luks_path = ""
 
         self.args = args
 
@@ -304,7 +304,7 @@ class Volume(object):
             pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]),
                                             self.get_safe_label() or self.index)
             path = os.path.join(md, pretty_label)
-            #noinspection PyBroadException
+            # noinspection PyBroadException
             try:
                 os.mkdir(path, 777)
                 self.mountpoint = path
@@ -377,7 +377,7 @@ class Volume(object):
 
             elif self.fstype == 'bsd':
                 # ufs
-                #mount -t ufs -o ufstype=ufs2,loop,ro,offset=4294967296 /tmp/image/ewf1 /media/a
+                # mount -t ufs -o ufstype=ufs2,loop,ro,offset=4294967296 /tmp/image/ewf1 /media/a
                 cmd = ['mount', raw_path, self.mountpoint, '-t', 'ufs', '-o',
                        'ufstype=ufs2,loop,offset=' + str(self.offset)]
                 if not self.disk.read_write:
@@ -387,8 +387,7 @@ class Volume(object):
 
             elif self.fstype == 'ntfs':
                 # NTFS
-                cmd = ['mount', raw_path, self.mountpoint, '-t', 'ntfs', '-o',
-                       'loop,noexec,offset=' + str(self.offset)]
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'ntfs', '-o', 'loop,noexec,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
@@ -404,9 +403,8 @@ class Volume(object):
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
             elif self.fstype in ('iso', 'udf', 'squashfs', 'cramfs', 'minix', 'fat'):
-                command = {'iso': 'iso9660', 'fat': 'vfat'}.get(self.fstype, self.fstype)
-                cmd = ['mount', raw_path, self.mountpoint, '-t', command, '-o',
-                       'loop,offset=' + str(self.offset)]
+                mnt_type = {'iso': 'iso9660', 'fat': 'vfat'}.get(self.fstype, self.fstype)
+                cmd = ['mount', raw_path, self.mountpoint, '-t', mnt_type, '-o', 'loop,offset=' + str(self.offset)]
                 # not always needed, only to make command generic
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
@@ -414,11 +412,10 @@ class Volume(object):
                 util.check_call_(cmd, self, stdout=subprocess.PIPE)
 
             elif self.fstype == 'vmfs':
-                self.loopback = self.setup_loopback()
+                if not self._find_loopback():
+                    return False
 
-                cmd = ['vmfs-fuse', self.loopback, self.mountpoint]
-
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                util.check_call_(['vmfs-fuse', self.loopback, self.mountpoint], self, stdout=subprocess.PIPE)
 
             elif self.fstype == 'unknown':  # mounts without specifying the filesystem type
                 cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset)]
@@ -467,9 +464,9 @@ class Volume(object):
             try:
                 if self.mountpoint:
                     os.rmdir(self.mountpoint)
-                    self.mountpoint = None
+                    self.mountpoint = ""
                 if self.loopback:
-                    self.loopback = None
+                    self.loopback = ""
             except Exception as e2:
                 self._debug(e2)
 
@@ -489,7 +486,7 @@ class Volume(object):
             util.check_call_(['mount', '--bind', self.mountpoint, self.bindmountpoint], self, stdout=subprocess.PIPE)
             return True
         except Exception as e:
-            self.bindmountpoint = None
+            self.bindmountpoint = ""
             self._debug("[-] Error bind mounting {0}.".format(self))
             self._debug(e)
             return False
@@ -516,7 +513,7 @@ class Volume(object):
             # noinspection PyBroadException
             try:
                 util.check_call_(['losetup', '-d', self.loopback], self)
-                self.loopback = None
+                self.loopback = ""
             except Exception:
                 pass
 
@@ -532,7 +529,7 @@ class Volume(object):
                 cmd.insert(1, '-r')
             util.check_call_(cmd, self)
         except Exception:
-            self.luks_path = None
+            self.luks_path = ""
             return None
 
         size = None
@@ -643,7 +640,7 @@ class Volume(object):
             try:
                 cmd = ['fsstat', self.get_raw_base_path(), '-o', str(self.offset // self.disk.block_size)]
                 self._debug('  $ {0}'.format(' '.join(cmd)), 2)
-                #noinspection PyShadowingNames
+                # noinspection PyShadowingNames
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
                 for line in iter(process.stdout.readline, b''):
@@ -659,7 +656,7 @@ class Volume(object):
                     elif line.startswith("Source OS:"):
                         self.version = line[line.index(':') + 2:].strip()
                     elif 'CYLINDER GROUP INFORMATION' in line:
-                        #noinspection PyBroadException
+                        # noinspection PyBroadException
                         try:
                             process.terminate()  # some attempt
                         except Exception:
@@ -687,7 +684,7 @@ class Volume(object):
         duration = 5  # longest possible duration for fsstat.
         thread.join(duration)
         if thread.is_alive():
-            #noinspection PyBroadException
+            # noinspection PyBroadException
             try:
                 process.terminate()
             except Exception:
@@ -717,7 +714,7 @@ class Volume(object):
             result = '/usr/local'
         elif 'lib' in paths and 'local' in paths and 'tmp' in paths and not 'var' in paths:
             result = '/var'
-        #elif sum(['bin' in paths, 'boot' in paths, 'cdrom' in paths, 'dev' in paths, 'etc' in paths, 'home' in paths,
+        # elif sum(['bin' in paths, 'boot' in paths, 'cdrom' in paths, 'dev' in paths, 'etc' in paths, 'home' in paths,
         #          'lib' in paths, 'lib64' in paths, 'media' in paths, 'mnt' in paths, 'opt' in paths,
         #          'proc' in paths, 'root' in paths, 'sbin' in paths, 'srv' in paths, 'sys' in paths, 'tmp' in paths,
         #          'usr' in paths, 'var' in paths]) > 11:
@@ -731,7 +728,7 @@ class Volume(object):
 
         return result
 
-    #noinspection PyBroadException
+    # noinspection PyBroadException
     def unmount(self):
         """Unounts the volume from the filesystem."""
 
@@ -744,7 +741,7 @@ class Volume(object):
             except Exception:
                 return False
 
-            self.volume_group = None
+            self.volume_group = ""
 
         if self.loopback and self.luks_path:
             try:
@@ -752,7 +749,7 @@ class Volume(object):
             except Exception:
                 return False
 
-            self.luks_path = None
+            self.luks_path = ""
 
         if self.loopback:
             try:
@@ -760,18 +757,18 @@ class Volume(object):
             except Exception:
                 return False
 
-            self.loopback = None
+            self.loopback = ""
 
         if self.bindmountpoint:
             if not util.clean_unmount(['umount'], self.bindmountpoint, rmdir=False, parser=self):
                 return False
 
-            self.bindmountpoint = None
+            self.bindmountpoint = ""
 
         if self.mountpoint:
             if not util.clean_unmount(['umount'], self.mountpoint, parser=self):
                 return False
 
-            self.mountpoint = None
+            self.mountpoint = ""
 
         return True

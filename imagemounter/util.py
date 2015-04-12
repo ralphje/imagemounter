@@ -14,11 +14,13 @@ def clean_unmount(cmd, mountpoint, tries=5, rmdir=True, parser=None):
     # AVFS mounts are not actually unmountable, but are symlinked.
     if os.path.exists(os.path.join(mountpoint, 'avfs')):
         os.remove(os.path.join(mountpoint, 'avfs'))
+        # noinspection PyProtectedMember
         parser._debug("    Removed {}".format(os.path.join(mountpoint, 'avfs')))
     elif os.path.islink(mountpoint):
         pass  # if it is a symlink, we can simply skip to removing it
     else:
         # Perform unmount
+        # noinspection PyBroadException
         try:
             check_call_(cmd, parser)
         except:
@@ -98,6 +100,7 @@ def module_exists(mod):
 
 def check_call_(cmd, parser=None, *args, **kwargs):
     if parser:
+        # noinspection PyProtectedMember
         parser._debug('  $ {0}'.format(' '.join(cmd)), 2)
     return subprocess.check_call(cmd, *args, **kwargs)
 
@@ -107,6 +110,7 @@ encoding = locale.getdefaultlocale()[1]
 
 def check_output_(cmd, parser=None, *args, **kwargs):
     if parser:
+        # noinspection PyProtectedMember
         parser._debug('  $ {0}'.format(' '.join(cmd)), 2)
     result = subprocess.check_output(cmd, *args, **kwargs)
     if result:
@@ -114,6 +118,7 @@ def check_output_(cmd, parser=None, *args, **kwargs):
     return result
 
 
+# noinspection PyBroadException
 def force_clean(execute=True):
     """Cleans previous mount points without knowing which is mounted. It assumes proper naming of mountpoints.
 
@@ -132,6 +137,7 @@ def force_clean(execute=True):
 
     # find all mountponits
     mountpoints = {}
+    # noinspection PyBroadException
     try:
         result = check_output_(['mount'])
         for line in result.splitlines():
