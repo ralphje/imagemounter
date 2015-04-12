@@ -172,12 +172,14 @@ class Volume(object):
         elif self.fsforce:
             self.fstype = self.fsfallback
         else:
+            last_resort = None  # use this if we can't determine the FS type more reliably
             # we have two possible sources for determining the FS type: the description given to us by the detection
             # method, and the type given to us by the stat function
             for fsdesc in (self.fsdescription, self.statfstype, self.get_magic_type, self.fill_guid):
                 # For efficiency reasons, not all functions are called instantly.
                 if callable(fsdesc):
                     fsdesc = fsdesc()
+                self._debug("    Current fsdesc is {}".format(fsdesc))
                 if not fsdesc:
                     continue
                 fsdesc = fsdesc.lower()
@@ -218,6 +220,11 @@ class Volume(object):
                 elif fsdesc in FILE_SYSTEM_GUIDS:
                     # this is a bit of a workaround for the fill_guid method
                     self.fstype = FILE_SYSTEM_GUIDS[fsdesc]
+                elif '0x83' in fsdesc:
+                    # this is a linux mount, but we can't figure out which one.
+                    # we hand it off to the OS, maybe it can try something.
+                    last_resort = 'unknown'
+                    continue
                 else:
                     continue  # this loop failed
 
@@ -226,7 +233,10 @@ class Volume(object):
                     self._debug("[-] Detected filesystem is not yet supported")
                 break  # we found something
             else:  # we found nothing
-                self.fstype = self.fsfallback
+                if not last_resort or last_resort == 'unknown':
+                    self.fstype = self.fsfallback
+                else:
+                    self.fstype = last_resort
 
         return self.fstype
 
