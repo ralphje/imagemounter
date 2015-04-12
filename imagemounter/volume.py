@@ -151,7 +151,7 @@ class Volume(object):
 
             with io.open(self.disk.get_fs_path(), "rb") as file:
                 file.seek(self.offset)
-                header = file.read(4096)
+                header = file.read(min(self.size, 4096) if self.size else 4096)
             result = magic.from_buffer(header).decode()
             self._debug("    Magic detection returned {}".format(result), 2)
             return result
