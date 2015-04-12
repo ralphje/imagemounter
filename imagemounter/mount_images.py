@@ -130,7 +130,7 @@ def main():
     if os.geteuid():  # Not run as root
         print(col('[!] Not running as root!', 'yellow'))
 
-    if __version__.endswith('a') or __version__.endswith('b'):
+    if 'a' in __version__ or 'b' in __version__:
         print(col("Development release v{0}. Please report any bugs you encounter.".format(__version__),
                   attrs=['dark']))
         print(col("Critical bug? Use git tag to list all versions and use git checkout <version>", attrs=['dark']))
