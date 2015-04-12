@@ -17,6 +17,7 @@ from imagemounter.disk import Disk
 from imagemounter.volume import Volume
 
 
+# noinspection PyShadowingNames
 class ImageParser(object):
     """Root object of the :mod:`imagemounter` Python interface. This class should be sufficient allowing access to the
     underlying functions of this module.
