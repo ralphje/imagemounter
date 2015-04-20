@@ -664,6 +664,18 @@ class Disk(object):
     def _mount_parted_volumes(self):
         """Finds and mounts all volumes based on parted."""
 
+        # for some reason, parted does not properly return extended volume types in its machine
+        # output, so we need to execute it twice.
+        meta_volumes = []
+        try:
+            output = util.check_output_(['parted', self.get_raw_path(), 'print'])
+            for line in output.splitlines():
+                if 'extended' in line:
+                    meta_volumes.append(int(line.split()[0]))
+        except Exception:
+            logger.exception("Failed executing parted command.")
+            # skip detection of meta volumes
+
         try:
             # parted does not support passing in the vstype. It either works, or it doesn't.
             cmd = ['parted', self.get_raw_path(), '-sm', 'unit s', 'print free']
@@ -699,6 +711,8 @@ class Disk(object):
 
                 if description == 'free':
                     volume.flag = 'unalloc'
+                elif int(slot) in meta_volumes:
+                    volume.flag = 'meta'
                 else:
                     volume.flag = 'alloc'
                     volume.slot = int(slot) - 1
