@@ -2,6 +2,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import io
+import logging
 import os
 import random
 import subprocess
@@ -10,6 +11,9 @@ import tempfile
 import threading
 import sys
 from imagemounter import util, FILE_SYSTEM_TYPES
+
+
+logger = logging.getLogger(__name__)
 
 
 FILE_SYSTEM_GUIDS = {
@@ -92,11 +96,6 @@ class Volume(object):
     def __str__(self):
         return str(self.__unicode__())
 
-    # noinspection PyProtectedMember
-    def _debug(self, val, level=1):
-        if self.disk:
-            self.disk._debug(val, level)
-
     def get_description(self, with_size=True):
         """Obtains a generic description of the volume, containing the file system type, index, label and NTFS version.
         If *with_size* is provided, the volume size is also included.
@@ -153,12 +152,12 @@ class Volume(object):
                 file.seek(self.offset)
                 header = file.read(min(self.size, 4096) if self.size else 4096)
             result = magic.from_buffer(header).decode()
-            self._debug("    Magic detection returned {}".format(result), 2)
+            logger.debug("Magic detection returned {}".format(result))
             return result
         except ImportError:
-            self._debug("    The python-magic module is not available.")
+            logger.warning("The python-magic module is not available.")
         except AttributeError:
-            self._debug("    The python-magic module is not available, but another module named magic was found.")
+            logger.warning("The python-magic module is not available, but another module named magic was found.")
         return None
 
     def determine_fs_type(self):
@@ -179,7 +178,7 @@ class Volume(object):
                 # For efficiency reasons, not all functions are called instantly.
                 if callable(fsdesc):
                     fsdesc = fsdesc()
-                self._debug("    Current fsdesc is {}".format(fsdesc), 3)
+                logger.debug("Current fsdesc is {}".format(fsdesc))
                 if not fsdesc:
                     continue
                 fsdesc = fsdesc.lower()
@@ -228,9 +227,9 @@ class Volume(object):
                 else:
                     continue  # this loop failed
 
-                self._debug("    Detected {0} as {1}".format(fsdesc, self.fstype))
+                logger.info("Detected {0} as {1}".format(fsdesc, self.fstype))
                 if self.fstype not in FILE_SYSTEM_TYPES:
-                    self._debug("[-] Detected filesystem is not yet supported")
+                    logger.warning("Detected filesystem {} is not yet supported".format(self.fstype))
                 break  # we found something
             else:  # we found nothing
                 if not last_resort or last_resort == 'unknown':
@@ -289,7 +288,7 @@ class Volume(object):
             yield self
         else:
             for v in self.volumes:
-                self._debug("    Mounting LVM volume {0}".format(v))
+                logger.info("Mounting LVM volume {0}".format(v))
                 for s in v.init():
                     yield s
 
@@ -310,7 +309,7 @@ class Volume(object):
                 self.mountpoint = path
                 return True
             except:
-                self._debug("[-] Could not create mountdir.")
+                logger.exception("Could not create mountdir.")
                 return False
         else:
             self.mountpoint = tempfile.mkdtemp(prefix='im_' + str(self.index) + '_',
@@ -327,9 +326,9 @@ class Volume(object):
 
         # noinspection PyBroadException
         try:
-            self.loopback = util.check_output_(['losetup', '-f'], self).strip()
+            self.loopback = util.check_output_(['losetup', '-f']).strip()
         except Exception:
-            self._debug("[-] No free loopback device found.")
+            logger.warning("No free loopback device found.", exc_info=True)
             return False
 
         # noinspection PyBroadException
@@ -338,10 +337,9 @@ class Volume(object):
                 cmd = ['losetup', '-o', str(self.offset), self.loopback, self.get_raw_base_path()]
                 if not self.disk.read_write:
                     cmd.insert(1, '-r')
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                util.check_call_(cmd, stdout=subprocess.PIPE)
             except Exception as e:
-                self._debug("[-] Loopback device could not be mounted.")
-                self._debug(e)
+                logger.exception("Loopback device could not be mounted.")
                 return False
         return True
 
@@ -373,7 +371,7 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype == 'bsd':
                 # ufs
@@ -383,7 +381,7 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype == 'ntfs':
                 # NTFS
@@ -391,7 +389,7 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype == 'xfs':
                 # ext
@@ -400,7 +398,7 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype in ('iso', 'udf', 'squashfs', 'cramfs', 'minix', 'fat'):
                 mnt_type = {'iso': 'iso9660', 'fat': 'vfat'}.get(self.fstype, self.fstype)
@@ -409,20 +407,20 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype == 'vmfs':
                 if not self._find_loopback():
                     return False
 
-                util.check_call_(['vmfs-fuse', self.loopback, self.mountpoint], self, stdout=subprocess.PIPE)
+                util.check_call_(['vmfs-fuse', self.loopback, self.mountpoint], stdout=subprocess.PIPE)
 
             elif self.fstype == 'unknown':  # mounts without specifying the filesystem type
                 cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                util.check_call_(cmd, self, stdout=subprocess.PIPE)
+                util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype == 'jffs2':
                 self.open_jffs2()
@@ -450,15 +448,15 @@ class Volume(object):
                 except TypeError:
                     size = self.size
 
-                self._debug("[-] Unknown filesystem {0} (type: {1}, block offset: {2}, length: {3})"
-                            .format(self, self.fstype, self.offset / self.disk.block_size, size))
+                logger.warning("Unknown filesystem {0} (type: {1}, block offset: {2}, length: {3})"
+                               .format(self, self.fstype, self.offset / self.disk.block_size, size))
                 return False
 
             self.was_mounted = True
 
             return True
         except Exception as e:
-            self._debug("[-] Execution failed due to {0}".format(e))
+            logger.exception("Execution failed due to {}".format(e), exc_info=True)
             self.exception = e
 
             try:
@@ -468,7 +466,7 @@ class Volume(object):
                 if self.loopback:
                     self.loopback = ""
             except Exception as e2:
-                self._debug(e2)
+                logger.exception("Clean-up failed", exc_info=True)
 
             return False
 
@@ -483,12 +481,11 @@ class Volume(object):
             return False
         try:
             self.bindmountpoint = mountpoint
-            util.check_call_(['mount', '--bind', self.mountpoint, self.bindmountpoint], self, stdout=subprocess.PIPE)
+            util.check_call_(['mount', '--bind', self.mountpoint, self.bindmountpoint], stdout=subprocess.PIPE)
             return True
         except Exception as e:
             self.bindmountpoint = ""
-            self._debug("[-] Error bind mounting {0}.".format(self))
-            self._debug(e)
+            logger.exception("Error bind mounting {0}.".format(self))
             return False
 
     def open_luks_container(self):
@@ -505,14 +502,14 @@ class Volume(object):
         # Check if this is a LUKS device
         # noinspection PyBroadException
         try:
-            util.check_call_(["cryptsetup", "isLuks", self.loopback], self, stderr=subprocess.STDOUT)
+            util.check_call_(["cryptsetup", "isLuks", self.loopback], stderr=subprocess.STDOUT)
             # ret = 0 if isLuks
         except Exception:
-            self._debug("[-] Not a LUKS volume")
+            logger.warning("Not a LUKS volume")
             # clean the loopback device, we want this method to be clean as possible
             # noinspection PyBroadException
             try:
-                util.check_call_(['losetup', '-d', self.loopback], self)
+                util.check_call_(['losetup', '-d', self.loopback])
                 self.loopback = ""
             except Exception:
                 pass
@@ -527,7 +524,7 @@ class Volume(object):
             cmd = ["cryptsetup", "luksOpen", self.loopback, self.luks_path]
             if not self.disk.read_write:
                 cmd.insert(1, '-r')
-            util.check_call_(cmd, self)
+            util.check_call_(cmd)
         except Exception:
             self.luks_path = ""
             return None
@@ -535,7 +532,7 @@ class Volume(object):
         size = None
         # noinspection PyBroadException
         try:
-            result = util.check_output_(["cryptsetup", "status", self.luks_path], self)
+            result = util.check_output_(["cryptsetup", "status", self.luks_path])
             for l in result.splitlines():
                 if "size:" in l and "key" not in l:
                     size = int(l.replace("size:", "").replace("sectors", "").strip()) * self.disk.block_size
@@ -563,12 +560,12 @@ class Volume(object):
         """
         # we have to make a ram-device to store the image, we keep 20% overhead
         size_in_kb = int((self.size / 1024) * 1.2)
-        util.check_call_(['modprobe', '-v', 'mtd'], self)
-        util.check_call_(['modprobe', '-v', 'jffs2'], self)
-        util.check_call_(['modprobe', '-v', 'mtdram', 'total_size={}'.format(size_in_kb), 'erase_size=256'], self)
-        util.check_call_(['modprobe', '-v', 'mtdblock'], self)
-        util.check_call_(['dd', 'if=' + self.get_raw_base_path(), 'of=/dev/mtd0'], self)
-        util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', self.mountpoint], self)
+        util.check_call_(['modprobe', '-v', 'mtd'])
+        util.check_call_(['modprobe', '-v', 'jffs2'])
+        util.check_call_(['modprobe', '-v', 'mtdram', 'total_size={}'.format(size_in_kb), 'erase_size=256'])
+        util.check_call_(['modprobe', '-v', 'mtdblock'])
+        util.check_call_(['dd', 'if=' + self.get_raw_base_path(), 'of=/dev/mtd0'])
+        util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', self.mountpoint])
 
         return True
 
@@ -583,21 +580,21 @@ class Volume(object):
             return []
 
         # Scan for new lvm volumes
-        result = util.check_output_(["lvm", "pvscan"], self)
+        result = util.check_output_(["lvm", "pvscan"])
         for l in result.splitlines():
             if self.loopback in l or (self.offset == 0 and self.get_raw_base_path() in l):
                 for vg in re.findall(r'VG (\S+)', l):
                     self.volume_group = vg
 
         if not self.volume_group:
-            self._debug("[-] Volume is not a volume group.")
+            logger.warning("Volume is not a volume group.")
             return []
 
         # Enable lvm volumes
-        util.check_call_(["vgchange", "-a", "y", self.volume_group], self, stdout=subprocess.PIPE)
+        util.check_call_(["vgchange", "-a", "y", self.volume_group], stdout=subprocess.PIPE)
 
         # Gather information about lvolumes, gathering their label, size and raw path
-        result = util.check_output_(["lvdisplay", self.volume_group], self)
+        result = util.check_output_(["lvdisplay", self.volume_group])
         for l in result.splitlines():
             if "--- Logical volume ---" in l:
                 self.volumes.append(Volume(disk=self.disk, stats=self.stats, fsforce=self.fsforce,
@@ -615,7 +612,7 @@ class Volume(object):
                 self.volumes[-1].lv_path = l.replace("LV Path", "").strip()
                 self.volumes[-1].offset = 0
 
-        self._debug("    {0} volumes found".format(len(self.volumes)))
+        logger.info("{0} volumes found".format(len(self.volumes)))
 
         return self.volumes
 
@@ -639,7 +636,7 @@ class Volume(object):
         def stats_thread():
             try:
                 cmd = ['fsstat', self.get_raw_base_path(), '-o', str(self.offset // self.disk.block_size)]
-                self._debug('  $ {0}'.format(' '.join(cmd)), 2)
+                logger.debug('$ {0}'.format(' '.join(cmd)))
                 # noinspection PyShadowingNames
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -674,8 +671,7 @@ class Volume(object):
                         self.lastmountpoint = self.label
 
             except Exception as e:  # ignore any exceptions here.
-                self._debug("[-] Error while obtaining stats.")
-                self._debug(e)
+                logger.exception("Error while obtaining stats.")
                 pass
 
         thread = threading.Thread(target=stats_thread)
@@ -690,7 +686,7 @@ class Volume(object):
             except Exception:
                 pass
             thread.join()
-            self._debug("    Killed fsstat after {0}s".format(duration))
+            logger.debug("Killed fsstat after {0}s".format(duration))
 
     def detect_mountpoint(self):
         """Attempts to detect the previous mountpoint if this was not done through :func:`fill_stats`. This detection
@@ -724,7 +720,7 @@ class Volume(object):
             self.lastmountpoint = result
             if not self.label:
                 self.label = self.lastmountpoint
-            self._debug("    Detected mountpoint as {0} based on files in volume".format(self.lastmountpoint))
+            logger.info("Detected mountpoint as {0} based on files in volume".format(self.lastmountpoint))
 
         return result
 
@@ -737,7 +733,7 @@ class Volume(object):
 
         if self.loopback and self.volume_group:
             try:
-                util.check_call_(['vgchange', '-a', 'n', self.volume_group], self, stdout=subprocess.PIPE)
+                util.check_call_(['vgchange', '-a', 'n', self.volume_group], stdout=subprocess.PIPE)
             except Exception:
                 return False
 
@@ -745,7 +741,7 @@ class Volume(object):
 
         if self.loopback and self.luks_path:
             try:
-                util.check_call_(['cryptsetup', 'luksClose', self.luks_path], self, stdout=subprocess.PIPE)
+                util.check_call_(['cryptsetup', 'luksClose', self.luks_path], stdout=subprocess.PIPE)
             except Exception:
                 return False
 
@@ -753,20 +749,20 @@ class Volume(object):
 
         if self.loopback:
             try:
-                util.check_call_(['losetup', '-d', self.loopback], self)
+                util.check_call_(['losetup', '-d', self.loopback])
             except Exception:
                 return False
 
             self.loopback = ""
 
         if self.bindmountpoint:
-            if not util.clean_unmount(['umount'], self.bindmountpoint, rmdir=False, parser=self):
+            if not util.clean_unmount(['umount'], self.bindmountpoint, rmdir=False):
                 return False
 
             self.bindmountpoint = ""
 
         if self.mountpoint:
-            if not util.clean_unmount(['umount'], self.mountpoint, parser=self):
+            if not util.clean_unmount(['umount'], self.mountpoint):
                 return False
 
             self.mountpoint = ""
