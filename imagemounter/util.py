@@ -1,6 +1,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import logging
 import time
 import subprocess
 import re
@@ -8,21 +9,24 @@ import glob
 import os
 
 
-def clean_unmount(cmd, mountpoint, tries=5, rmdir=True, parser=None):
+logger = logging.getLogger(__name__)
+
+
+def clean_unmount(cmd, mountpoint, tries=5, rmdir=True):
     cmd.append(mountpoint)
 
     # AVFS mounts are not actually unmountable, but are symlinked.
     if os.path.exists(os.path.join(mountpoint, 'avfs')):
         os.remove(os.path.join(mountpoint, 'avfs'))
         # noinspection PyProtectedMember
-        parser._debug("    Removed {}".format(os.path.join(mountpoint, 'avfs')))
+        logger.debug("Removed {}".format(os.path.join(mountpoint, 'avfs')))
     elif os.path.islink(mountpoint):
         pass  # if it is a symlink, we can simply skip to removing it
     else:
         # Perform unmount
         # noinspection PyBroadException
         try:
-            check_call_(cmd, parser)
+            check_call_(cmd)
         except:
             return False
 
@@ -98,20 +102,16 @@ def module_exists(mod):
         return False
 
 
-def check_call_(cmd, parser=None, *args, **kwargs):
-    if parser:
-        # noinspection PyProtectedMember
-        parser._debug('  $ {0}'.format(' '.join(cmd)), 2)
+def check_call_(cmd, *args, **kwargs):
+    logger.debug('$ {0}'.format(' '.join(cmd)))
     return subprocess.check_call(cmd, *args, **kwargs)
 
 import locale
 encoding = locale.getdefaultlocale()[1]
 
 
-def check_output_(cmd, parser=None, *args, **kwargs):
-    if parser:
-        # noinspection PyProtectedMember
-        parser._debug('  $ {0}'.format(' '.join(cmd)), 2)
+def check_output_(cmd, *args, **kwargs):
+    logger.debug('$ {0}'.format(' '.join(cmd)))
     result = subprocess.check_output(cmd, *args, **kwargs)
     if result:
         result = result.decode(encoding)

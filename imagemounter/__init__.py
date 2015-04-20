@@ -9,12 +9,16 @@ VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
 FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'luks', 'lvm', 'xfs', 'iso', 'udf', 'fat',
                      'vmfs', 'squashfs', 'jffs2', 'cramfs', 'minix', 'dir', 'unknown')
 
+import logging
 import sys
 import os
 
 from imagemounter import util
 from imagemounter.disk import Disk
 from imagemounter.volume import Volume
+
+
+logger = logging.getLogger(__name__)
 
 
 # noinspection PyShadowingNames
@@ -24,7 +28,7 @@ class ImageParser(object):
 
     """
 
-    def __init__(self, paths, out=None, verbose=False, color=False, **args):
+    def __init__(self, paths, **args):
         """Instantiation of this class does not automatically mount, detect or analyse :class:`Disk` s, though it
         initialises each provided path as a new :class:`Disk` object.
 
@@ -48,9 +52,6 @@ class ImageParser(object):
             self.paths = [paths]
         else:
             self.paths = paths
-        self.out = out or sys.stdout
-        self.verbose = verbose
-        self.verbose_color = color
         self.args = args
 
         self.disks = []
@@ -61,14 +62,6 @@ class ImageParser(object):
             else:
                 index += 1
             self.disks.append(Disk(self, path, index=index, **self.args))
-
-    def _debug(self, val, level=1):
-        if self.verbose and int(self.verbose) >= level:
-            if self.verbose_color:
-                from termcolor import colored
-                print(colored(val, "cyan"), file=self.out)
-            else:
-                print(val, file=self.out)
 
     def init(self, single=None, raid=True):
         """Handles all important disk-mounting tasks, i.e. calls the :func:`Disk.init` function on all underlying
@@ -128,7 +121,7 @@ class ImageParser(object):
         :rtype: generator"""
 
         for disk in self.disks:
-            self._debug("    Mounting volumes in {0}".format(disk))
+            logger.info("Mounting volumes in {0}".format(disk))
             for volume in disk.mount_single_volume():
                 yield volume
 
@@ -139,7 +132,7 @@ class ImageParser(object):
         :rtype: generator"""
 
         for disk in self.disks:
-            self._debug("    Mounting volumes in {0}".format(disk))
+            logger.info("Mounting volumes in {0}".format(disk))
             for volume in disk.mount_multiple_volumes():
                 yield volume
 
@@ -150,7 +143,7 @@ class ImageParser(object):
         :rtype: generator"""
 
         for disk in self.disks:
-            self._debug("    Mounting volumes in {0}".format(disk))
+            logger.info("Mounting volumes in {0}".format(disk))
             for volume in disk.mount_volumes(single):
                 yield volume
 
@@ -177,12 +170,12 @@ class ImageParser(object):
         volumes = list(sorted(self.get_volumes(), key=lambda v: v.mountpoint or "", reverse=True))
         for v in volumes:
             if not v.unmount():
-                self._debug("[-] Error unmounting volume {0}".format(v.mountpoint))
+                logger.error("Error unmounting volume {0}".format(v.mountpoint))
 
         # Now just clean the rest.
         for disk in self.disks:
             if not disk.unmount(remove_rw):
-                self._debug("[-] Error unmounting {0}".format(disk))
+                logger.error("Error unmounting {0}".format(disk))
                 return False
 
         return True
@@ -199,7 +192,7 @@ class ImageParser(object):
         try:
             root = list(filter(lambda x: x.lastmountpoint == '/', volumes))[0]
         except IndexError:
-            self._debug("[-] Could not find / while reconstructing, aborting!")
+            logger.error("Could not find / while reconstructing, aborting!")
             return None
 
         volumes.remove(root)

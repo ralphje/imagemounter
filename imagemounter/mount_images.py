@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 
 import argparse
 import glob
+import logging
 import sys
 import os
 
@@ -125,6 +126,25 @@ def main():
     else:
         from termcolor import colored
         col = colored
+
+    class ImageMounterFormatter(logging.Formatter):
+        def format(self, record):
+            msg = record.getMessage()
+            if record.levelno >= logging.WARNING:
+                return col("[-] " + msg, 'cyan')
+            elif record.levelno == logging.INFO:
+                return col("[+] " + msg, 'cyan')
+            elif msg.startswith('$'):
+                return col("  " + msg, 'cyan')
+            else:
+                return col("    " + msg, 'cyan')
+
+    # Set logging level for internal Python
+    handler = logging.StreamHandler()
+    handler.setFormatter(ImageMounterFormatter())
+    logger = logging.getLogger("imagemounter")
+    logger.setLevel({0: logging.CRITICAL, 1: logging.WARNING, 2: logging.INFO}.get(args.verbose, logging.DEBUG))
+    logger.addHandler(handler)
 
     # Check some prerequisites
     if os.geteuid():  # Not run as root
