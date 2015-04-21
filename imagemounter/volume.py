@@ -273,7 +273,11 @@ class Volume(object):
         return suffix
 
     def carve(self):
-        """Call this method to carve the free space of the volume for (deleted) files."""
+        """Call this method to carve the free space of the volume for (deleted) files. Note that photorec has its
+        own interface that temporarily takes over the shell.
+
+        :return: boolean indicating whether the command succeeded
+        """
 
         if not util.command_exists('photorec'):
             logger.warning("photorec is not installed, could not carve volume")
@@ -285,9 +289,11 @@ class Volume(object):
         try:
             util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.get_raw_base_path(),
                               str(self.slot + 1) + ",freespace,search"])
+            return True
 
         except Exception:
             logger.exception("Failed carving the volume.")
+            return False
 
     def init(self, no_stats=False):
         """Generator that mounts this volume and either yields itself or recursively generates its subvolumes.
