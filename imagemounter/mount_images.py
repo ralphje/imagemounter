@@ -366,9 +366,11 @@ def main():
                     if args.carve:
                         sys.stdout.write("[+] Carving volume...\r")
                         sys.stdout.flush()
-                        volume.carve()
-                        print('[+] Carved data is available at {0}.'.format(col(volume.carvepoint, 'green',
-                                                                                attrs=['bold'])))
+                        if volume.carve():
+                            print('[+] Carved data is available at {0}.'.format(col(volume.carvepoint, 'green',
+                                                                                    attrs=['bold'])))
+                        else:
+                            print(col('[-] Carving failed.', 'red'))
 
                     # Do not offer unmount when reconstructing
                     if args.reconstruct or args.keep:
