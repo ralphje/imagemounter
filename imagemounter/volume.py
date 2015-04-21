@@ -385,7 +385,8 @@ class Volume(object):
 
             elif self.fstype == 'ntfs':
                 # NTFS
-                cmd = ['mount', raw_path, self.mountpoint, '-t', 'ntfs', '-o', 'loop,noexec,offset=' + str(self.offset)]
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'ntfs', '-o',
+                       'loop,show_sys_files,noexec,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
