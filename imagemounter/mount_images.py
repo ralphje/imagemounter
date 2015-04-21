@@ -67,6 +67,8 @@ def main():
     parser.add_argument('-r', '--reconstruct', action='store_true', default=False,
                         help='attempt to reconstruct the full filesystem tree; implies -s and mounts all partitions '
                              'at once')
+    parser.add_argument('--carve', action='store_true', default=False,
+                        help='automatically carve the free space of a mounted volume for deleted files')
 
     # Specify options to the subsystem
     parser.add_argument('-md', '--mountdir', default=None,
@@ -269,6 +271,11 @@ def main():
     if args.vstype != 'detect' and args.single:
         print("[!] There's no point in using --single in combination with --vstype.")
 
+    if args.carve and not util.command_exists('photorec'):
+        print(col("[-] The photorec command (part of testdisk package) is required to carve, but is not "
+                  "installed. Carving will be disabled.", 'yellow'))
+        args.carve = False
+
     # Enumerate over all images in the CLI
     images = []
     for num, image in enumerate(args.images):
@@ -355,6 +362,13 @@ def main():
                                                                                   col(volume.loopback, 'green',
                                                                                       attrs=['bold'])))
                         print(col('[-] Could not detect further volumes in the loopback device.', 'red'))
+
+                    if args.carve:
+                        sys.stdout.write("[+] Carving volume...\r")
+                        sys.stdout.flush()
+                        volume.carve()
+                        print('[+] Carved data is available at {0}.'.format(col(volume.carvepoint, 'green',
+                                                                                attrs=['bold'])))
 
                     # Do not offer unmount when reconstructing
                     if args.reconstruct or args.keep:

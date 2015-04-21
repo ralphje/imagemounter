@@ -578,6 +578,7 @@ class Disk(object):
                 logger.info("Unallocated space: block offset: {0}, length: {1} ".format(p.start, p.len))
             elif p.flags == pytsk3.TSK_VS_PART_FLAG_META:
                 volume.flag = 'meta'
+                logger.info("Meta volume: block offset: {0}, length: {1} ".format(p.start, p.len))
 
             # unalloc / meta partitions do not have stats and can not be mounted
             if volume.flag != 'alloc':
@@ -643,8 +644,10 @@ class Disk(object):
 
             if slot.lower() == 'meta':
                 volume.flag = 'meta'
+                logger.info("Meta volume: block offset: {0}, length: {1}".format(start, length))
             elif slot.lower() == '-----':
                 volume.flag = 'unalloc'
+                logger.info("Unallocated space: block offset: {0}, length: {1}".format(start, length))
             else:
                 volume.flag = 'alloc'
                 if ":" in slot:
@@ -711,8 +714,10 @@ class Disk(object):
 
                 if description == 'free':
                     volume.flag = 'unalloc'
+                    logger.info("Unallocated space: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
                 elif int(slot) in meta_volumes:
                     volume.flag = 'meta'
+                    logger.info("Meta volume: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
                 else:
                     volume.flag = 'alloc'
                     volume.slot = int(slot) - 1
