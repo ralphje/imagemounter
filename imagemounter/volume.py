@@ -10,6 +10,7 @@ import re
 import tempfile
 import threading
 import sys
+import shutil
 from imagemounter import util, FILE_SYSTEM_TYPES
 
 
@@ -76,6 +77,9 @@ class Volume(object):
         self.loopback = ""
         self.exception = None
         self.was_mounted = False
+
+        # Used by carving
+        self.carvepoint = ""
 
         # Used by functions that create subvolumes
         self.volumes = []
@@ -268,6 +272,23 @@ class Volume(object):
             suffix = suffix[:-1]
         return suffix
 
+    def carve(self):
+        """Call this method to carve the free space of the volume for (deleted) files."""
+
+        if not util.command_exists('photorec'):
+            logger.warning("photorec is not installed, could not carve volume")
+            return False
+
+        if not self._make_mountpoint(var_name='carvepoint', suffix="carve"):
+            return False
+
+        try:
+            util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.get_raw_base_path(),
+                              str(self.slot + 1) + ",freespace,search"])
+
+        except Exception:
+            logger.exception("Failed carving the volume.")
+
     def init(self, no_stats=False):
         """Generator that mounts this volume and either yields itself or recursively generates its subvolumes.
 
@@ -292,29 +313,44 @@ class Volume(object):
                 for s in v.init():
                     yield s
 
-    def _make_mountpoint(self):
-        """Creates a directory that can be used as a mountpoint. The directory is stored in :attr:`mountpoint`
+    def _make_mountpoint(self, case_name=None, var_name='mountpoint', suffix=''):
+        """Creates a directory that can be used as a mountpoint. The directory is stored in :attr:`mountpoint`,
+        or the varname as specified by the argument.
 
         :return: boolean indicating whether the mountpoint was successfully created.
         """
 
         if self.pretty:
+            case_name = case_name or ".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1])
             md = self.mountdir or tempfile.tempdir
-            pretty_label = "{0}-{1}".format(".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]),
-                                            self.get_safe_label() or self.index)
+            pretty_label = "{0}-{1}".format(case_name, self.get_safe_label() or self.index)
+            if suffix:
+                pretty_label += "-" + suffix
             path = os.path.join(md, pretty_label)
+
+            # check if path already exists, otherwise try to find another nice path
+            if os.path.exists(path):
+                for i in range(2, 100):
+                    path = os.path.join(md, pretty_label + "-" + str(i))
+                    if not os.path.exists(path):
+                        break
+                else:
+                    logger.error("Could not find free mountdir.")
+                    return False
+
             # noinspection PyBroadException
             try:
                 os.mkdir(path, 777)
-                self.mountpoint = path
+                setattr(self, var_name, path)
                 return True
-            except:
+            except Exception:
                 logger.exception("Could not create mountdir.")
                 return False
         else:
-            self.mountpoint = tempfile.mkdtemp(prefix='im_' + str(self.index) + '_',
-                                               suffix='_' + self.get_safe_label(),
-                                               dir=self.mountdir)
+            setattr(self, var_name, tempfile.mkdtemp(prefix='im_' + str(self.index) + '_',
+                                                     suffix='_' + self.get_safe_label() +
+                                                            ("_" + suffix if suffix else ""),
+                                                     dir=self.mountdir))
             return True
 
     def _find_loopback(self, use_loopback=True):
@@ -767,5 +803,13 @@ class Volume(object):
                 return False
 
             self.mountpoint = ""
+
+        if self.carvepoint:
+            try:
+                shutil.rmtree(self.carvepoint)
+            except OSError:
+                return False
+            else:
+                self.carvepoint = ""
 
         return True
