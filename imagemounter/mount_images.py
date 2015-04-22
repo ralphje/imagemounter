@@ -350,6 +350,15 @@ def main():
                         if args.wait:
                             input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
+                    if args.carve:
+                        sys.stdout.write("[+] Carving volume...\r")
+                        sys.stdout.flush()
+                        if volume.carve(freespace=False):
+                            print('[+] Carved data is available at {0}.'.format(col(volume.carvepoint, 'green',
+                                                                                    attrs=['bold'])))
+                        else:
+                            print(col('[-] Carving failed.', 'red'))
+
                     continue
 
                 try:

@@ -272,10 +272,12 @@ class Volume(object):
             suffix = suffix[:-1]
         return suffix
 
-    def carve(self):
+    def carve(self, freespace=True):
         """Call this method to carve the free space of the volume for (deleted) files. Note that photorec has its
         own interface that temporarily takes over the shell.
 
+        :param freespace: indicates whether the entire volume should be carved (False) or only the free space (True)
+        :type freespace: bool
         :return: boolean indicating whether the command succeeded
         """
 
@@ -288,7 +290,7 @@ class Volume(object):
 
         try:
             util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.get_raw_base_path(),
-                              str(self.slot + 1) + ",freespace,search"])
+                              str(self.slot + 1) + (",freespace" if freespace else "") + ",search"])
             return True
 
         except Exception:
