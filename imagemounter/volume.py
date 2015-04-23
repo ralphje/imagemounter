@@ -285,21 +285,31 @@ class Volume(object):
             logger.warning("photorec is not installed, could not carve volume")
             return False
 
-        if not self.slot:
-            logger.warning("Can't carve if volume slot number is not known.")
-            return False
-
         if not self._make_mountpoint(var_name='carvepoint', suffix="carve"):
             return False
 
-        try:
-            util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.get_raw_base_path(),
-                              str(self.slot) + (",freespace" if freespace else "") + ",search"])
-            return True
+        # if no slot, we need to make a loopback that we can use to carve the volume
+        if not self.slot:
+            if not self.loopback and not self._find_loopback():
+                logger.error("Can't carve if volume has no slot number and can't be mounted on loopback.")
+                return False
 
-        except Exception:
-            logger.exception("Failed carving the volume.")
-            return False
+            try:
+                util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.loopback,
+                                  ("freespace," if freespace else "") + "search"])
+                return True
+            except Exception:
+                logger.exception("Failed carving the volume.")
+                return False
+        else:
+            try:
+                util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.get_raw_base_path(),
+                                  str(self.slot) + (",freespace" if freespace else "") + ",search"])
+                return True
+
+            except Exception:
+                logger.exception("Failed carving the volume.")
+                return False
 
     def init(self, no_stats=False):
         """Generator that mounts this volume and either yields itself or recursively generates its subvolumes.
@@ -365,7 +375,7 @@ class Volume(object):
                                                      dir=self.mountdir))
             return True
 
-    def _find_loopback(self, use_loopback=True):
+    def _find_loopback(self, use_loopback=True, var_name='loopback'):
         """Finds a free loopback device that can be used. The loopback is stored in :attr:`loopback`. If *use_loopback*
         is True, the loopback will also be used directly.
 
@@ -374,7 +384,8 @@ class Volume(object):
 
         # noinspection PyBroadException
         try:
-            self.loopback = util.check_output_(['losetup', '-f']).strip()
+            loopback = util.check_output_(['losetup', '-f']).strip()
+            setattr(self, var_name, loopback)
         except Exception:
             logger.warning("No free loopback device found.", exc_info=True)
             return False
@@ -382,7 +393,8 @@ class Volume(object):
         # noinspection PyBroadException
         if use_loopback:
             try:
-                cmd = ['losetup', '-o', str(self.offset), self.loopback, self.get_raw_base_path()]
+                cmd = ['losetup', '-o', str(self.offset), '--sizelimit', str(self.size),
+                       loopback, self.get_raw_base_path()]
                 if not self.disk.read_write:
                     cmd.insert(1, '-r')
                 util.check_call_(cmd, stdout=subprocess.PIPE)
