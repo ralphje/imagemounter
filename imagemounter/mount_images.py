@@ -119,6 +119,8 @@ def main():
                         help="do not try to find a volume system, but assume the image contains a single volume")
     parser.add_argument('--no-single', action='store_true', default=False,
                         help="prevent trying to mount the image as a single volume if no volume system was found")
+    parser.add_argument('--no-interaction', action='store_true', default=False,
+                        help="do not ask for any user input, implies --keep")
     args = parser.parse_args()
 
     if not args.color:
@@ -188,6 +190,13 @@ def main():
         args.single = True
     elif args.no_single:
         args.single = False
+
+    # If --no-interaction is specified, imply --keep and not --wait
+    if args.no_interaction:
+        args.keep = True
+        if args.wait:
+            print(col("[!] --no-interaction can't be used in conjunction with --wait", 'yellow'))
+            args.wait = False
 
     # Check if mount method supports rw
     if args.method not in ('xmount', 'auto') and args.read_write:
@@ -339,7 +348,8 @@ def main():
 
                     elif volume.exception:
                         print(col('[-] Exception while mounting {0}'.format(volume.get_description()), 'red'))
-                        input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+                        if not args.no_interaction:
+                            input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                     elif volume.flag != 'alloc':
                         print(col('[-] Skipped {0} {1} volume' .format(volume.get_description(), volume.flag),
                                   'yellow'))
@@ -451,8 +461,8 @@ def main():
                     else:
                         print("[+] The entire filesystem is reconstructed in {0}.".format(col(root.mountpoint,
                                                                                               "green", attrs=["bold"])))
-
-                input(col(">>> Press [enter] to unmount all volumes... ", attrs=['dark']))
+                if not args.keep:
+                    input(col(">>> Press [enter] to unmount all volumes... ", attrs=['dark']))
             elif has_left_mounted and not args.keep:
                 input(col(">>> Some volumes were left mounted. Press [enter] to unmount all... ", attrs=['dark']))
 
@@ -464,7 +474,8 @@ def main():
             import traceback
             traceback.print_exc()
             print(col("[-] {0}".format(e), 'red'))
-            input(col(">>> Press [enter] to continue.", attrs=['dark']))
+            if not args.no_interaction:
+                input(col(">>> Press [enter] to continue.", attrs=['dark']))
 
         finally:
             if args.keep:
