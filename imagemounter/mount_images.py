@@ -359,8 +359,9 @@ def main():
                             if not args.no_interaction:
                                 input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                         elif volume.flag != 'alloc':
-                            print(col('[-] Skipped {0} {1} volume' .format(volume.get_description(), volume.flag),
-                                      'yellow'))
+                            if args.wait or args.verbose:  # do not show skipped messages by default
+                                print(col('[-] Skipped {0} {1} volume' .format(volume.get_description(), volume.flag),
+                                          'yellow'))
                             if args.wait:
                                 input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                         else:
