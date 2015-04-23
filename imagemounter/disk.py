@@ -377,9 +377,8 @@ class Disk(object):
 
         if slot is None:
             slot = volume.slot
-        partition_nr = slot + 1
-        if partition_nr in self._disktype:
-            data = self._disktype[partition_nr]
+        if slot in self._disktype:
+            data = self._disktype[slot]
             if not volume.guid and 'guid' in data:
                 volume.guid = data['guid']
             if not volume.label and 'label' in data:
@@ -720,7 +719,7 @@ class Disk(object):
                     logger.info("Meta volume: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
                 else:
                     volume.flag = 'alloc'
-                    volume.slot = int(slot) - 1
+                    volume.slot = int(slot)
                     self._assign_disktype_data(volume)
             except AttributeError as e:
                 logger.exception("Error while parsing parted output")

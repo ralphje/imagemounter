@@ -290,7 +290,7 @@ class Volume(object):
 
         try:
             util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.get_raw_base_path(),
-                              str(self.slot + 1) + (",freespace" if freespace else "") + ",search"])
+                              str(self.slot) + (",freespace" if freespace else "") + ",search"])
             return True
 
         except Exception:

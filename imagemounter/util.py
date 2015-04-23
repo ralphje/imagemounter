@@ -234,6 +234,6 @@ def force_clean(execute=True):
 
 def determine_slot(table, slot):
     if int(table) >= 0:
-        return int(table) * 4 + int(slot)
+        return int(table) * 4 + int(slot) + 1
     else:
-        return int(slot)
+        return int(slot) + 1
