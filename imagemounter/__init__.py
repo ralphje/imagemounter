@@ -28,17 +28,13 @@ class ImageParser(object):
 
     """
 
-    def __init__(self, paths, **args):
+    def __init__(self, paths, casename=None, **args):
         """Instantiation of this class does not automatically mount, detect or analyse :class:`Disk` s, though it
         initialises each provided path as a new :class:`Disk` object.
 
         :param paths: list of paths to base images that should be mounted
         :type paths: iterable
-        :param out: location where verbose output should be written, defaulting to :mod:`sys.stdout`
-        :param verbose: indicates whether verbose output should be written
-        :type verbose: bool
-        :param color: indicates whether verbose output should be colored
-        :type color: bool
+        :param casename: the name of the case, used when prettifying names
         :param args: arguments that should be passed down to :class:`Disk` and :class:`Volume` objects
         """
 
@@ -52,6 +48,7 @@ class ImageParser(object):
             self.paths = [paths]
         else:
             self.paths = paths
+        self.casename = casename
         self.args = args
 
         self.disks = []
