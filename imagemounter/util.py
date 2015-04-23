@@ -119,15 +119,16 @@ def check_output_(cmd, *args, **kwargs):
 
 
 # noinspection PyBroadException
-def force_clean(execute=True):
+def force_clean(execute=True, pattern=r".*/im_[0-9.]+_.+", glob_pattern="/tmp/im_*"):
     """Cleans previous mount points without knowing which is mounted. It assumes proper naming of mountpoints.
 
-    1. Unmounts all bind mounted folders in folders with a name of the form /im_0_
-    2. Unmounts all folders with a name of the form /im_0_ or originating from /image_mounter_
-    3. Deactivates volume groups which originate from a loopback device, which originates from /image_mounter
+    1. Unmounts all bind mounted folders in folders with a name of the form *pattern*
+    2. Unmounts all folders with a name of the form *pattern* or originating from */image_mounter_*
+    3. Deactivates volume groups which originate from a loopback device, which originates from */image_mounter_*
     4. ... and unmounts their related loopback devices
     5. Unmounts all /image_mounter_ folders
-    6. Removes all /tmp/image_mounter folders
+    6. Removes all folders matching both *glob_pattern* and *pattern*
+    6. Removes all /tmp/image_mounter_* folders
 
     Performs only a dry run when execute==False
     """
@@ -149,13 +150,13 @@ def force_clean(execute=True):
 
     # start by unmounting all bind mounts
     for mountpoint, (orig, fs, opts) in mountpoints.items():
-        if 'bind' in opts and re.match(r".*/im_[0-9.]+_.+", mountpoint):
+        if 'bind' in opts and re.match(pattern, mountpoint):
             commands.append('umount {0}'.format(mountpoint))
             if execute:
                 clean_unmount(['umount'], mountpoint, rmdir=False)
     # now unmount all mounts originating from an image_mounter
     for mountpoint, (orig, fs, opts) in mountpoints.items():
-        if 'bind' not in opts and ('/image_mounter_' in orig or re.match(r".*/im_[0-9.]+_.+", mountpoint)):
+        if 'bind' not in opts and ('/image_mounter_' in orig or re.match(pattern, mountpoint)):
             commands.append('umount {0}'.format(mountpoint))
             commands.append('rm -Rf {0}'.format(mountpoint))
             if execute:
@@ -209,8 +210,8 @@ def force_clean(execute=True):
                 clean_unmount(['fusermount', '-u'], mountpoint)
 
     # finalize by cleaning /tmp
-    for folder in glob.glob("/tmp/im_*"):
-        if re.match(r".*/im_[0-9.]+_.+", folder):
+    for folder in glob.glob(glob_pattern):
+        if re.match(pattern, folder):
             cmd = 'rm -Rf {0}'.format(folder)
             if cmd not in commands:
                 commands.append(cmd)
