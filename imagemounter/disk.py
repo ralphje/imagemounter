@@ -716,6 +716,7 @@ class Disk(object):
                     logger.info("Unallocated space: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
                 elif int(slot) in meta_volumes:
                     volume.flag = 'meta'
+                    volume.slot = int(slot)
                     logger.info("Meta volume: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
                 else:
                     volume.flag = 'alloc'

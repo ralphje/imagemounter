@@ -285,6 +285,10 @@ class Volume(object):
             logger.warning("photorec is not installed, could not carve volume")
             return False
 
+        if not self.slot:
+            logger.warning("Can't carve if volume slot number is not known.")
+            return False
+
         if not self._make_mountpoint(var_name='carvepoint', suffix="carve"):
             return False
 
