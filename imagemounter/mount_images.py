@@ -360,7 +360,7 @@ def main():
                         if args.wait:
                             input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
-                    if args.carve:
+                    if args.carve and volume.flag == 'alloc':
                         sys.stdout.write("[+] Carving volume...\r")
                         sys.stdout.flush()
                         if volume.carve(freespace=False):
