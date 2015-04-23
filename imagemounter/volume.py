@@ -213,7 +213,7 @@ class Volume(object):
                     self.fstype = 'cramfs'
                 elif fsdesc.startswith("sgi xfs"):
                     self.fstype = "xfs"
-                elif re.search(r'\bswap file\b', fsdesc):
+                elif re.search(r'\bswap file\b', fsdesc) or 'linux swap' in fsdesc:
                     self.fstype = 'swap'
                 elif re.search(r'\bsquashfs\b', fsdesc):
                     self.fstype = 'squashfs'
