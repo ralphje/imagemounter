@@ -349,7 +349,10 @@ class Volume(object):
             case_name = casename or self.disk.parser.casename or \
                         ".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]) or \
                         os.path.basename(self.disk.paths[0])
-            pretty_label = "{0}-{1}".format(case_name, self.get_safe_label() or self.index)
+            if self.disk.parser.casename == case_name:
+                pretty_label = self.get_safe_label() or ("volume-" + str(self.index))
+            else:
+                pretty_label = "{0}-{1}".format(case_name, self.get_safe_label() or ("volume-" + str(self.index)))
             if suffix:
                 pretty_label += "-" + suffix
             path = os.path.join(md, pretty_label)
