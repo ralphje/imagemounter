@@ -344,58 +344,61 @@ def main():
             has_left_mounted = False
 
             for volume in p.mount_volumes(args.single):
-
-                if not volume.mountpoint and not volume.loopback:
-                    if volume.exception and volume.size is not None and volume.size <= 1048576:
-                        print(col('[-] Exception while mounting small volume {0}'.format(volume.get_description()),
-                                  'yellow'))
-                        if args.wait:
-                            input(col('>>> Press [enter] to continue... ', attrs=['dark']))
-
-                    elif volume.exception:
-                        print(col('[-] Exception while mounting {0}'.format(volume.get_description()), 'red'))
-                        if not args.no_interaction:
-                            input(col('>>> Press [enter] to continue... ', attrs=['dark']))
-                    elif volume.flag != 'alloc':
-                        print(col('[-] Skipped {0} {1} volume' .format(volume.get_description(), volume.flag),
-                                  'yellow'))
-                        if args.wait:
-                            input(col('>>> Press [enter] to continue... ', attrs=['dark']))
-                    else:
-                        print(col('[-] Could not mount volume {0}'.format(volume.get_description()), 'yellow'))
-                        if args.wait:
-                            input(col('>>> Press [enter] to continue... ', attrs=['dark']))
-
-                    if args.carve and volume.flag == 'alloc':
-                        sys.stdout.write("[+] Carving volume...\r")
-                        sys.stdout.flush()
-                        if volume.carve(freespace=False):
-                            print('[+] Carved data is available at {0}.'.format(col(volume.carvepoint, 'green',
-                                                                                    attrs=['bold'])))
-                        else:
-                            print(col('[-] Carving failed.', 'red'))
-
-                    continue
-
                 try:
-                    if volume.mountpoint:
-                        print('[+] Mounted volume {0} on {1}.'.format(col(volume.get_description(), attrs=['bold']),
-                                                                      col(volume.mountpoint, 'green', attrs=['bold'])))
-                    elif volume.loopback:  # fallback, generally indicates error.
-                        print('[+] Mounted volume {0} as loopback on {1}.'.format(col(volume.get_description(),
-                                                                                      attrs=['bold']),
-                                                                                  col(volume.loopback, 'green',
-                                                                                      attrs=['bold'])))
-                        print(col('[-] Could not detect further volumes in the loopback device.', 'red'))
+                    # something failed?
+                    if not volume.mountpoint and not volume.loopback:
+                        if volume.exception and volume.size is not None and volume.size <= 1048576:
+                            print(col('[-] Exception while mounting small volume {0}'.format(volume.get_description()),
+                                      'yellow'))
+                            if args.wait:
+                                input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
-                    if args.carve:
-                        sys.stdout.write("[+] Carving volume...\r")
-                        sys.stdout.flush()
-                        if volume.carve():
-                            print('[+] Carved data is available at {0}.'.format(col(volume.carvepoint, 'green',
-                                                                                    attrs=['bold'])))
+                        elif volume.exception:
+                            print(col('[-] Exception while mounting {0}'.format(volume.get_description()), 'red'))
+                            if not args.no_interaction:
+                                input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+                        elif volume.flag != 'alloc':
+                            print(col('[-] Skipped {0} {1} volume' .format(volume.get_description(), volume.flag),
+                                      'yellow'))
+                            if args.wait:
+                                input(col('>>> Press [enter] to continue... ', attrs=['dark']))
                         else:
-                            print(col('[-] Carving failed.', 'red'))
+                            print(col('[-] Could not mount volume {0}'.format(volume.get_description()), 'yellow'))
+                            if args.wait:
+                                input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+
+                        if args.carve and volume.flag in ('alloc', 'unalloc'):
+                            sys.stdout.write("[+] Carving volume...\r")
+                            sys.stdout.flush()
+                            if volume.carve(freespace=False):
+                                print('[+] Carved data is available at {0}.'.format(col(volume.carvepoint, 'green',
+                                                                                        attrs=['bold'])))
+                            else:
+                                print(col('[-] Carving failed.', 'red'))
+                        else:
+                            continue  # we do not need the unmounting sequence
+
+                    else:
+                        # it all was ok
+                        if volume.mountpoint:
+                            print('[+] Mounted volume {0} on {1}.'.format(col(volume.get_description(), attrs=['bold']),
+                                                                          col(volume.mountpoint, 'green',
+                                                                              attrs=['bold'])))
+                        elif volume.loopback:  # fallback, generally indicates error.
+                            print('[+] Mounted volume {0} as loopback on {1}.'.format(col(volume.get_description(),
+                                                                                          attrs=['bold']),
+                                                                                      col(volume.loopback, 'green',
+                                                                                          attrs=['bold'])))
+                            print(col('[-] Could not detect further volumes in the loopback device.', 'red'))
+
+                        if args.carve:
+                            sys.stdout.write("[+] Carving volume...\r")
+                            sys.stdout.flush()
+                            if volume.carve():
+                                print('[+] Carved data is available at {0}.'.format(col(volume.carvepoint, 'green',
+                                                                                        attrs=['bold'])))
+                            else:
+                                print(col('[-] Carving failed.', 'red'))
 
                     # Do not offer unmount when reconstructing
                     if args.reconstruct or args.keep:
