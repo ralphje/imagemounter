@@ -74,8 +74,9 @@ def main():
     parser.add_argument('-md', '--mountdir', default=None,
                         help='specify other directory for volume mountpoints')
     parser.add_argument('-p', '--pretty', action='store_true', default=False,
-                        help='use pretty names for mount points; useful in combination with --mountdir and does not '
-                             'provide a fallback when the pretty mount name is unavailable')
+                        help='use pretty names for mount points; useful in combination with --mountdir')
+    parser.add_argument('--casename', default=None,
+                        help='name to add to the --mountdir, often used in conjunction with --pretty')
     parser.add_argument('-rw', '--read-write', action='store_true', default=False,
                         help='mount image read-write by creating a local write-cache file in a temp directory; '
                              'implies --method=xmount')

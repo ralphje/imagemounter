@@ -53,6 +53,8 @@ class Volume(object):
         self.fstypes = fstypes or {}
         self.pretty = pretty
         self.mountdir = mountdir
+        if self.disk.parser.casename:
+            self.mountdir = os.path.join(mountdir or tempfile.tempdir, self.disk.parser.casename)
 
         # Should be filled somewhere
         self.size = 0
@@ -335,16 +337,21 @@ class Volume(object):
                 for s in v.init():
                     yield s
 
-    def _make_mountpoint(self, case_name=None, var_name='mountpoint', suffix=''):
+    def _make_mountpoint(self, casename=None, var_name='mountpoint', suffix=''):
         """Creates a directory that can be used as a mountpoint. The directory is stored in :attr:`mountpoint`,
         or the varname as specified by the argument.
 
         :return: boolean indicating whether the mountpoint was successfully created.
         """
 
+        if self.mountdir and not os.path.exists(self.mountdir):
+            os.makedirs(self.mountdir)
+
         if self.pretty:
-            case_name = case_name or ".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1])
             md = self.mountdir or tempfile.tempdir
+            case_name = casename or self.disk.parser.casename or \
+                        ".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]) or \
+                        os.path.basename(self.disk.paths[0])
             pretty_label = "{0}-{1}".format(case_name, self.get_safe_label() or self.index)
             if suffix:
                 pretty_label += "-" + suffix
