@@ -134,6 +134,12 @@ def main():
     class ImageMounterFormatter(logging.Formatter):
         def format(self, record):
             msg = record.getMessage()
+            if args.verbose >= 4 and record.exc_info:
+                if not record.exc_text:
+                    record.exc_text = self.formatException(record.exc_info)
+                if msg[-1:] != "\n":
+                    msg += "\n"
+                msg += record.exc_text
             if record.levelno >= logging.WARNING:
                 return col("[-] " + msg, 'cyan')
             elif record.levelno == logging.INFO:
