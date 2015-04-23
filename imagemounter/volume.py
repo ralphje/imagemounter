@@ -158,7 +158,6 @@ class Volume(object):
                 file.seek(self.offset)
                 header = file.read(min(self.size, 4096) if self.size else 4096)
             result = magic.from_buffer(header).decode()
-            logger.debug("Magic detection returned {}".format(result))
             return result
         except ImportError:
             logger.warning("The python-magic module is not available.")
@@ -234,8 +233,6 @@ class Volume(object):
                     continue  # this loop failed
 
                 logger.info("Detected {0} as {1}".format(fsdesc, self.fstype))
-                if self.fstype not in FILE_SYSTEM_TYPES:
-                    logger.warning("Detected filesystem {} is not yet supported".format(self.fstype))
                 break  # we found something
             else:  # we found nothing
                 if not last_resort or last_resort == 'unknown':
@@ -516,7 +513,7 @@ class Volume(object):
                 except TypeError:
                     size = self.size
 
-                logger.warning("Unknown filesystem {0} (type: {1}, block offset: {2}, length: {3})"
+                logger.warning("Unsupported filesystem {0} (type: {1}, block offset: {2}, length: {3})"
                                .format(self, self.fstype, self.offset / self.disk.block_size, size))
                 return False
 

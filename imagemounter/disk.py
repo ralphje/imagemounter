@@ -172,7 +172,9 @@ class Disk(object):
 
                     os.symlink(avfspath, targetraw)
                     logger.debug("Symlinked {} with {}".format(avfspath, targetraw))
-                    return self.get_raw_path() is not None
+                    raw_path = self.get_raw_path()
+                    logger.debug("Raw path to avfs is {}".format(raw_path))
+                    return raw_path is not None
 
                 elif self.method == 'xmount':
                     cmd = ['xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']
@@ -194,6 +196,7 @@ class Disk(object):
                     # remove base mountpoint
                     os.rmdir(self.mountpoint)
                     self.mountpoint = ""
+                    logger.debug("Raw path to dummy is {}".format(self.get_raw_path()))
                     return True
 
                 else:
@@ -214,7 +217,9 @@ class Disk(object):
                         util.check_call_(fallbackcmd, stdout=subprocess.PIPE)
                     else:
                         raise
-                return self.get_raw_path() is not None
+                raw_path = self.get_raw_path()
+                logger.debug("Raw path to disk is {}".format(raw_path))
+                return raw_path is not None
 
             except Exception:
                 logger.warning('Could not mount {0}, will try multi-file method'.format(paths[0]), exc_info=True)
@@ -255,7 +260,6 @@ class Disk(object):
             if not raw_path:
                 logger.warning("No viable mount file found in {}.".format(searchdirs))
                 return None
-            logger.debug("Raw path is {}".format(raw_path[0]))
             return raw_path[0]
 
     def get_fs_path(self):
@@ -572,12 +576,14 @@ class Disk(object):
                 volume.flag = 'alloc'
                 volume.slot = determine_slot(p.table_num, p.slot_num)
                 self._assign_disktype_data(volume)
+                logger.info("Found allocated {2}: block offset: {0}, length: {1} ".format(p.start, p.len,
+                                                                                          volume.fsdescription))
             elif p.flags == pytsk3.TSK_VS_PART_FLAG_UNALLOC:
                 volume.flag = 'unalloc'
-                logger.info("Unallocated space: block offset: {0}, length: {1} ".format(p.start, p.len))
+                logger.info("Found unallocated space: block offset: {0}, length: {1} ".format(p.start, p.len))
             elif p.flags == pytsk3.TSK_VS_PART_FLAG_META:
                 volume.flag = 'meta'
-                logger.info("Meta volume: block offset: {0}, length: {1} ".format(p.start, p.len))
+                logger.info("Found meta volume: block offset: {0}, length: {1} ".format(p.start, p.len))
 
             # unalloc / meta partitions do not have stats and can not be mounted
             if volume.flag != 'alloc':
@@ -643,10 +649,10 @@ class Disk(object):
 
             if slot.lower() == 'meta':
                 volume.flag = 'meta'
-                logger.info("Meta volume: block offset: {0}, length: {1}".format(start, length))
+                logger.info("Found meta volume: block offset: {0}, length: {1}".format(start, length))
             elif slot.lower() == '-----':
                 volume.flag = 'unalloc'
-                logger.info("Unallocated space: block offset: {0}, length: {1}".format(start, length))
+                logger.info("Found unallocated space: block offset: {0}, length: {1}".format(start, length))
             else:
                 volume.flag = 'alloc'
                 if ":" in slot:
@@ -654,6 +660,8 @@ class Disk(object):
                 else:
                     volume.slot = determine_slot(-1, slot)
                 self._assign_disktype_data(volume)
+                logger.info("Found allocated {2}: block offset: {0}, length: {1} ".format(start, length,
+                                                                                          volume.fsdescription))
 
             # unalloc / meta partitions do not have stats and can not be mounted
             if volume.flag != 'alloc':
@@ -713,15 +721,17 @@ class Disk(object):
 
                 if description == 'free':
                     volume.flag = 'unalloc'
-                    logger.info("Unallocated space: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
+                    logger.info("Found unallocated space: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
                 elif int(slot) in meta_volumes:
                     volume.flag = 'meta'
                     volume.slot = int(slot)
-                    logger.info("Meta volume: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
+                    logger.info("Found meta volume: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
                 else:
                     volume.flag = 'alloc'
                     volume.slot = int(slot)
                     self._assign_disktype_data(volume)
+                    logger.info("Found allocated {2}: block offset: {0}, length: {1} ".format(start[:-1], length[:-1],
+                                                                                              volume.fsdescription))
             except AttributeError as e:
                 logger.exception("Error while parsing parted output")
                 continue
