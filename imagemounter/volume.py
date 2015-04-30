@@ -183,7 +183,7 @@ class Volume(object):
                 # For efficiency reasons, not all functions are called instantly.
                 if callable(fsdesc):
                     fsdesc = fsdesc()
-                logger.debug("Current fsdesc is {}".format(fsdesc))
+                logger.debug("Trying to determine fs type from '{}'".format(fsdesc))
                 if not fsdesc:
                     continue
                 fsdesc = fsdesc.lower()
@@ -288,14 +288,27 @@ class Volume(object):
             return False
 
         # if no slot, we need to make a loopback that we can use to carve the volume
+        loopback_was_created_for_carving = False
         if not self.slot:
-            if not self.loopback and not self._find_loopback():
-                logger.error("Can't carve if volume has no slot number and can't be mounted on loopback.")
-                return False
+            if not self.loopback:
+                if not self._find_loopback():
+                    logger.error("Can't carve if volume has no slot number and can't be mounted on loopback.")
+                    return False
+                loopback_was_created_for_carving = True
 
             try:
                 util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.loopback,
                                   ("freespace," if freespace else "") + "search"])
+
+                # clean out the loop device if we created it specifically for carving
+                if loopback_was_created_for_carving:
+                    try:
+                        util.check_call_(['losetup', '-d', self.loopback])
+                    except Exception:
+                        pass
+                    else:
+                        self.loopback = ""
+
                 return True
             except Exception:
                 logger.exception("Failed carving the volume.")

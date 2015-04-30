@@ -126,11 +126,11 @@ class Disk(object):
         :rtype: generator
         """
 
-        if disktype:
-            self.load_disktype_data()
         self.mount()
         if raid:
             self.add_to_raid()
+        if disktype:
+            self.load_disktype_data()
 
         for v in self.mount_volumes(single):
             yield v
