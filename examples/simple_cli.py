@@ -14,23 +14,21 @@ from __future__ import print_function
 import argparse
 import logging
 import sys
-from imagemounter import ImageParser
+from imagemounter import ImageParser, __version__
 from termcolor import colored
 
 
 def main():
     # We use argparse to parse arguments from the command line.
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--in", help="path(s) to the files you want to mount", nargs='+', dest='images')
+    parser = argparse.ArgumentParser(description='Simple CLI to mount disk images.')
+    parser.add_argument('--version', action='version', version=__version__, help='display version and exit')
+    parser.add_argument("-i", "--in", action='append', required=True, metavar='IN',
+                        help="path(s) to the files you want to mount", dest='images')
     parser.add_argument("-o", "--out", help="directory to mount the volumes in", dest="mountdir")
     parser.add_argument("-c", "--casename", help="the name of the case (this is appended to the output dir)")
     parser.add_argument("-r", "--restore", action="store_true", help="carve unallocated space", dest="carve")
     parser.add_argument("-v", "--verbose", action="store_true", help="enable verbose output")
     args = parser.parse_args()
-
-    # This is a simple CLI, imount is way more advanced.
-    if not args.images:
-        sys.exit("[-] -i is a required argument")
 
     # This sets up the logger. This is somewhat huge part of this example
     class ImageMounterFormatter(logging.Formatter):
@@ -61,7 +59,7 @@ def main():
     # This is the basic parser.
     parser = ImageParser(args.images, pretty=True, **vars(args))
     for volume in parser.init():
-        # parser.init() loops over all volumes and mounts them. It is very simple.
+        # parser.init() loops over all volumes and mounts them
         if volume.mountpoint:
             # If the mountpoint is set, we have successfully mounted it
             print('[+] Mounted volume {0} on {1}.'.format(colored(volume.get_description(), attrs=['bold']),
