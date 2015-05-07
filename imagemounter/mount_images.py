@@ -44,6 +44,60 @@ def main():
                 print("\n[-] Aborted.")
             parser.exit()
 
+    class CheckAction(argparse.Action):
+        def _check_command(self, command, package="", why=""):
+            if util.command_exists(command):
+                print(" INSTALLED {}".format(command))
+            elif why and package:
+                print(" MISSING   {:<20}needed for {}, part of the {} package".format(command, why, package))
+            elif why:
+                print(" MISSING   {:<20}needed for {}".format(command, why))
+            elif package:
+                print(" MISSING   {:<20}part of the {} package".format(command, package))
+            else:
+                print(" MISSING   {}".format(command))
+
+        def _check_module(self, module, pip_name="", why=""):
+            if not pip_name:
+                pip_name = module
+            if util.module_exists(module):
+                print(" INSTALLED {}".format(pip_name))
+            elif why:
+                print(" MISSING   {:<20}needed for {}, install using pip".format(pip_name, why))
+            else:
+                print(" MISSING   {:<20}install using pip".format(pip_name, why))
+
+        # noinspection PyShadowingNames
+        def __call__(self, parser, namespace, values, option_string=None):
+            print("The following commands are used by imagemounter internally. Without most commands, imagemounter "
+                  "works perfectly fine, but may lack some detection or mounting capabilities.")
+            print("-- Mounting base disk images (at least one required, first three recommended) --")
+            self._check_command("xmount", "xmount", "several types of disk images")
+            self._check_command("ewfmount", "ewf-tools", "EWF images (partially covered by xmount)")
+            self._check_command("affuse", "afflib-tools", "AFF images (partially covered by xmount)")
+            self._check_command("vmware-mount", why="VMWare disks")
+            print("-- Detecting volumes and volume types (at least one required) --")
+            self._check_command("mmls", "sleuthkit")
+            self._check_module("pytsk3")
+            self._check_command("parted", "parted")
+            print("-- Detecting volume types (all recommended, first two highly recommended) --")
+            self._check_command("fsstat", "sleuthkit")
+            self._check_command("file", "libmagic1")
+            self._check_module("magic", "python-magic")
+            self._check_command("disktype", "disktype")
+            print("-- Enhanced mounting and detecting disks (install when needed) --")
+            self._check_command("mdadm", "mdadm", "RAID disks")
+            self._check_command("cryptsetup", "cryptsetup", "LUKS containers")
+            self._check_command("mountavfs", "avfs", "compressed disk images")
+            print("-- Mounting volumes (install when needed) --")
+            self._check_command("mount.xfs", "xfsprogs", "XFS volumes")
+            self._check_command("mount.ntfs", "ntfs-3g", "NTFS volumes")
+            self._check_command("lvm", "lvm2", "LVM volumes")
+            self._check_command("vmfs-fuse", "vmfs-tools", "VMFS volumes")
+            self._check_command("mount.jffs2", "mtd-tools", "JFFS2 volumes")
+            self._check_command("mount.squashfs", "squashfs-tools", "SquashFS volumes")
+            parser.exit()
+
     parser = MyParser(description='Utility to mount volumes in Encase and dd images locally.')
     parser.add_argument('images', nargs='+',
                         help='path(s) to the image(s) that you want to mount; generally just the first file (e.g. '
@@ -55,6 +109,8 @@ def main():
     parser.add_argument('--clean', action=CleanAction, nargs=0,
                         help='try to rigorously clean anything that resembles traces from previous runs of '
                              'this utility (is not able to detect RAID volumes)')
+    parser.add_argument('--check', action=CheckAction, nargs=0,
+                        help='do a system check and list which tools are installed')
 
     # Utility specific
     parser.add_argument('-c', '--color', action='store_true', default=False, help='colorize the output')
