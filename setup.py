@@ -28,7 +28,7 @@ setup(
     long_description=long_description,
     entry_points={'console_scripts': ['imount = imagemounter.mount_images:main']},
     install_requires=['termcolor>=1.0.0'],
-    extras={"full": ["python-magic>=0.4"]},
+    extras={"magic": ["python-magic>=0.4"]},
     keywords=['encase', 'aff', 'dd', 'disk image', 'ewfmount', 'affuse', 'xmount', 'imount'],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
