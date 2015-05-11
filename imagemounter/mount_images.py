@@ -60,7 +60,14 @@ def main():
         def _check_module(self, module, pip_name="", why=""):
             if not pip_name:
                 pip_name = module
-            if util.module_exists(module):
+
+            if module == "magic" and util.module_exists(module):
+                import magic
+                if hasattr(magic, 'from_filez'):
+                    print(" INSTALLED {}".format(pip_name))
+                else:
+                    print(" ERROR     {:<20}expecting {}, found other module named magic".format(pip_name, pip_name))
+            elif module != "magic" and util.module_exists(module):
                 print(" INSTALLED {}".format(pip_name))
             elif why:
                 print(" MISSING   {:<20}needed for {}, install using pip".format(pip_name, why))
