@@ -209,17 +209,17 @@ class Volume(object):
                     self.fstype = 'fat'
                 elif 'iso 9660' in fsdesc:
                     self.fstype = 'iso'
-                elif 'linux compressed rom file system' in fsdesc:
+                elif 'linux compressed rom file system' in fsdesc or 'cramfs' in fsdesc:
                     self.fstype = 'cramfs'
-                elif fsdesc.startswith("sgi xfs"):
+                elif fsdesc.startswith("sgi xfs") or re.search(r'\bxfs\b', fsdesc):
                     self.fstype = "xfs"
-                elif re.search(r'\bswap file\b', fsdesc) or 'linux swap' in fsdesc:
+                elif 'swap file' in fsdesc or 'linux swap' in fsdesc or 'linux-swap' in fsdesc:
                     self.fstype = 'swap'
-                elif re.search(r'\bsquashfs\b', fsdesc):
+                elif 'squashfs' in fsdesc:
                     self.fstype = 'squashfs'
                 elif "jffs2" in fsdesc:
                     self.fstype = 'jffs2'
-                elif re.search(r'\bminix filesystem\b', fsdesc):
+                elif "minix filesystem" in fsdesc:
                     self.fstype = 'minix'
                 elif fsdesc in FILE_SYSTEM_GUIDS:
                     # this is a bit of a workaround for the fill_guid method
