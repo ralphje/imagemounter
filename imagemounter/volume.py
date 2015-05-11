@@ -227,6 +227,8 @@ class Volume(object):
                 elif '0x83' in fsdesc:
                     # this is a linux mount, but we can't figure out which one.
                     # we hand it off to the OS, maybe it can try something.
+                    # if we use last_resort for more enhanced stuff, we may need to check if we are not setting
+                    # it to something less specific here
                     last_resort = 'unknown'
                     continue
                 else:
@@ -235,7 +237,7 @@ class Volume(object):
                 logger.info("Detected {0} as {1}".format(fsdesc, self.fstype))
                 break  # we found something
             else:  # we found nothing
-                if not last_resort or last_resort == 'unknown':
+                if not last_resort or (last_resort == 'unknown' and self.fsfallback):
                     self.fstype = self.fsfallback
                 else:
                     self.fstype = last_resort
