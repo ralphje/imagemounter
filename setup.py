@@ -26,7 +26,7 @@ setup(
     download_url='https://github.com/ralphje/imagemounter/tarball/v' + metadata['version'],
     description='Utility to mount partitions in Encase, AFF and dd images locally on Linux operating systems.',
     long_description=long_description,
-    entry_points={'console_scripts': ['imount = imagemounter.mount_images:main']},
+    entry_points={'console_scripts': ['imount = imagemounter.imount:main']},
     install_requires=['termcolor>=1.0.0'],
     extras={"magic": ["python-magic>=0.4"]},
     keywords=['encase', 'aff', 'dd', 'disk image', 'ewfmount', 'affuse', 'xmount', 'imount'],
