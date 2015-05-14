@@ -21,7 +21,10 @@ FILE_SYSTEM_GUIDS = {
     '2AE031AA-0F40-DB11-9590-000C2911D1B8': 'vmfs',
     '8053279D-AD40-DB11-BF97-000C2911D1B8': 'vmkcore-diagnostics',
     '6A898CC3-1DD2-11B2-99A6-080020736631': 'zfs-member',
-    'C38C896A-D21D-B211-99A6-080020736631': 'zfs-member'
+    'C38C896A-D21D-B211-99A6-080020736631': 'zfs-member',
+    '0FC63DAF-8483-4772-8E79-3D69D8477DE4': 'linux',
+    'E6D6D379-F507-44C2-A23C-238F2A3DF928': 'lvm',
+    'CA7D7CCB-63ED-4C53-861C-1742536059CC': 'luks'
 }
 
 
@@ -167,7 +170,7 @@ class Volume(object):
 
     def determine_fs_type(self):
         """Determines the FS type for this partition. This function is used internally to determine which mount system
-        to use, based on the file system description. Return values include *ext*, *bsd*, *ntfs*, *lvm* and *luks*.
+        to use, based on the file system description. Return values include *ext*, *ufs*, *ntfs*, *lvm* and *luks*.
         """
 
         # Determine fs type. If forced, always use provided type.
@@ -197,7 +200,7 @@ class Volume(object):
                 elif re.search(r'\bext[0-9]*\b', fsdesc):
                     self.fstype = 'ext'
                 elif 'bsd' in fsdesc:
-                    self.fstype = 'bsd'
+                    self.fstype = 'ufs'
                 elif '0x07' in fsdesc or 'ntfs' in fsdesc:
                     self.fstype = 'ntfs'
                 elif '0x8e' in fsdesc or 'lvm' in fsdesc:
@@ -455,7 +458,7 @@ class Volume(object):
 
                 util.check_call_(cmd, stdout=subprocess.PIPE)
 
-            elif self.fstype == 'bsd':
+            elif self.fstype == 'ufs':
                 # ufs
                 # mount -t ufs -o ufstype=ufs2,loop,ro,offset=4294967296 /tmp/image/ewf1 /media/a
                 cmd = ['mount', raw_path, self.mountpoint, '-t', 'ufs', '-o',
