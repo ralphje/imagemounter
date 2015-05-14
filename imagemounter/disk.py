@@ -10,8 +10,7 @@ import subprocess
 import tempfile
 import time
 
-from imagemounter import util, BLOCK_SIZE
-from imagemounter.util import determine_slot
+from imagemounter import _util, BLOCK_SIZE
 from imagemounter.volume import Volume
 
 
@@ -45,15 +44,15 @@ class Disk(object):
 
         # Find the type and the paths
         path = os.path.expandvars(os.path.expanduser(path))
-        if util.is_encase(path):
+        if _util.is_encase(path):
             self.type = 'encase'
-        elif util.is_vmware(path):
+        elif _util.is_vmware(path):
             self.type = 'vmdk'
-        elif util.is_compressed(path):
+        elif _util.is_compressed(path):
             self.type = 'compressed'
         else:
             self.type = 'dd'
-        self.paths = sorted(util.expand_path(path))
+        self.paths = sorted(_util.expand_path(path))
 
         self.offset = offset
         self.vstype = vstype.lower()
@@ -65,16 +64,16 @@ class Disk(object):
         if method == 'auto':
             if self.read_write:
                 self.method = 'xmount'
-            elif self.type == 'encase' and util.command_exists('ewfmount'):
+            elif self.type == 'encase' and _util.command_exists('ewfmount'):
                 self.method = 'ewfmount'
             elif self.type == 'vmdk':
-                if util.command_exists('vmware-mount'):
+                if _util.command_exists('vmware-mount'):
                     self.method = 'vmware-mount'
-                elif util.command_exists('affuse'):
+                elif _util.command_exists('affuse'):
                     self.method = 'affuse'
-            elif self.type == 'dd' and util.command_exists('affuse'):
+            elif self.type == 'dd' and _util.command_exists('affuse'):
                 self.method = 'affuse'
-            elif self.type == 'compressed' and util.command_exists('avfsd'):
+            elif self.type == 'compressed' and _util.command_exists('avfsd'):
                 self.method = 'avfs'
             else:
                 self.method = 'xmount'
@@ -82,9 +81,9 @@ class Disk(object):
             self.method = method
 
         if detection == 'auto':
-            if util.module_exists('pytsk3'):
+            if _util.module_exists('pytsk3'):
                 self.detection = 'pytsk3'
-            elif util.command_exists('mmls'):
+            elif _util.command_exists('mmls'):
                 self.detection = 'mmls'
             else:
                 self.detection = 'parted'
@@ -164,7 +163,7 @@ class Disk(object):
                     self.avfs_mountpoint = tempfile.mkdtemp(prefix='image_mounter_avfs_')
 
                     # start by calling the mountavfs command to initialize avfs
-                    util.check_call_(['avfsd', self.avfs_mountpoint, '-o', 'allow_other'], stdout=subprocess.PIPE)
+                    _util.check_call_(['avfsd', self.avfs_mountpoint, '-o', 'allow_other'], stdout=subprocess.PIPE)
 
                     # no multifile support for avfs
                     avfspath = self.avfs_mountpoint + '/' + os.path.abspath(paths[0]) + '#'
@@ -206,7 +205,7 @@ class Disk(object):
                 try:
                     cmd.extend(paths)
                     cmd.append(self.mountpoint)
-                    util.check_call_(cmd, stdout=subprocess.PIPE)
+                    _util.check_call_(cmd, stdout=subprocess.PIPE)
                     # mounting does not seem to be instant add a timer here
                     time.sleep(.1)
                 except Exception:
@@ -214,7 +213,7 @@ class Disk(object):
                     if fallbackcmd:
                         fallbackcmd.extend(paths)
                         fallbackcmd.append(self.mountpoint)
-                        util.check_call_(fallbackcmd, stdout=subprocess.PIPE)
+                        _util.check_call_(fallbackcmd, stdout=subprocess.PIPE)
                     else:
                         raise
                 raw_path = self.get_raw_path()
@@ -279,14 +278,14 @@ class Disk(object):
     def is_raid(self):
         """Tests whether this image (was) part of a RAID array. Requires :command:`mdadm` to be installed."""
 
-        if not util.command_exists('mdadm'):
+        if not _util.command_exists('mdadm'):
             logger.info("mdadm not installed, could not detect RAID")
             return False
 
         # Scan for new lvm volumes
         # noinspection PyBroadException
         try:
-            result = util.check_output_(["mdadm", "--examine", self.get_raw_path()], stderr=subprocess.STDOUT)
+            result = _util.check_output_(["mdadm", "--examine", self.get_raw_path()], stderr=subprocess.STDOUT)
             for l in result.splitlines():
                 if 'Raid Level' in l:
                     logger.debug("Detected RAID level " + l[l.index(':') + 2:])
@@ -312,7 +311,7 @@ class Disk(object):
         # find free loopback device
         # noinspection PyBroadException
         try:
-            self.loopback = util.check_output_(['losetup', '-f']).strip()
+            self.loopback = _util.check_output_(['losetup', '-f']).strip()
         except Exception:
             logger.warning("No free loopback device found for RAID", exc_info=True)
             return False
@@ -323,7 +322,7 @@ class Disk(object):
             cmd.insert(1, '-r')
 
         try:
-            util.check_call_(cmd, stdout=subprocess.PIPE)
+            _util.check_call_(cmd, stdout=subprocess.PIPE)
         except Exception:
             logger.exception("Failed mounting image to loopback")
             return False
@@ -331,7 +330,7 @@ class Disk(object):
         try:
             # use mdadm to mount the loopback to a md device
             # incremental and run as soon as available
-            output = util.check_output_(['mdadm', '-IR', self.loopback], stderr=subprocess.STDOUT)
+            output = _util.check_output_(['mdadm', '-IR', self.loopback], stderr=subprocess.STDOUT)
             match = re.findall(r"attached to ([^ ,]+)", output)
             if match:
                 self.md_device = os.path.realpath(match[0])
@@ -349,11 +348,11 @@ class Disk(object):
         The disktype data is only loaded and not assigned to volumes yet.
         """
 
-        if not util.command_exists('disktype'):
+        if not _util.command_exists('disktype'):
             logger.warning("disktype not installed, could not detect volume type")
             return None
 
-        disktype = util.check_output_(['disktype', self.get_raw_path()]).strip()
+        disktype = _util.check_output_(['disktype', self.get_raw_path()]).strip()
 
         current_partition = None
         for line in disktype.splitlines():
@@ -441,7 +440,7 @@ class Disk(object):
         else:
             volume.index = '{0}.0'.format(self.index)
 
-        filesize = util.check_output_(['du', '-scDb', self.get_fs_path()]).strip()
+        filesize = _util.check_output_(['du', '-scDb', self.get_fs_path()]).strip()
         if filesize:
             volume.size = int(filesize.splitlines()[-1].split()[0])
 
@@ -470,7 +469,7 @@ class Disk(object):
         else:
             volume.index = '{0}.0'.format(self.index)
 
-        description = util.check_output_(['file', '-sL', self.get_fs_path()]).strip()
+        description = _util.check_output_(['file', '-sL', self.get_fs_path()]).strip()
         if description:
             # description is the part after the :, until the first comma
             volume.fsdescription = description.split(': ', 1)[1].split(',', 1)[0].strip()
@@ -574,7 +573,7 @@ class Disk(object):
 
             if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
                 volume.flag = 'alloc'
-                volume.slot = determine_slot(p.table_num, p.slot_num)
+                volume.slot = _util.determine_slot(p.table_num, p.slot_num)
                 self._assign_disktype_data(volume)
                 logger.info("Found allocated {2}: block offset: {0}, length: {1} ".format(p.start, p.len,
                                                                                           volume.fsdescription))
@@ -601,7 +600,7 @@ class Disk(object):
             if self.vstype != 'detect':
                 cmd.extend(['-t', self.vstype])
             cmd.append(self.get_raw_path())
-            output = util.check_output_(cmd, stderr=subprocess.STDOUT)
+            output = _util.check_output_(cmd, stderr=subprocess.STDOUT)
             self.volume_source = 'multi'
         except Exception as e:
             # some bug in sleuthkit makes detection sometimes difficult, so we hack around it:
@@ -611,7 +610,7 @@ class Disk(object):
                     logger.warning("[-] Error in retrieving volume info: mmls couldn't decide between GPT and DOS, "
                                    "choosing GPT for you. Use --vstype=dos to force DOS.", exc_info=True)
                     cmd = ['mmls', '-t', self.vstype, self.get_raw_path()]
-                    output = util.check_output_(cmd, stderr=subprocess.STDOUT)
+                    output = _util.check_output_(cmd, stderr=subprocess.STDOUT)
                     self.volume_source = 'multi'
                 except Exception as e:
                     logger.exception("Failed executing mmls command")
@@ -656,9 +655,9 @@ class Disk(object):
             else:
                 volume.flag = 'alloc'
                 if ":" in slot:
-                    volume.slot = determine_slot(*slot.split(':'))
+                    volume.slot = _util.determine_slot(*slot.split(':'))
                 else:
-                    volume.slot = determine_slot(-1, slot)
+                    volume.slot = _util.determine_slot(-1, slot)
                 self._assign_disktype_data(volume)
                 logger.info("Found allocated {2}: block offset: {0}, length: {1} ".format(start, length,
                                                                                           volume.fsdescription))
@@ -678,7 +677,7 @@ class Disk(object):
         # output, so we need to execute it twice.
         meta_volumes = []
         try:
-            output = util.check_output_(['parted', self.get_raw_path(), 'print'])
+            output = _util.check_output_(['parted', self.get_raw_path(), 'print'])
             for line in output.splitlines():
                 if 'extended' in line:
                     meta_volumes.append(int(line.split()[0]))
@@ -689,7 +688,7 @@ class Disk(object):
         try:
             # parted does not support passing in the vstype. It either works, or it doesn't.
             cmd = ['parted', self.get_raw_path(), '-sm', 'unit s', 'print free']
-            output = util.check_output_(cmd)
+            output = _util.check_output_(cmd)
             self.volume_source = 'multi'
         except Exception as e:
             logger.exception("Failed executing parted command")
@@ -765,7 +764,7 @@ class Disk(object):
             # Removes the RAID device first. Actually, we should be able to remove the devices from the array separately,
             # but whatever.
             try:
-                util.check_call_(['mdadm', '-S', self.md_device], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                _util.check_call_(['mdadm', '-S', self.md_device], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 self.md_device = None
             except Exception as e:
                 logger.warning("Failed unmounting MD device {0}".format(self.md_device), exc_info=True)
@@ -773,16 +772,16 @@ class Disk(object):
         if self.loopback:
             # noinspection PyBroadException
             try:
-                util.check_call_(['losetup', '-d', self.loopback])
+                _util.check_call_(['losetup', '-d', self.loopback])
                 self.loopback = None
             except Exception:
                 logger.warning("Failed deleting loopback device {0}".format(self.loopback), exc_info=True)
 
-        if self.mountpoint and not util.clean_unmount(['fusermount', '-u'], self.mountpoint):
+        if self.mountpoint and not _util.clean_unmount(['fusermount', '-u'], self.mountpoint):
             logger.error("Error unmounting base {0}".format(self.mountpoint))
             return False
 
-        if self.avfs_mountpoint and not util.clean_unmount(['fusermount', '-u'], self.avfs_mountpoint):
+        if self.avfs_mountpoint and not _util.clean_unmount(['fusermount', '-u'], self.avfs_mountpoint):
             logger.error("Error unmounting AVFS mountpoint {0}".format(self.avfs_mountpoint))
             return False
 

@@ -10,7 +10,6 @@ FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'luks', 'lvm', 'xfs', 'iso', 'udf', '
                      'vmfs', 'squashfs', 'jffs2', 'cramfs', 'minix', 'dir', 'unknown')
 
 
-from imagemounter import util
 from imagemounter.parser import ImageParser
 from imagemounter.disk import Disk
 from imagemounter.volume import Volume

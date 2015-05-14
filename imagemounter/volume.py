@@ -11,7 +11,7 @@ import tempfile
 import threading
 import sys
 import shutil
-from imagemounter import util, FILE_SYSTEM_TYPES
+from imagemounter import _util, FILE_SYSTEM_TYPES
 
 
 logger = logging.getLogger(__name__)
@@ -285,7 +285,7 @@ class Volume(object):
         :return: boolean indicating whether the command succeeded
         """
 
-        if not util.command_exists('photorec'):
+        if not _util.command_exists('photorec'):
             logger.warning("photorec is not installed, could not carve volume")
             return False
 
@@ -302,13 +302,13 @@ class Volume(object):
                 loopback_was_created_for_carving = True
 
             try:
-                util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.loopback,
+                _util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.loopback,
                                   ("freespace," if freespace else "") + "search"])
 
                 # clean out the loop device if we created it specifically for carving
                 if loopback_was_created_for_carving:
                     try:
-                        util.check_call_(['losetup', '-d', self.loopback])
+                        _util.check_call_(['losetup', '-d', self.loopback])
                     except Exception:
                         pass
                     else:
@@ -320,7 +320,7 @@ class Volume(object):
                 return False
         else:
             try:
-                util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.get_raw_base_path(),
+                _util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.get_raw_base_path(),
                                   str(self.slot) + (",freespace" if freespace else "") + ",search"])
                 return True
 
@@ -409,7 +409,7 @@ class Volume(object):
 
         # noinspection PyBroadException
         try:
-            loopback = util.check_output_(['losetup', '-f']).strip()
+            loopback = _util.check_output_(['losetup', '-f']).strip()
             setattr(self, var_name, loopback)
         except Exception:
             logger.warning("No free loopback device found.", exc_info=True)
@@ -422,7 +422,7 @@ class Volume(object):
                        loopback, self.get_raw_base_path()]
                 if not self.disk.read_write:
                     cmd.insert(1, '-r')
-                util.check_call_(cmd, stdout=subprocess.PIPE)
+                _util.check_call_(cmd, stdout=subprocess.PIPE)
             except Exception as e:
                 logger.exception("Loopback device could not be mounted.")
                 return False
@@ -456,7 +456,7 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                util.check_call_(cmd, stdout=subprocess.PIPE)
+                _util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype == 'ufs':
                 # ufs
@@ -466,7 +466,7 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                util.check_call_(cmd, stdout=subprocess.PIPE)
+                _util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype == 'ntfs':
                 # NTFS
@@ -475,7 +475,7 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                util.check_call_(cmd, stdout=subprocess.PIPE)
+                _util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype == 'xfs':
                 # ext
@@ -484,7 +484,7 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                util.check_call_(cmd, stdout=subprocess.PIPE)
+                _util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype in ('iso', 'udf', 'squashfs', 'cramfs', 'minix', 'fat'):
                 mnt_type = {'iso': 'iso9660', 'fat': 'vfat'}.get(self.fstype, self.fstype)
@@ -493,20 +493,20 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                util.check_call_(cmd, stdout=subprocess.PIPE)
+                _util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype == 'vmfs':
                 if not self._find_loopback():
                     return False
 
-                util.check_call_(['vmfs-fuse', self.loopback, self.mountpoint], stdout=subprocess.PIPE)
+                _util.check_call_(['vmfs-fuse', self.loopback, self.mountpoint], stdout=subprocess.PIPE)
 
             elif self.fstype == 'unknown':  # mounts without specifying the filesystem type
                 cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                util.check_call_(cmd, stdout=subprocess.PIPE)
+                _util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype == 'jffs2':
                 self.open_jffs2()
@@ -567,7 +567,7 @@ class Volume(object):
             return False
         try:
             self.bindmountpoint = mountpoint
-            util.check_call_(['mount', '--bind', self.mountpoint, self.bindmountpoint], stdout=subprocess.PIPE)
+            _util.check_call_(['mount', '--bind', self.mountpoint, self.bindmountpoint], stdout=subprocess.PIPE)
             return True
         except Exception as e:
             self.bindmountpoint = ""
@@ -588,14 +588,14 @@ class Volume(object):
         # Check if this is a LUKS device
         # noinspection PyBroadException
         try:
-            util.check_call_(["cryptsetup", "isLuks", self.loopback], stderr=subprocess.STDOUT)
+            _util.check_call_(["cryptsetup", "isLuks", self.loopback], stderr=subprocess.STDOUT)
             # ret = 0 if isLuks
         except Exception:
             logger.warning("Not a LUKS volume")
             # clean the loopback device, we want this method to be clean as possible
             # noinspection PyBroadException
             try:
-                util.check_call_(['losetup', '-d', self.loopback])
+                _util.check_call_(['losetup', '-d', self.loopback])
                 self.loopback = ""
             except Exception:
                 pass
@@ -610,7 +610,7 @@ class Volume(object):
             cmd = ["cryptsetup", "luksOpen", self.loopback, self.luks_path]
             if not self.disk.read_write:
                 cmd.insert(1, '-r')
-            util.check_call_(cmd)
+            _util.check_call_(cmd)
         except Exception:
             self.luks_path = ""
             return None
@@ -618,7 +618,7 @@ class Volume(object):
         size = None
         # noinspection PyBroadException
         try:
-            result = util.check_output_(["cryptsetup", "status", self.luks_path])
+            result = _util.check_output_(["cryptsetup", "status", self.luks_path])
             for l in result.splitlines():
                 if "size:" in l and "key" not in l:
                     size = int(l.replace("size:", "").replace("sectors", "").strip()) * self.disk.block_size
@@ -646,12 +646,12 @@ class Volume(object):
         """
         # we have to make a ram-device to store the image, we keep 20% overhead
         size_in_kb = int((self.size / 1024) * 1.2)
-        util.check_call_(['modprobe', '-v', 'mtd'])
-        util.check_call_(['modprobe', '-v', 'jffs2'])
-        util.check_call_(['modprobe', '-v', 'mtdram', 'total_size={}'.format(size_in_kb), 'erase_size=256'])
-        util.check_call_(['modprobe', '-v', 'mtdblock'])
-        util.check_call_(['dd', 'if=' + self.get_raw_base_path(), 'of=/dev/mtd0'])
-        util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', self.mountpoint])
+        _util.check_call_(['modprobe', '-v', 'mtd'])
+        _util.check_call_(['modprobe', '-v', 'jffs2'])
+        _util.check_call_(['modprobe', '-v', 'mtdram', 'total_size={}'.format(size_in_kb), 'erase_size=256'])
+        _util.check_call_(['modprobe', '-v', 'mtdblock'])
+        _util.check_call_(['dd', 'if=' + self.get_raw_base_path(), 'of=/dev/mtd0'])
+        _util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', self.mountpoint])
 
         return True
 
@@ -666,7 +666,7 @@ class Volume(object):
             return []
 
         # Scan for new lvm volumes
-        result = util.check_output_(["lvm", "pvscan"])
+        result = _util.check_output_(["lvm", "pvscan"])
         for l in result.splitlines():
             if self.loopback in l or (self.offset == 0 and self.get_raw_base_path() in l):
                 for vg in re.findall(r'VG (\S+)', l):
@@ -677,10 +677,10 @@ class Volume(object):
             return []
 
         # Enable lvm volumes
-        util.check_call_(["vgchange", "-a", "y", self.volume_group], stdout=subprocess.PIPE)
+        _util.check_call_(["vgchange", "-a", "y", self.volume_group], stdout=subprocess.PIPE)
 
         # Gather information about lvolumes, gathering their label, size and raw path
-        result = util.check_output_(["lvdisplay", self.volume_group])
+        result = _util.check_output_(["lvdisplay", self.volume_group])
         for l in result.splitlines():
             if "--- Logical volume ---" in l:
                 self.volumes.append(Volume(disk=self.disk, stats=self.stats, fsforce=self.fsforce,
@@ -819,7 +819,7 @@ class Volume(object):
 
         if self.loopback and self.volume_group:
             try:
-                util.check_call_(['vgchange', '-a', 'n', self.volume_group], stdout=subprocess.PIPE)
+                _util.check_call_(['vgchange', '-a', 'n', self.volume_group], stdout=subprocess.PIPE)
             except Exception:
                 return False
 
@@ -827,7 +827,7 @@ class Volume(object):
 
         if self.loopback and self.luks_path:
             try:
-                util.check_call_(['cryptsetup', 'luksClose', self.luks_path], stdout=subprocess.PIPE)
+                _util.check_call_(['cryptsetup', 'luksClose', self.luks_path], stdout=subprocess.PIPE)
             except Exception:
                 return False
 
@@ -835,20 +835,20 @@ class Volume(object):
 
         if self.loopback:
             try:
-                util.check_call_(['losetup', '-d', self.loopback])
+                _util.check_call_(['losetup', '-d', self.loopback])
             except Exception:
                 return False
 
             self.loopback = ""
 
         if self.bindmountpoint:
-            if not util.clean_unmount(['umount'], self.bindmountpoint, rmdir=False):
+            if not _util.clean_unmount(['umount'], self.bindmountpoint, rmdir=False):
                 return False
 
             self.bindmountpoint = ""
 
         if self.mountpoint:
-            if not util.clean_unmount(['umount'], self.mountpoint):
+            if not _util.clean_unmount(['umount'], self.mountpoint):
                 return False
 
             self.mountpoint = ""
