@@ -11,7 +11,7 @@ def get_metadata():
 metadata = get_metadata()
 
 try:
-    long_description = open("README.md", "r").read()
+    long_description = open("README.rst", "r").read()
 except Exception:
     long_description = None
 
@@ -38,7 +38,6 @@ setup(
         'Intended Audience :: System Administrators',
         'License :: OSI Approved :: MIT License',
         'Operating System :: POSIX :: Linux',
-        'Programming Language :: Python :: 2.6',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.2',
         'Programming Language :: Python :: 3.3',
