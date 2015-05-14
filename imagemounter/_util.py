@@ -7,9 +7,12 @@ import subprocess
 import re
 import glob
 import os
+import sys
+import locale
 
 
 logger = logging.getLogger(__name__)
+encoding = locale.getdefaultlocale()[1]
 
 
 def clean_unmount(cmd, mountpoint, tries=5, rmdir=True):
@@ -105,9 +108,6 @@ def module_exists(mod):
 def check_call_(cmd, *args, **kwargs):
     logger.debug('$ {0}'.format(' '.join(cmd)))
     return subprocess.check_call(cmd, *args, **kwargs)
-
-import locale
-encoding = locale.getdefaultlocale()[1]
 
 
 def check_output_(cmd, *args, **kwargs):
@@ -238,3 +238,8 @@ def determine_slot(table, slot):
         return int(table) * 4 + int(slot) + 1
     else:
         return int(slot) + 1
+
+
+def terminal_supports_color():
+    return (sys.platform != 'Pocket PC' and (sys.platform != 'win32' or 'ANSICON' in os.environ)
+            and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty())

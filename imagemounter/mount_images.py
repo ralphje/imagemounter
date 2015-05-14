@@ -120,11 +120,14 @@ def main():
                         help='do a system check and list which tools are installed')
 
     # Utility specific
-    parser.add_argument('-c', '--color', action='store_true', default=False, help='colorize the output')
     parser.add_argument('-w', '--wait', action='store_true', default=False, help='pause on some additional warnings')
     parser.add_argument('-k', '--keep', action='store_true', default=False,
                         help='keep volumes mounted after program exits')
+    parser.add_argument('--no-interaction', action='store_true', default=False,
+                        help="do not ask for any user input, implies --keep")
     parser.add_argument('-v', '--verbose', action='count', default=False, help='enable verbose output')
+    parser.add_argument('-c', '--color', action='store_true', default=False, help='force colorizing the output')
+    parser.add_argument('--no-color', action='store_true', default=False, help='prevent colorizing the output')
 
     # Additional options
     parser.add_argument('-r', '--reconstruct', action='store_true', default=False,
@@ -183,9 +186,15 @@ def main():
                         help="do not try to find a volume system, but assume the image contains a single volume")
     parser.add_argument('--no-single', action='store_true', default=False,
                         help="prevent trying to mount the image as a single volume if no volume system was found")
-    parser.add_argument('--no-interaction', action='store_true', default=False,
-                        help="do not ask for any user input, implies --keep")
     args = parser.parse_args()
+
+    # Colorize the output by default if the terminal supports it
+    if not args.color and args.no_color:
+        args.color = False
+    elif args.color:
+        args.color = True
+    else:
+        args.color = _util.terminal_supports_color()
 
     if not args.color:
         # noinspection PyUnusedLocal,PyShadowingNames
