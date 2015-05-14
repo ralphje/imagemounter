@@ -5,7 +5,7 @@ import logging
 import sys
 import os
 from imagemounter.disk import Disk
-from imagemounter import util
+from imagemounter import _util
 
 
 logger = logging.getLogger(__name__)
@@ -197,4 +197,4 @@ class ImageParser(object):
         :return: list of all commands (to be) executed
         """
 
-        return util.force_clean(execute)
+        return _util.force_clean(execute)

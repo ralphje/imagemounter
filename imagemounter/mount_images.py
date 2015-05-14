@@ -9,7 +9,7 @@ import logging
 import sys
 import os
 
-from imagemounter import util, ImageParser, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
+from imagemounter import _util, ImageParser, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
 
 # Python 2 compatibility
 try:
@@ -46,7 +46,7 @@ def main():
 
     class CheckAction(argparse.Action):
         def _check_command(self, command, package="", why=""):
-            if util.command_exists(command):
+            if _util.command_exists(command):
                 print(" INSTALLED {}".format(command))
             elif why and package:
                 print(" MISSING   {:<20}needed for {}, part of the {} package".format(command, why, package))
@@ -61,13 +61,13 @@ def main():
             if not pip_name:
                 pip_name = module
 
-            if module == "magic" and util.module_exists(module):
+            if module == "magic" and _util.module_exists(module):
                 import magic
                 if hasattr(magic, 'from_filez'):
                     print(" INSTALLED {}".format(pip_name))
                 else:
                     print(" ERROR     {:<20}expecting {}, found other module named magic".format(pip_name, pip_name))
-            elif module != "magic" and util.module_exists(module):
+            elif module != "magic" and _util.module_exists(module):
                 print(" INSTALLED {}".format(pip_name))
             elif why:
                 print(" MISSING   {:<20}needed for {}, install using pip".format(pip_name, why))
@@ -275,30 +275,30 @@ def main():
 
     # Check if mount method is available
     mount_command = 'avfsd' if args.method == 'avfs' else args.method
-    if args.method not in ('auto', 'dummy') and not util.command_exists(mount_command):
+    if args.method not in ('auto', 'dummy') and not _util.command_exists(mount_command):
         print(col("[-] {0} is not installed!".format(args.method), 'red'))
         sys.exit(1)
-    elif args.method == 'auto' and not any(map(util.command_exists, ('xmount', 'affuse', 'ewfmount', 'vmware-mount',
+    elif args.method == 'auto' and not any(map(_util.command_exists, ('xmount', 'affuse', 'ewfmount', 'vmware-mount',
                                                                      'avfsd'))):
         print(col("[-] No tools installed to mount the image base! Please install xmount, affuse (afflib-tools), "
                   "ewfmount (ewf-tools), vmware-mount or avfs first.", 'red'))
         sys.exit(1)
 
     # Check if detection method is available
-    if args.detection == 'pytsk3' and not util.module_exists('pytsk3'):
+    if args.detection == 'pytsk3' and not _util.module_exists('pytsk3'):
         print(col("[-] pytsk3 module does not exist!", 'red'))
         sys.exit(1)
-    elif args.detection in ('mmls', 'parted') and not util.command_exists(args.detection):
+    elif args.detection in ('mmls', 'parted') and not _util.command_exists(args.detection):
         print(col("[-] {0} is not installed!".format(args.detection), 'red'))
         sys.exit(1)
-    elif args.detection == 'auto' and not any((util.module_exists('pytsk3'), util.command_exists('mmls'),
-                                               util.command_exists('parted'))):
+    elif args.detection == 'auto' and not any((_util.module_exists('pytsk3'), _util.command_exists('mmls'),
+                                               _util.command_exists('parted'))):
         print(col("[-] No tools installed to detect volumes! Please install mmls (sleuthkit), pytsk3 or parted first.",
                   'red'))
         sys.exit(1)
 
     # Check if raid is available
-    if args.raid and not util.command_exists('mdadm'):
+    if args.raid and not _util.command_exists('mdadm'):
         if explicit_raid:
             print(col("[!] RAID mount requires the mdadm command.", 'yellow'))
         args.raid = False
@@ -308,12 +308,12 @@ def main():
         args.stats = True
 
     # Check if raid is available
-    if args.disktype and not util.command_exists('disktype'):
+    if args.disktype and not _util.command_exists('disktype'):
         if explicit_disktype:
             print(col("[-] The disktype command can not be used in this session, as it is not installed.", 'yellow'))
         args.disktype = False
 
-    if args.stats and not util.command_exists('fsstat'):
+    if args.stats and not _util.command_exists('fsstat'):
         print(col("[-] The fsstat command (part of sleuthkit package) is required to obtain stats, but is not "
                   "installed. Stats can not be obtained during this session.", 'yellow'))
         args.stats = False
@@ -350,7 +350,7 @@ def main():
     if args.vstype != 'detect' and args.single:
         print("[!] There's no point in using --single in combination with --vstype.")
 
-    if args.carve and not util.command_exists('photorec'):
+    if args.carve and not _util.command_exists('photorec'):
         print(col("[-] The photorec command (part of testdisk package) is required to carve, but is not "
                   "installed. Carving will be disabled.", 'yellow'))
         args.carve = False
