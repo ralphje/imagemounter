@@ -245,3 +245,40 @@ The best example of the use of the Python interface is the :command:`imount` com
                   args
 
       See the constructor of :class:`Volume`.
+
+.. autoclass:: Unmounter
+
+   .. automethod:: preview_unmount
+   .. automethod:: unmount
+
+   .. automethod:: find_bindmounts
+   .. automethod:: find_mounts
+   .. automethod:: find_base_images
+   .. automethod:: find_volume_groups
+   .. automethod:: find_clean_dirs
+
+   .. automethod:: unmount_bindmounts
+   .. automethod:: unmount_mounts
+   .. automethod:: unmount_base_images
+   .. automethod:: unmount_volume_groups
+   .. automethod:: clean_dirs
+
+   .. attribute:: re_pattern
+
+      The regex pattern used to look for volume mountpoints.
+
+   .. attribute:: glob_pattern
+
+      The glob pattern used to look for volume mountpoints. Always used in conjunction with the :attr:`re_pattern`.
+
+   .. attribute:: orig_re_pattern
+
+      The regex pattern used to look for base mountpoints.
+
+   .. attribute:: orig_glob_pattern
+
+      The glob pattern used to look for base mountpoints. Always used in conjunction with the :attr:`orig_re_pattern`.
+
+   .. attribute:: be_greedy
+
+      If set, some more volumes and mountpoints may be found.

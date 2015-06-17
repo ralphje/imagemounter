@@ -9,9 +9,10 @@ import logging
 import sys
 import os
 
-from imagemounter import _util, ImageParser, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
+from imagemounter import _util, ImageParser, Unmounter, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
 
 # Python 2 compatibility
+
 try:
     input = raw_input
 except NameError:
@@ -28,7 +29,8 @@ def main():
     class CleanAction(argparse.Action):
         # noinspection PyShadowingNames
         def __call__(self, parser, namespace, values, option_string=None):
-            commands = ImageParser.force_clean(False)
+            unmounter = Unmounter()
+            commands = unmounter.preview_unmount()
             if not commands:
                 print("[+] Nothing to do")
                 parser.exit()
@@ -39,7 +41,7 @@ def main():
                 print("    {0}".format(c))
             try:
                 input(">>> Press [enter] to continue or ^C to cancel... ")
-                ImageParser.force_clean()
+                unmounter.unmount()
             except KeyboardInterrupt:
                 print("\n[-] Aborted.")
             parser.exit()

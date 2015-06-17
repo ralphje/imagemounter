@@ -13,3 +13,4 @@ FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'luks', 'lvm', 'xfs', 'iso', 'udf', '
 from imagemounter.parser import ImageParser
 from imagemounter.disk import Disk
 from imagemounter.volume import Volume
+from imagemounter.unmounter import Unmounter
