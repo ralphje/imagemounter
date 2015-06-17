@@ -61,24 +61,7 @@ class Disk(object):
 
         self.read_write = read_write
 
-        if method == 'auto':
-            if self.read_write:
-                self.method = 'xmount'
-            elif self.type == 'encase' and _util.command_exists('ewfmount'):
-                self.method = 'ewfmount'
-            elif self.type == 'vmdk':
-                if _util.command_exists('vmware-mount'):
-                    self.method = 'vmware-mount'
-                elif _util.command_exists('affuse'):
-                    self.method = 'affuse'
-            elif self.type == 'dd' and _util.command_exists('affuse'):
-                self.method = 'affuse'
-            elif self.type == 'compressed' and _util.command_exists('avfsd'):
-                self.method = 'avfs'
-            else:
-                self.method = 'xmount'
-        else:
-            self.method = method
+        self.method = method
 
         if detection == 'auto':
             if _util.module_exists('pytsk3'):
@@ -149,49 +132,77 @@ class Disk(object):
         if self.read_write:
             self.rwpath = tempfile.mkstemp(prefix="image_mounter_rw_cache_")[1]
 
-        if self.method == 'avfs':
-            self.avfs_mountpoint = tempfile.mkdtemp(prefix='image_mounter_avfs_')
+        # Find the mount methods
+        if self.method == 'auto':
+            methods = []
 
-            # start by calling the mountavfs command to initialize avfs
-            _util.check_call_(['avfsd', self.avfs_mountpoint, '-o', 'allow_other'], stdout=subprocess.PIPE)
+            def add_method_if_exists(method):
+                if (method == 'avfs' and _util.command_exists('avfsd')) or _util.command_exists(method):
+                    methods.append(method)
 
-            # no multifile support for avfs
-            avfspath = self.avfs_mountpoint + '/' + os.path.abspath(paths[0]) + '#'
-            targetraw = os.path.join(self.mountpoint, 'avfs')
-
-            os.symlink(avfspath, targetraw)
-            logger.debug("Symlinked {} with {}".format(avfspath, targetraw))
-            raw_path = self.get_raw_path()
-            logger.debug("Raw path to avfs is {}".format(raw_path))
-            return raw_path is not None
-
-        elif self.method == 'xmount':
-            cmds = [['xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']]
             if self.read_write:
-                cmds[0].extend(['--rw', self.rwpath])
-
-        elif self.method == 'affuse':
-            cmds = [['affuse', '-o', 'allow_other'], ['affuse']]
-
-        elif self.method == 'ewfmount':
-            cmds = [['ewfmount', '-X', 'allow_other'], ['ewfmount']]
-
-        elif self.method == 'vmware-mount':
-            cmds = [['vmware-mount']]
-
-        elif self.method == 'dummy':
-            os.rmdir(self.mountpoint)
-            self.mountpoint = ""
-            logger.debug("Raw path to dummy is {}".format(self.get_raw_path()))
-            return True
-
+                add_method_if_exists('xmount')
+            else:
+                if self.type == 'encase':
+                    add_method_if_exists('ewfmount')
+                elif self.type == 'vmdk':
+                    add_method_if_exists('vmware-mount')
+                    add_method_if_exists('affuse')
+                elif self.type == 'dd':
+                    add_method_if_exists('affuse')
+                elif self.type == 'compressed':
+                    add_method_if_exists('avfs')
+                add_method_if_exists('xmount')
         else:
-            raise Exception("Unknown mount method {0}".format(self.method))
+            methods = [self.method]
+
+        cmds = []
+        for method in methods:
+            if method == 'avfs':  # avfs does not participate in the fallback stuff, unfortunately
+                self.avfs_mountpoint = tempfile.mkdtemp(prefix='image_mounter_avfs_')
+
+                # start by calling the mountavfs command to initialize avfs
+                _util.check_call_(['avfsd', self.avfs_mountpoint, '-o', 'allow_other'], stdout=subprocess.PIPE)
+
+                # no multifile support for avfs
+                avfspath = self.avfs_mountpoint + '/' + os.path.abspath(self.paths[0]) + '#'
+                targetraw = os.path.join(self.mountpoint, 'avfs')
+
+                os.symlink(avfspath, targetraw)
+                logger.debug("Symlinked {} with {}".format(avfspath, targetraw))
+                raw_path = self.get_raw_path()
+                logger.debug("Raw path to avfs is {}".format(raw_path))
+                if self.method == 'auto':
+                    self.method = 'avfs'
+                return raw_path is not None
+
+            elif method == 'xmount':
+                cmds.extend([['xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']])
+                if self.read_write:
+                    cmds[-1].extend(['--rw', self.rwpath])
+
+            elif method == 'affuse':
+                cmds.extend([['affuse', '-o', 'allow_other'], ['affuse']])
+
+            elif method == 'ewfmount':
+                cmds.extend([['ewfmount', '-X', 'allow_other'], ['ewfmount']])
+
+            elif method == 'vmware-mount':
+                cmds.extend([['vmware-mount']])
+
+            elif method == 'dummy':
+                os.rmdir(self.mountpoint)
+                self.mountpoint = ""
+                logger.debug("Raw path to dummy is {}".format(self.get_raw_path()))
+                return True
+
+            else:
+                raise Exception("Unknown mount method {0}".format(self.method))
 
         # if multifile is enabled, add additional mount methods to the end of it
         for cmd in cmds[:]:
             if self.multifile:
-                cmds.append(cmd)
+                cmds.append(cmd[:])
                 cmds[-1].extend(self.paths)
                 cmds[-1].append(self.mountpoint)
             cmd.append(self.paths[0])
@@ -204,14 +215,16 @@ class Disk(object):
                 # mounting does not seem to be instant, add a timer here
                 time.sleep(.1)
             except Exception:
-                logger.warning('Could not mount {0}, trying other method'.format(paths[0]), exc_info=True)
+                logger.warning('Could not mount {0}, trying other method'.format(self.paths[0]), exc_info=True)
                 continue
             else:
                 raw_path = self.get_raw_path()
                 logger.debug("Raw path to disk is {}".format(raw_path))
+                if self.method == 'auto':
+                    self.method = cmd[0]
                 return raw_path is not None
 
-        logger.error('Unable to mount {0}'.format(paths[0]), exc_info=True)
+        logger.error('Unable to mount {0}'.format(self.paths[0]), exc_info=True)
         os.rmdir(self.mountpoint)
         self.mountpoint = ""
 
