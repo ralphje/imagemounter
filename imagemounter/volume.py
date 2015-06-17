@@ -34,7 +34,7 @@ class Volume(object):
     :attr:`exception` attribute is set with an exception.
     """
 
-    def __init__(self, disk=None, stats=True, fsforce=False, fsfallback=None, fstypes=None, pretty=False,
+    def __init__(self, disk=None, stats=True, fsforce=False, fsfallback='unknown', fstypes=None, pretty=False,
                  mountdir=None, **args):
         """Creates a Volume object that is not mounted yet.
 
@@ -53,6 +53,8 @@ class Volume(object):
         self.stats = stats
         self.fsforce = fsforce
         self.fsfallback = fsfallback
+        if self.fsfallback == 'none':
+            self.fsfallback = None
         self.fstypes = fstypes or {}
         self.pretty = pretty
         self.mountdir = mountdir
