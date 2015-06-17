@@ -26,26 +26,6 @@ def main():
             self.print_help()
             sys.exit(2)
 
-    class CleanAction(argparse.Action):
-        # noinspection PyShadowingNames
-        def __call__(self, parser, namespace, values, option_string=None):
-            unmounter = Unmounter()
-            commands = unmounter.preview_unmount()
-            if not commands:
-                print("[+] Nothing to do")
-                parser.exit()
-            print("[!] --clean will rigorously clean anything that looks like a mount or volume group originating "
-                  "from this utility. You may regret using this if you have other mounts or volume groups that are "
-                  "similarly named. The following commands will be executed:")
-            for c in commands:
-                print("    {0}".format(c))
-            try:
-                input(">>> Press [enter] to continue or ^C to cancel... ")
-                unmounter.unmount()
-            except KeyboardInterrupt:
-                print("\n[-] Aborted.")
-            parser.exit()
-
     class CheckAction(argparse.Action):
         def _check_command(self, command, package="", why=""):
             if _util.command_exists(command):
@@ -108,20 +88,21 @@ def main():
             parser.exit()
 
     parser = MyParser(description='Utility to mount volumes in Encase and dd images locally.')
-    parser.add_argument('images', nargs='+',
+    parser.add_argument('images', nargs='*',
                         help='path(s) to the image(s) that you want to mount; generally just the first file (e.g. '
                              'the .E01 or .001 file) or the folder containing the files is enough in the case of '
                              'split files')
 
     # Special options
     parser.add_argument('--version', action='version', version=__version__, help='display version and exit')
-    parser.add_argument('--clean', action=CleanAction, nargs=0,
-                        help='try to rigorously clean anything that resembles traces from previous runs of '
-                             'this utility (is not able to detect RAID volumes)')
     parser.add_argument('--check', action=CheckAction, nargs=0,
                         help='do a system check and list which tools are installed')
 
     # Utility specific
+    parser.add_argument('-u', '--unmount', action='store_true', default=False,
+                        help='try to unmount left-overs of previous imount runs; may occasionally not be able to '
+                             'detect all mountpoints or detect too much mountpoints; use --casename to limit '
+                             'the unmount options')
     parser.add_argument('-w', '--wait', action='store_true', default=False, help='pause on some additional warnings')
     parser.add_argument('-k', '--keep', action='store_true', default=False,
                         help='keep volumes mounted after program exits')
@@ -143,7 +124,7 @@ def main():
                         help='specify other directory for volume mountpoints')
     parser.add_argument('-p', '--pretty', action='store_true', default=False,
                         help='use pretty names for mount points; useful in combination with --mountdir')
-    parser.add_argument('--casename', default=None,
+    parser.add_argument('-cn', '--casename', default=None,
                         help='name to add to the --mountdir, often used in conjunction with --pretty')
     parser.add_argument('-rw', '--read-write', action='store_true', default=False,
                         help='mount image read-write by creating a local write-cache file in a temp directory; '
@@ -171,10 +152,10 @@ def main():
                         help="allows the specification of the filesystem type per volume number; format: 0.1=lvm, ...")
 
     # Toggles for default settings you may perhaps want to override
-    parser.add_argument('-s', '--stats', action='store_true', default=False,
+    parser.add_argument('--stats', action='store_true', default=False,
                         help='show limited information from fsstat, which will slow down mounting and may cause '
                              'random issues such as partitions being unreadable (default)')
-    parser.add_argument('-n', '--no-stats', action='store_true', default=False,
+    parser.add_argument('--no-stats', action='store_true', default=False,
                         help='do not show limited information from fsstat')
     parser.add_argument('--disktype', action='store_true', default=False,
                         help='use the disktype command to get even more information about the volumes (default)')
@@ -365,6 +346,28 @@ def main():
         print(col("[-] The photorec command (part of testdisk package) is required to carve, but is not "
                   "installed. Carving will be disabled.", 'yellow'))
         args.carve = False
+
+    if not args.images and not args.unmount:
+        print(col("[-] You must specify at least one path to a disk image", 'red'))
+        sys.exit(1)
+
+    if args.unmount:
+        unmounter = Unmounter(**vars(args))
+        commands = unmounter.preview_unmount()
+        if not commands:
+            print("[+] Nothing to do")
+            parser.exit()
+        print("[!] --unmount will rigorously clean anything that looks like a mount or volume group originating "
+              "from this utility. You may regret using this if you have other mounts or volume groups that are "
+              "similarly named. The following commands will be executed:")
+        for c in commands:
+            print("    {0}".format(c))
+        try:
+            input(">>> Press [enter] to continue or ^C to cancel... ")
+            unmounter.unmount()
+        except KeyboardInterrupt:
+            print("\n[-] Aborted.")
+        sys.exit(0)
 
     # Enumerate over all images in the CLI
     images = []
