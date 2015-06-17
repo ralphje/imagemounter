@@ -127,7 +127,10 @@ class Disk(object):
         :rtype: bool
         """
 
-        self.mountpoint = tempfile.mkdtemp(prefix='image_mounter_')
+        if self.parser.casename:
+            self.mountpoint = tempfile.mkdtemp(prefix='image_mounter_', suffix='_' + self.parser.casename)
+        else:
+            self.mountpoint = tempfile.mkdtemp(prefix='image_mounter_')
 
         if self.read_write:
             self.rwpath = tempfile.mkstemp(prefix="image_mounter_rw_cache_")[1]

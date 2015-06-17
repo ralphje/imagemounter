@@ -57,7 +57,7 @@ class Volume(object):
         self.pretty = pretty
         self.mountdir = mountdir
         if self.disk.parser.casename:
-            self.mountdir = os.path.join(mountdir or tempfile.tempdir, self.disk.parser.casename)
+            self.mountdir = os.path.join(mountdir or tempfile.gettempdir(), self.disk.parser.casename)
 
         # Should be filled somewhere
         self.size = 0
@@ -363,14 +363,15 @@ class Volume(object):
             os.makedirs(self.mountdir)
 
         if self.pretty:
-            md = self.mountdir or tempfile.tempdir
+            md = self.mountdir or tempfile.gettempdir()
             case_name = casename or self.disk.parser.casename or \
                         ".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]) or \
                         os.path.basename(self.disk.paths[0])
-            if self.disk.parser.casename == case_name:
-                pretty_label = self.get_safe_label() or ("volume-" + str(self.index))
+            if self.disk.parser.casename == case_name:  # the casename is already in the path in this case
+                pretty_label = "{0}-{1}".format(str(self.index), self.get_safe_label() or self.fstype or 'volume')
             else:
-                pretty_label = "{0}-{1}".format(case_name, self.get_safe_label() or ("volume-" + str(self.index)))
+                pretty_label = "{0}-{1}-{2}".format(case_name, str(self.index),
+                                                    self.get_safe_label() or self.fstype or 'volume')
             if suffix:
                 pretty_label += "-" + suffix
             path = os.path.join(md, pretty_label)

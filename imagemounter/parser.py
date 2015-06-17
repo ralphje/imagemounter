@@ -188,13 +188,3 @@ class ImageParser(object):
             v.bindmount(os.path.join(root.mountpoint, v.lastmountpoint[1:]))
         return root
 
-    @staticmethod
-    def force_clean(execute=True):
-        """Executes a full clean-up of any left-over traces of previous runs of :mod:`imagemounter`. This detection is
-        separate from any program execution and may therefore detect not everything or detect too much.
-
-        :param bool execute: indicates whether the actions should be executed or only returned
-        :return: list of all commands (to be) executed
-        """
-
-        return _util.force_clean(execute)
