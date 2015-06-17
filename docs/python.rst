@@ -61,7 +61,6 @@ The best example of the use of the Python interface is the :command:`imount` com
    .. attribute:: paths
                   out
                   verbose
-                  verbose_color
                   args
 
       See the constructor of :class:`ImageParser`.
@@ -116,12 +115,18 @@ The best example of the use of the Python interface is the :command:`imount` com
 
       Used for RAID support.
 
+   .. attribute:: method
+
+      Used to store the base mount method. If it is set to ``auto``, this value will be overwritten with the actually used
+      mount method after calling :func:`mount`.
+
+      See also the constructor of :class:`Disk`.
+
    .. attribute:: parser
                   path
                   offset
                   vstype
                   read_write
-                  method
                   detection
                   multifile
                   args
