@@ -539,7 +539,7 @@ class Disk(object):
                 if "(GPT or DOS at 0)" in str(e) and self.vstype != 'gpt':
                     self.vstype = 'gpt'
                     try:
-                        logger.warning("[-] Error in retrieving volume info: TSK couldn't decide between GPT and DOS, "
+                        logger.warning("Error in retrieving volume info: TSK couldn't decide between GPT and DOS, "
                                        "choosing GPT for you. Use --vstype=dos to force DOS.", exc_info=True)
                         volumes = pytsk3.Volume_Info(baseimage, getattr(pytsk3, 'TSK_VS_TYPE_' + self.vstype.upper()))
                         self.volume_source = 'multi'
@@ -610,7 +610,7 @@ class Disk(object):
             if hasattr(e, 'output') and "(GPT or DOS at 0)" in e.output.decode() and self.vstype != 'gpt':
                 self.vstype = 'gpt'
                 try:
-                    logger.warning("[-] Error in retrieving volume info: mmls couldn't decide between GPT and DOS, "
+                    logger.warning("Error in retrieving volume info: mmls couldn't decide between GPT and DOS, "
                                    "choosing GPT for you. Use --vstype=dos to force DOS.", exc_info=True)
                     cmd = ['mmls', '-t', self.vstype, self.get_raw_path()]
                     output = _util.check_output_(cmd, stderr=subprocess.STDOUT)
@@ -619,7 +619,7 @@ class Disk(object):
                     logger.exception("Failed executing mmls command")
                     return
             else:
-                logger.exception("[-] Failed executing mmls command")
+                logger.exception("Failed executing mmls command")
                 return
 
         output = output.split("Description", 1)[-1]
