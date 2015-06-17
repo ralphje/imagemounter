@@ -59,8 +59,7 @@ The best example of the use of the Python interface is the :command:`imount` com
       List of all :class:`Disk` objects.
 
    .. attribute:: paths
-                  out
-                  verbose
+                  casename
                   args
 
       See the constructor of :class:`ImageParser`.
