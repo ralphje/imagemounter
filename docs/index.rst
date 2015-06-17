@@ -37,3 +37,4 @@ Contents
    installation
    commandline
    python
+   changelog
