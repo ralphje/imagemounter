@@ -314,15 +314,16 @@ def main():
             print(col("[-] Reconstruction requires stats to be obtained, but stats can not be enabled.", 'red'))
             sys.exit(1)
 
-    if args.fsfallback and not args.fsforce:
+    if args.fsforce:
+        if not args.fsfallback or args.fsfallback == 'none':
+            print("[-] You are forcing a file system type, but have not specified the type to use. Ignoring force.")
+            args.fsforce = False
+        else:
+            print("[!] You are forcing the file system type to {0}. This may cause unexpected results."
+                  .format(args.fsfallback))
+    elif args.fsfallback and args.fsfallback not in ('unknown', 'none'):
         print("[!] You are using the file system type {0} as fallback. This may cause unexpected results."
               .format(args.fsfallback))
-    elif args.fsfallback and args.fsforce:
-        print("[!] You are forcing the file system type to {0}. This may cause unexpected results."
-              .format(args.fsfallback))
-    elif not args.fsfallback and args.fsforce:
-        print("[-] You are forcing a file system type, but have not specified the type to use. Ignoring force.")
-        args.fsforce = False
 
     if args.fstypes:
         try:
