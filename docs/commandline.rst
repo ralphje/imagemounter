@@ -33,18 +33,20 @@ Some useful facilities.
 
    Shows the current version and exits.
 
-.. cmdoption:: --clean
+.. cmdoption:: --check
+
+   Shows which third-party utilities you have installed for a correct functioning of imagemounter.
+
+.. cmdoption:: --unmount
+               -u
 
    Option that will try to identify leftover files from previous :command:`imount` executions and try to delete these. This will, for instance, clean leftover :file:`/tmp/im_{...}` mounts and mountpoints. This command will allow you to review the actions that will be taken before they are done.
+
+   Can be combined with :option:`--casename`, :option:`--mountdir` and :option:`--pretty` to specify which mount points to delete.
 
 CLI behaviour
 ^^^^^^^^^^^^^
 The next four command-line options alter the behaviour of the :command:`imount` utility, but does not affect the behaviour of the underlying :mod:`imagemounter` module.
-
-.. cmdoption:: --color
-               -c
-
-   Colorizes the output. Verbose message will be colored blue, for instance. Requires the :mod:`termcolor` package.
 
 .. cmdoption:: --wait
                -w
@@ -56,10 +58,20 @@ The next four command-line options alter the behaviour of the :command:`imount` 
 
    Skips the unmounting at the end of the program.
 
+.. cmdoption:: --no-interaction
+
+   Never ask for input from the user, implies :option:`--keep`.
+
 .. cmdoption:: --verbose
                -v
 
-   Show verbose output
+   Show verbose output. Repeat for more verbosity (up to 4).
+
+.. cmdoption:: --color
+               --no-color
+
+   Force toggle colorizing the output. Verbose message will be colored blue, for instance. Requires the :mod:`termcolor` package.
+
 
 Additional features
 ^^^^^^^^^^^^^^^^^^^
@@ -74,6 +86,10 @@ This command-line option enables an additional and useful feature.
 
    Implies :option:`--stats`.
 
+.. cmdoption:: --carve
+
+   Carves the filesystem for missing files.
+
 Mount behaviour
 ^^^^^^^^^^^^^^^
 These arguments alter some pieces of the mount behaviour of :mod:`imagemounter`, mostly to ease your work.
@@ -87,6 +103,11 @@ These arguments alter some pieces of the mount behaviour of :mod:`imagemounter`,
                -p
 
    Uses pretty names for volume mount points. This is useful in combination with :option:`--mountdir`, but you should be careful using this option. It does not provide a fallback when the mount point is not available or other issues arise. It can also not be cleaned with :option:`--clean`.
+
+.. cmdoption:: --casename
+               -cn
+
+   Use to specify the case name, which is used in pretty mounts, but also for the location of the mountdir. Useful if you want to be able to identify the mountpoints later.
 
 .. cmdoption:: --read-write
                -rw
@@ -109,7 +130,7 @@ While :mod:`imagemounter` will try to automatically detect as much as possible, 
 .. cmdoption:: --detection <method>
                -d <method>
 
-   Specifies the volume detection method. Available options are `pytsk3`, `mmls` and `auto`, which is the default. Though `pytsk3` and `mmls` should in principle deliver identical results, `pytsk3` can be considered more reliable as this uses the C API of The Sleuth Kit (TSK). However, it also requires :mod:`pytsk3` to be installed, which is not possible with Py3K.
+   Specifies the volume detection method. Available options are `pytsk3`, `mmls`, `parted` and `auto`, which is the default. Though `pytsk3` and `mmls` should in principle deliver identical results, `pytsk3` can be considered more reliable as this uses the C API of The Sleuth Kit (TSK). However, it also requires :mod:`pytsk3` to be installed, which is not possible with Py3K.
 
 .. cmdoption:: --vstype <type>
 
@@ -117,7 +138,7 @@ While :mod:`imagemounter` will try to automatically detect as much as possible, 
 
 .. cmdoption:: --fsfallback <type>
 
-   Specifies a fallback option for the filesystem of a volume if automatic detection fails. Available options are `ext`, `ufs`, `ntfs`, `luks`, `lvm` and `unknown`, with the latter simply mounting the volume without specifying type.
+   Specifies a fallback option for the filesystem of a volume if automatic detection fails. Available options include `ext`, `ufs`, `ntfs`, `luks`, `lvm` and `unknown`, with the latter simply mounting the volume without specifying type. See the command-line help for all available volume types.
 
 .. cmdoption:: --fsforce
 
@@ -153,3 +174,9 @@ Advanced toggles
    :command:`imount` will, by default, try to detect whether the disk that is being mounted, contains an entire volume system, or only a single volume. If you know your volumes are not single volumes, or you know they are, use :option:`--no-single` and :option:`--single` respectively.
 
    Where :option:`--single` forces the mounting of the disk as a single volume, :option:`--no-single` will prevent the identification of the disk as a single volume if no volume system is found.
+
+
+.. cmdoption:: --disktype
+               --no-disktype
+
+   Forcibly enable or disable the use of :command:`disktype` for additional disk information.
