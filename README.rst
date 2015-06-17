@@ -13,11 +13,11 @@ detect the volume system and then mount each volume seperately. If it fails find
 it will try to mount the entire image as a whole if it succeeds in detecting what it actually is.
 
 This package supports Python 2.6 and 2.7, and Python 3.2+. Versions before 1.5.0 depended on pytsk3, but 1.5.0
-introduced the option to use the result of the `mmls` command instead.
+introduced the option to use the result of the ``mmls`` command instead.
 
 Documentation
 =============
-Full documentation of this project is available from http://imagemounter.readthedocs.org/ or in the `docs/` directory.
+Full documentation of this project is available from http://imagemounter.readthedocs.org/ or in the ``docs/`` directory.
 
 Installation
 ============
@@ -26,13 +26,13 @@ Just perform the following commands for a full install, including all optional d
     apt-get install python-setuptools xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm cryptsetup libmagic1 avfs disktype squashfs-tools mtd-tools vmfs-tools
     pip install imagemounter
 
-You can install `vmware-mount` by installing VMware Workstation on your system.
+You can install ``vmware-mount`` by installing VMware Workstation on your system.
 
-Use `imount --check` to verify which packages are (not) installed.
+Use ``imount --check`` to verify which packages are (not) installed.
 
 Python packages
 ---------------
-This package does not require other packages, though _termcolor_ is recommended and _pytsk3_ is needed if you wish to
+This package does not require other packages, though ``termcolor`` is recommended and ``pytsk3`` is needed if you wish to
 use this package for volume detection.
 
 Important notes
