@@ -5,7 +5,6 @@ import logging
 import sys
 import os
 from imagemounter.disk import Disk
-from imagemounter import _util
 
 
 logger = logging.getLogger(__name__)
@@ -85,8 +84,6 @@ class ImageParser(object):
         for disk in self.disks:
             result = disk.rw_active() or result
         return result
-
-    mount_base = mount_disks  # backwards compatibility
 
     def mount_raid(self):
         """Creates a RAID device and adds all devices to the RAID array, i.e. calling :func:`Disk.add_to_raid` on all

@@ -509,8 +509,6 @@ class Disk(object):
             logger.error("No viable detection method found")
             return
 
-    mount_partitions = mount_multiple_volumes  # Backwards compatibility
-
     def _find_pytsk3_volumes(self):
         """Finds all volumes based on the pytsk3 library."""
 
@@ -795,4 +793,3 @@ class Disk(object):
 
         return True
 
-    clean = unmount  # backwards compatibility

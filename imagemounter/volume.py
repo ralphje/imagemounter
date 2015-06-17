@@ -247,8 +247,6 @@ class Volume(object):
 
         return self.fstype
 
-    get_fs_type = determine_fs_type  # backwards compatibility, remove in 2.0
-
     def get_raw_base_path(self):
         """Retrieves the base mount path of the volume. Typically equals to :func:`Disk.get_fs_path` but may also be the
         path to a logical volume. This is used to determine the source path for a mount call.
