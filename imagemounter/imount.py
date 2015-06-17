@@ -143,7 +143,7 @@ def main():
     parser.add_argument('--vstype', choices=VOLUME_SYSTEM_TYPES,
                         default="detect", help='specify type of volume system (partition table); if you don\'t know, '
                                                'use "detect" to try to detect (default: detect)')
-    parser.add_argument('--fsfallback', choices=FILE_SYSTEM_TYPES, default=None,
+    parser.add_argument('--fsfallback', choices=FILE_SYSTEM_TYPES + ('none', ), default='unknown',
                         help="specify fallback type of the filesystem, which is used when it could not be detected or "
                              "is unsupported; use unknown to mount without specifying type")
     parser.add_argument('--fsforce', action='store_true', default=False,
