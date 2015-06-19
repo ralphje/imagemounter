@@ -1,6 +1,11 @@
 Release notes
 =============
 
+We try to reduce backwards compatibility breakage only to major version releases, i.e. X.0.0. Minor releases (1.X.0) may include new features, whereas patch releases (1.0.X) will generally be used to fix bugs. Not all versions have followed these simple rules to date (and sometimes new features may creep up in patch releases), but we try to adhere them as much as possible :).
+
+Release history
+~~~~~~~~~~~~~~~
+
 2.0.2 (2015-06-17)
 ------------------
 * Bugfix in --check regarding the python-magic module
@@ -10,8 +15,8 @@ Release notes
 ------------------
 * Changed the default ``fsfallback`` to ``unknown``, instead of ``none``.
 
-2.0 (2015-06-17)
-----------------
+2.0.0 (2015-06-17)
+------------------
 * Introduce support for XFS, ISO, JFFS2, FAT, SquashFS, CramFS, VMFS, UDF and Minix (cheers martinvw!)
 * Add ability to read the disk GUID using disktype, and read the filesystem magic for better detection of filesystems (cheers martinvw!)
 * Add support for 'mounting' directories and compressed files using avfs (cheers martinvw!)
@@ -175,13 +180,16 @@ Release notes
 * Add support for reconstructing the filesystem using bindmounts
 * More reliable use of fsstat
 * Overhauled Python API with more transparency and less CLI requirements
+
   * Store yielded information in a ImagePartition
   * Remove dependency on args and add them to the class explicitly
   * Do not depend on user interaction or CLI output in ImageParser or util, but do CLI in __main__
+
 * Support for LVM
 * Support for ewfmount
 * Retrieve stats more reliably
 * New CLI arguments:
+
   * Colored output with --color
   * Wait for warnings with --wait
   * Support for automatic method with --method=auto
