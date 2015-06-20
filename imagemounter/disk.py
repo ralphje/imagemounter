@@ -191,7 +191,7 @@ class Disk(object):
                 cmds.extend([['ewfmount', '-X', 'allow_other'], ['ewfmount']])
 
             elif method == 'vmware-mount':
-                cmds.extend([['vmware-mount', '-f']])
+                cmds.extend([['vmware-mount', '-r', '-f']])
 
             elif method == 'dummy':
                 os.rmdir(self.mountpoint)
