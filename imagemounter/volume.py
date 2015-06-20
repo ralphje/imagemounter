@@ -159,6 +159,7 @@ class Volume(object):
             # noinspection PyUnresolvedReferences
             import magic
 
+            # TODO fallback to img-cat image -s blocknum | file -
             with io.open(self.disk.get_fs_path(), "rb") as file:
                 file.seek(self.offset)
                 header = file.read(min(self.size, 4096) if self.size else 4096)
@@ -472,7 +473,7 @@ class Volume(object):
             elif self.fstype == 'ntfs':
                 # NTFS
                 cmd = ['mount', raw_path, self.mountpoint, '-t', 'ntfs', '-o',
-                       'loop,show_sys_files,noexec,offset=' + str(self.offset)]
+                       'loop,show_sys_files,noexec,force,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
