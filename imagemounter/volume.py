@@ -154,17 +154,34 @@ class Volume(object):
     def get_magic_type(self):
         """Checks the volume for its magic bytes and returns the magic."""
 
+        with io.open(self.disk.get_fs_path(), "rb") as file:
+            file.seek(self.offset)
+            fheader = file.read(min(self.size, 4096) if self.size else 4096)
+
+        # TODO fallback to img-cat image -s blocknum | file -
         # if we were able to load the module magic
         try:
             # noinspection PyUnresolvedReferences
             import magic
 
-            # TODO fallback to img-cat image -s blocknum | file -
-            with io.open(self.disk.get_fs_path(), "rb") as file:
-                file.seek(self.offset)
-                header = file.read(min(self.size, 4096) if self.size else 4096)
-            result = magic.from_buffer(header).decode()
-            return result
+            if hasattr(magic, 'from_buffer'):
+                # using https://github.com/ahupp/python-magic
+                logger.debug("Using python-magic Python package for file type magic")
+                result = magic.from_buffer(fheader).decode()
+                return result
+
+            elif hasattr(magic, 'open'):
+                # using Magic file extensions by Rueben Thomas (Ubuntu python-magic module)
+                logger.debug("Using python-magic system package for file type magic")
+                ms = magic.open(magic.NONE)
+                ms.load()
+                result = ms.buffer(fheader)
+                ms.close()
+                return result
+
+            else:
+                logger.warning("The python-magic module is not available, but another module named magic was found.")
+
         except ImportError:
             logger.warning("The python-magic module is not available.")
         except AttributeError:

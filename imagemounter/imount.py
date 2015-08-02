@@ -46,7 +46,9 @@ def main():
             if module == "magic" and _util.module_exists(module):
                 import magic
                 if hasattr(magic, 'from_file'):
-                    print(" INSTALLED {}".format(pip_name))
+                    print(" INSTALLED {:<20}(Python package)".format(pip_name))
+                elif hasattr(magic, 'open'):
+                    print(" INSTALLED {:<20}(system package)".format(pip_name))
                 else:
                     print(" ERROR     {:<20}expecting {}, found other module named magic".format(pip_name, pip_name))
             elif module != "magic" and _util.module_exists(module):
