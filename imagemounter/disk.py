@@ -180,7 +180,7 @@ class Disk(object):
                 return raw_path is not None
 
             elif method == 'xmount':
-                cmds.extend([['xmount', '--in', 'ewf' if self.type == 'encase' else 'dd']])
+                cmds.append(['xmount', '--in', 'ewf' if self.type == 'encase' else 'dd'])
                 if self.read_write:
                     cmds[-1].extend(['--rw', self.rwpath])
 
@@ -191,7 +191,7 @@ class Disk(object):
                 cmds.extend([['ewfmount', '-X', 'allow_other'], ['ewfmount']])
 
             elif method == 'vmware-mount':
-                cmds.extend([['vmware-mount', '-r', '-f']])
+                cmds.append(['vmware-mount', '-r', '-f'])
 
             elif method == 'dummy':
                 os.rmdir(self.mountpoint)
@@ -253,13 +253,9 @@ class Disk(object):
 
             raw_path = []
             for searchdir in searchdirs:
-                raw_path.extend(glob.glob(os.path.join(searchdir, '*.dd')))
-                raw_path.extend(glob.glob(os.path.join(searchdir, '*.iso')))
-                raw_path.extend(glob.glob(os.path.join(searchdir, '*.raw')))
-                raw_path.extend(glob.glob(os.path.join(searchdir, '*.dmg')))
-                raw_path.extend(glob.glob(os.path.join(searchdir, 'ewf1')))
-                raw_path.extend(glob.glob(os.path.join(searchdir, 'flat')))
-                raw_path.extend(glob.glob(os.path.join(searchdir, 'avfs')))  # apparently it is not a dir
+                # avfs: apparently it is not a dir
+                for pattern in ['*.dd', '*.iso', '*.raw', '*.dmg', 'ewf1', 'flat', 'avfs']:
+                    raw_path.extend(glob.glob(os.path.join(searchdir, pattern)))
 
             if not raw_path:
                 logger.warning("No viable mount file found in {}.".format(searchdirs))
