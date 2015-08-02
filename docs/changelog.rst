@@ -6,10 +6,18 @@ We try to reduce backwards compatibility breakage only to major version releases
 Release history
 ~~~~~~~~~~~~~~~
 
+2.0.3 (2015-08-02)
+------------------
+* Remove error prefix ([-]) from some of the warnings
+* Do not warn about using unknown as fsfallback anymore
+* Also work properly with the python-magic system package (in addition to the totally different python-magic pip package)
+* *vmware-mount* Add -r to vmware-mount for readonly mounts
+* *ntfs* Add force to mount options
+
 2.0.2 (2015-06-17)
 ------------------
 * Bugfix in --check regarding the python-magic module
-* Fix vmware-mount support
+* *vmware-mount* Fix vmware-mount support
 
 2.0.1 (2015-06-17)
 ------------------
