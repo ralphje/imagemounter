@@ -225,6 +225,8 @@ class Volume(object):
                     self.fstype = 'ntfs'
                 elif '0x8e' in fsdesc or 'lvm' in fsdesc:
                     self.fstype = 'lvm'
+                elif 'hfs+' in fsdesc:
+                    self.fstype = 'hfs+'
                 elif 'luks' in fsdesc:
                     self.fstype = 'luks'
                 elif 'fat' in fsdesc or 'efi system partition' in fsdesc:
@@ -500,6 +502,15 @@ class Volume(object):
                 # ext
                 cmd = ['mount', raw_path, self.mountpoint, '-t', 'xfs', '-o',
                        'loop,norecovery,offset=' + str(self.offset)]
+                if not self.disk.read_write:
+                    cmd[-1] += ',ro'
+
+                _util.check_call_(cmd, stdout=subprocess.PIPE)
+
+            elif self.fstype == 'hfs+':
+                # ext
+                cmd = ['mount', raw_path, self.mountpoint, '-t', 'hfsplus', '-o',
+                       'loop,force,offset=' + str(self.offset) + ',sizelimit=' + str(self.size)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 

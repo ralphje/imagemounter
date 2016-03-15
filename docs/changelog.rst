@@ -6,6 +6,10 @@ We try to reduce backwards compatibility breakage only to major version releases
 Release history
 ~~~~~~~~~~~~~~~
 
+2.0.4 (2016-03-15)
+------------------
+* Add HFS+ support
+
 2.0.3 (2015-08-02)
 ------------------
 * Remove error prefix ([-]) from some of the warnings
