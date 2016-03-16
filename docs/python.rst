@@ -153,8 +153,6 @@ The best example of the use of the Python interface is the :command:`imount` com
    .. automethod:: bindmount
    .. automethod:: fill_stats
    .. automethod:: detect_mountpoint
-   .. automethod:: find_lvm_volumes
-   .. automethod:: open_luks_container
 
    The following details may also be available as attributes:
 

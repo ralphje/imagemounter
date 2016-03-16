@@ -348,16 +348,30 @@ class Volume(object):
                 logger.exception("Failed carving the volume.")
                 return False
 
-    def init(self, no_stats=False):
+    def _should_mount(self, only_mount=None):
+        """Indicates whether this volume should be mounted. Internal method, used by imount.py"""
+
+        return only_mount is None or \
+            self.index in only_mount or str(self.index) in only_mount or \
+            self.lastmountpoint in only_mount or \
+            self.label in only_mount
+
+    def init(self, no_stats=False, only_mount=None):
         """Generator that mounts this volume and either yields itself or recursively generates its subvolumes.
 
         More specifically, this function will call :func:`fill_stats` (iff *no_stats* is False), followed by
         :func:`mount`, followed by a call to :func:`detect_mountpoint`, after which ``self`` is yielded, or the result
         of the :func:`init` call on each subvolume is yielded
+
+        If only_mount is specified, only volume indexes in this list are mounted. Note that volume indexes are strings.
         """
 
         if self.stats and not no_stats:
             self.fill_stats()
+
+        if not self._should_mount(only_mount):
+            yield self
+            return
 
         self.mount()
 
@@ -539,10 +553,10 @@ class Volume(object):
                 _util.check_call_(cmd, stdout=subprocess.PIPE)
 
             elif self.fstype == 'jffs2':
-                self.open_jffs2()
+                self._open_jffs2()
 
             elif self.fstype == 'luks':
-                self.open_luks_container()
+                self._open_luks_container()
 
             elif self.fstype == 'lvm':
                 # LVM
@@ -552,7 +566,7 @@ class Volume(object):
                 if not self._find_loopback():
                     return False
 
-                self.find_lvm_volumes()
+                self._find_lvm_volumes()
 
             elif self.fstype == 'dir':
                 os.rmdir(self.mountpoint)
@@ -604,7 +618,7 @@ class Volume(object):
             logger.exception("Error bind mounting {0}.".format(self))
             return False
 
-    def open_luks_container(self):
+    def _open_luks_container(self):
         """Command that is an alternative to the :func:`mount` command that opens a LUKS container. The opened volume is
         added to the subvolume set of this volume. Requires the user to enter the key manually.
 
@@ -667,7 +681,7 @@ class Volume(object):
 
         return container
 
-    def open_jffs2(self):
+    def _open_jffs2(self):
         """Perform specific operations to mount a JFFS2 image. This kind of image is sometimes used for things like
         bios images. so external tools are required but given this method you don't have to memorize anything and it
         works fast and easy.
@@ -685,7 +699,7 @@ class Volume(object):
 
         return True
 
-    def find_lvm_volumes(self, force=False):
+    def _find_lvm_volumes(self, force=False):
         """Performs post-mount actions on a LVM. Scans for active volume groups from the loopback device, activates it
         and fills :attr:`volumes` with the logical volumes.
 
@@ -892,3 +906,9 @@ class Volume(object):
                 self.carvepoint = ""
 
         return True
+
+
+    # backwards compatibility
+    open_luks_container = _open_luks_container
+    open_jffs2 = _open_jffs2
+    find_lvm_volumes = _find_lvm_volumes

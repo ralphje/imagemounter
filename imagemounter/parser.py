@@ -120,7 +120,7 @@ class ImageParser(object):
             for volume in disk.mount_multiple_volumes():
                 yield volume
 
-    def mount_volumes(self, single=None):
+    def mount_volumes(self, single=None, only=None):
         """Detects volumes (as volume system or as single volume) in all disks and yields the volumes. This calls
         :func:`Disk.mount_multiple_volumes` on all disks and should be called after :func:`mount_disks`.
 
@@ -128,7 +128,7 @@ class ImageParser(object):
 
         for disk in self.disks:
             logger.info("Mounting volumes in {0}".format(disk))
-            for volume in disk.mount_volumes(single):
+            for volume in disk.mount_volumes(single, only):
                 yield volume
 
     def get_volumes(self):

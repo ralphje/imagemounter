@@ -396,7 +396,7 @@ class Disk(object):
             volumes.extend(v.get_volumes())
         return volumes
 
-    def mount_volumes(self, single=None):
+    def mount_volumes(self, single=None, only_mount=None):
         """Generator that detects and mounts all volumes in the disk.
 
         If *single* is :const:`True`, this method will call :Func:`mount_single_volumes`. If *single* is False, only
@@ -406,27 +406,27 @@ class Disk(object):
 
         if os.path.isdir(self.get_raw_path()) and self.mount_directories:
             logger.info("Raw path is a directory: using directory mount method")
-            for v in self.mount_directory():
+            for v in self.mount_directory(only_mount):
                 yield v
 
         elif single:
             # if single, then only use single_Volume
-            for v in self.mount_single_volume():
+            for v in self.mount_single_volume(only_mount):
                 yield v
         else:
             # if single == False or single == None, loop over all volumes
             amount = 0
-            for v in self.mount_multiple_volumes():
+            for v in self.mount_multiple_volumes(only_mount):
                 amount += 1
                 yield v
 
             # if single == None and no volumes were mounted, use single_volume
             if single is None and amount == 0:
                 logger.info("Mounting as single volume instead")
-                for v in self.mount_single_volume():
+                for v in self.mount_single_volume(only_mount):
                     yield v
 
-    def mount_directory(self):
+    def mount_directory(self, only_mount=None):
         """Method that 'mounts' a directory. It actually just symlinks it. It is useful for AVFS mounts, that
         are not otherwise detected. This is a last resort method.
         """
@@ -450,10 +450,10 @@ class Disk(object):
         self.volumes = [volume]
         self.volume_source = 'directory'
 
-        for v in volume.init(no_stats=True):  # stats can't be retrieved from directory
+        for v in volume.init(no_stats=True, only_mount=only_mount):  # stats can't be retrieved from directory
             yield v
 
-    def mount_single_volume(self):
+    def mount_single_volume(self, only_mount=None):
         """Mounts a volume assuming that the mounted image does not contain a full disk image, but only a
         single volume.
 
@@ -484,22 +484,22 @@ class Disk(object):
         self.volume_source = 'single'
         self._assign_disktype_data(volume)
 
-        for v in volume.init(no_stats=True):  # stats can't  be retrieved from single volumes
+        for v in volume.init(no_stats=True, only_mount=only_mount):  # stats can't  be retrieved from single volumes
             yield v
 
-    def mount_multiple_volumes(self):
+    def mount_multiple_volumes(self, only_mount=None):
         """Generator that will detect volumes in the disk file, generate :class:`Volume` objects based on this
         information and call :func:`init` on these.
         """
 
         if self.detection == 'mmls':
-            for v in self._mount_mmls_volumes():
+            for v in self._mount_mmls_volumes(only_mount):
                 yield v
         elif self.detection == 'parted':
-            for v in self._mount_parted_volumes():
+            for v in self._mount_parted_volumes(only_mount):
                 yield v
         elif self.detection == 'pytsk3':
-            for v in self._mount_pytsk3_volumes():
+            for v in self._mount_pytsk3_volumes(only_mount):
                 yield v
         else:
             logger.error("No viable detection method found")
@@ -551,7 +551,7 @@ class Disk(object):
                 baseimage.close()
                 del baseimage
 
-    def _mount_pytsk3_volumes(self):
+    def _mount_pytsk3_volumes(self, only_mount=None):
         """Generator that mounts every partition of this image and yields the mountpoint."""
 
         # Loop over all volumes in image.
@@ -588,10 +588,10 @@ class Disk(object):
                 yield volume
                 continue
 
-            for v in volume.init():
+            for v in volume.init(only_mount=only_mount):
                 yield v
 
-    def _mount_mmls_volumes(self):
+    def _mount_mmls_volumes(self, only_mount=None):
         """Finds and mounts all volumes based on mmls."""
 
         try:
@@ -666,10 +666,10 @@ class Disk(object):
                 yield volume
                 continue
 
-            for v in volume.init():
+            for v in volume.init(only_mount=only_mount):
                 yield v
 
-    def _mount_parted_volumes(self):
+    def _mount_parted_volumes(self, only_mount=None):
         """Finds and mounts all volumes based on parted."""
 
         # for some reason, parted does not properly return extended volume types in its machine
@@ -741,7 +741,7 @@ class Disk(object):
                 yield volume
                 continue
 
-            for v in volume.init():
+            for v in volume.init(only_mount=only_mount):
                 yield v
 
     def rw_active(self):
