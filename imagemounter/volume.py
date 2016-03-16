@@ -191,6 +191,8 @@ class Volume(object):
     def determine_fs_type(self):
         """Determines the FS type for this partition. This function is used internally to determine which mount system
         to use, based on the file system description. Return values include *ext*, *ufs*, *ntfs*, *lvm* and *luks*.
+
+        Note: does not do anything if fstype is already set to something sensible.
         """
 
         # Determine fs type. If forced, always use provided type.
@@ -198,6 +200,8 @@ class Volume(object):
             self.fstype = self.fstypes[str(self.index)]
         elif self.fsforce:
             self.fstype = self.fsfallback
+        elif self.fstype in FILE_SYSTEM_TYPES:
+            pass  # already correctly set
         else:
             last_resort = None  # use this if we can't determine the FS type more reliably
             # we have two possible sources for determining the FS type: the description given to us by the detection
@@ -227,6 +231,8 @@ class Volume(object):
                     self.fstype = 'lvm'
                 elif 'hfs+' in fsdesc:
                     self.fstype = 'hfs+'
+                elif 'hfs' in fsdesc:
+                    self.fstype = 'hfs'
                 elif 'luks' in fsdesc:
                     self.fstype = 'luks'
                 elif 'fat' in fsdesc or 'efi system partition' in fsdesc:
@@ -468,8 +474,7 @@ class Volume(object):
         for this volume. The volume is mounted in a temporary path (or a pretty path if :attr:`pretty` is enabled) in
         the mountpoint as specified by :attr:`mountpoint`.
 
-        If the file system type is a LUKS container, :func:`open_luks_container` is called only. If it is a LVM volume,
-        :func:`find_lvm_volumes` is called after the LVM has been mounted. Both methods will add subvolumes to
+        If the file system type is a LUKS container or LVM, additional methods may be called, adding subvolumes to
         :attr:`volumes`
 
         :return: boolean indicating whether the mount succeeded
@@ -484,60 +489,31 @@ class Volume(object):
 
         # Prepare mount command
         try:
-            if self.fstype == 'ext':
-                # ext
-                cmd = ['mount', raw_path, self.mountpoint, '-t', 'ext4', '-o',
-                       'loop,noexec,noload,offset=' + str(self.offset)]
+            def call_mount(type, opts):
+                cmd = ['mount', raw_path, self.mountpoint, '-t', type, '-o', opts]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
                 _util.check_call_(cmd, stdout=subprocess.PIPE)
+
+            if self.fstype == 'ext':
+                call_mount('ext4', 'noexec,noload,loop,offset=' + str(self.offset))
 
             elif self.fstype == 'ufs':
-                # ufs
-                # mount -t ufs -o ufstype=ufs2,loop,ro,offset=4294967296 /tmp/image/ewf1 /media/a
-                cmd = ['mount', raw_path, self.mountpoint, '-t', 'ufs', '-o',
-                       'ufstype=ufs2,loop,offset=' + str(self.offset)]
-                if not self.disk.read_write:
-                    cmd[-1] += ',ro'
-
-                _util.check_call_(cmd, stdout=subprocess.PIPE)
+                call_mount('ufs', 'ufstype=ufs2,loop,offset=' + str(self.offset))
 
             elif self.fstype == 'ntfs':
-                # NTFS
-                cmd = ['mount', raw_path, self.mountpoint, '-t', 'ntfs', '-o',
-                       'loop,show_sys_files,noexec,force,offset=' + str(self.offset)]
-                if not self.disk.read_write:
-                    cmd[-1] += ',ro'
-
-                _util.check_call_(cmd, stdout=subprocess.PIPE)
+                call_mount('ntfs', 'show_sys_files,noexec,force,loop,offset=' + str(self.offset))
 
             elif self.fstype == 'xfs':
-                # ext
-                cmd = ['mount', raw_path, self.mountpoint, '-t', 'xfs', '-o',
-                       'loop,norecovery,offset=' + str(self.offset)]
-                if not self.disk.read_write:
-                    cmd[-1] += ',ro'
-
-                _util.check_call_(cmd, stdout=subprocess.PIPE)
+                call_mount('xfs', 'norecovery,loop,offset=' + str(self.offset))
 
             elif self.fstype == 'hfs+':
-                # ext
-                cmd = ['mount', raw_path, self.mountpoint, '-t', 'hfsplus', '-o',
-                       'loop,force,offset=' + str(self.offset) + ',sizelimit=' + str(self.size)]
-                if not self.disk.read_write:
-                    cmd[-1] += ',ro'
+                call_mount('hfsplus', 'force,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
 
-                _util.check_call_(cmd, stdout=subprocess.PIPE)
-
-            elif self.fstype in ('iso', 'udf', 'squashfs', 'cramfs', 'minix', 'fat'):
+            elif self.fstype in ('iso', 'udf', 'squashfs', 'cramfs', 'minix', 'fat', 'hfs'):
                 mnt_type = {'iso': 'iso9660', 'fat': 'vfat'}.get(self.fstype, self.fstype)
-                cmd = ['mount', raw_path, self.mountpoint, '-t', mnt_type, '-o', 'loop,offset=' + str(self.offset)]
-                # not always needed, only to make command generic
-                if not self.disk.read_write:
-                    cmd[-1] += ',ro'
-
-                _util.check_call_(cmd, stdout=subprocess.PIPE)
+                call_mount(mnt_type, 'loop,offset=' + str(self.offset))
 
             elif self.fstype == 'vmfs':
                 if not self._find_loopback():
@@ -906,7 +882,6 @@ class Volume(object):
                 self.carvepoint = ""
 
         return True
-
 
     # backwards compatibility
     open_luks_container = _open_luks_container
