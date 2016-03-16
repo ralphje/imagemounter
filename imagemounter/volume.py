@@ -905,6 +905,14 @@ class Volume(object):
 
             self.volume_group = ""
 
+        if self.loopback and self.luks_path:
+            try:
+                _util.check_call_(['cryptsetup', 'luksClose', self.luks_path], stdout=subprocess.PIPE)
+            except Exception:
+                return False
+
+            self.luks_path = ""
+
         if self.bde_path:
             if not _util.clean_unmount(['fusermount', '-u'], self.bde_path):
                 return False
