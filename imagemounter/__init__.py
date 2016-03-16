@@ -6,7 +6,7 @@ __version__ = '2.0.4'
 
 BLOCK_SIZE = 512
 VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt', 'dbfiller')
-FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'hfs', 'hfs+', 'luks', 'lvm', 'xfs', 'iso', 'udf', 'fat',
+FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'hfs', 'hfs+', 'luks', 'bde', 'lvm', 'xfs', 'iso', 'udf', 'fat',
                      'vmfs', 'squashfs', 'jffs2', 'cramfs', 'minix', 'dir', 'unknown')
 
 

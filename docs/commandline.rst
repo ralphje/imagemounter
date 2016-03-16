@@ -151,6 +151,18 @@ While :mod:`imagemounter` will try to automatically detect as much as possible, 
        1=ntfs
        2=luks,2.0=lvm,2.0.1=ext
 
+.. cmdoption:: --keys <keys>
+
+   Allows the specification of key information for each volume separately. This is similar to :option:`--fstypes`. The format of the specifc value depends on the volume type.
+
+   For BDE, you can use a single letter, followed by a colon, followed by the value. This leads to the following accepted formats, similar to how the :command:`bdemount` command interprets input::
+
+        k:full volume encryption and tweak key
+        p:passphrase
+        r:recovery password
+        s:file to startup key (.bek)
+
+   LUKS is not yet supported by :option:`--keys`. Passphrases must be provided via stdin.
 
 Advanced toggles
 ^^^^^^^^^^^^^^^^

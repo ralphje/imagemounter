@@ -34,8 +34,8 @@ class Volume(object):
     :attr:`exception` attribute is set with an exception.
     """
 
-    def __init__(self, disk=None, stats=True, fsforce=False, fsfallback='unknown', fstypes=None, pretty=False,
-                 mountdir=None, **args):
+    def __init__(self, disk=None, stats=True, fsforce=False, fsfallback='unknown', fstypes=None, keys=None,
+                 pretty=False, mountdir=None, **args):
         """Creates a Volume object that is not mounted yet.
 
         :param disk: the parent disk
@@ -44,6 +44,7 @@ class Volume(object):
         :param bool fsforce: indicates whether the file system type in *fsfallback* should be used for all file systems
         :param str fsfallback: the file system type to use when automatic detection fails
         :param dict fstypes: dict mapping volume indices to file system types to (forcibly) use
+        :param dict keys: dict mapping volume indices to key material
         :param bool pretty: indicates whether pretty names should be used for the mountpoints
         :param str mountdir: location where mountpoints are created, defaulting to a temporary location
         :param args: additional arguments
@@ -56,6 +57,7 @@ class Volume(object):
         if self.fsfallback == 'none':
             self.fsfallback = None
         self.fstypes = fstypes or {}
+        self.keys = keys or {}
         self.pretty = pretty
         self.mountdir = mountdir
         if self.disk.parser.casename:
@@ -96,8 +98,9 @@ class Volume(object):
         self.volume_group = ""
         self.lv_path = ""
 
-        # Used by LUKS
+        # Used by LUKS/BDE
         self.luks_path = ""
+        self.bde_path = ""
 
         self.args = args
 
@@ -216,7 +219,7 @@ class Volume(object):
                 fsdesc = fsdesc.lower()
 
                 # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info
-                if fsdesc in ('logical volume', 'luks container', 'primary', 'basic data partition'):
+                if fsdesc in ('logical volume', 'luks containee', 'bde containee', 'primary', 'basic data partition'):
                     continue
 
                 if fsdesc == 'directory':
@@ -282,6 +285,8 @@ class Volume(object):
 
         if self.lv_path:
             return self.lv_path
+        elif self.parent and self.parent.bde_path:
+            return self.parent.bde_path + '/bde1'
         elif self.luks_path:
             return '/dev/mapper/' + self.luks_path
         elif self.parent and self.parent.luks_path:
@@ -388,7 +393,7 @@ class Volume(object):
             yield self
         else:
             for v in self.volumes:
-                logger.info("Mounting LVM volume {0}".format(v))
+                logger.info("Mounting subvolume {0}".format(v))
                 for s in v.init():
                     yield s
 
@@ -484,7 +489,7 @@ class Volume(object):
         self.determine_fs_type()
 
         # we need a mountpoint if it is not a lvm or luks volume
-        if self.fstype not in ('luks', 'lvm') and self.fstype in FILE_SYSTEM_TYPES and not self._make_mountpoint():
+        if self.fstype not in ('luks', 'lvm', 'bde') and self.fstype in FILE_SYSTEM_TYPES and not self._make_mountpoint():
             return False
 
         # Prepare mount command
@@ -533,6 +538,9 @@ class Volume(object):
 
             elif self.fstype == 'luks':
                 self._open_luks_container()
+
+            elif self.fstype == 'bde':
+                self._open_bde_container()
 
             elif self.fstype == 'lvm':
                 # LVM
@@ -598,6 +606,8 @@ class Volume(object):
         """Command that is an alternative to the :func:`mount` command that opens a LUKS container. The opened volume is
         added to the subvolume set of this volume. Requires the user to enter the key manually.
 
+        TODO: add support for :attr:`keys`
+
         :return: the Volume contained in the LUKS container, or None on failure.
         """
 
@@ -646,13 +656,63 @@ class Volume(object):
             pass
 
         container = Volume(disk=self.disk, stats=self.stats, fsforce=self.fsforce,
-                           fsfallback=self.fsfallback, fstypes=self.fstypes, pretty=self.pretty, mountdir=self.mountdir)
+                           fsfallback=self.fsfallback, fstypes=self.fstypes, keys=self.keys,
+                           pretty=self.pretty, mountdir=self.mountdir)
         container.index = "{0}.0".format(self.index)
-        container.fsdescription = 'LUKS container'
+        container.fsdescription = 'LUKS containee'
         container.flag = 'alloc'
         container.parent = self
         container.offset = 0
         container.size = size
+        self.volumes.append(container)
+
+        return container
+
+    def _open_bde_container(self):
+        """Mounts a BDE container. Uses key material provided by the :attr:`keys` attribute. The key material should be
+        provided in the same format as to :cmd:`bdemount`, used as follows:
+
+        k:full volume encryption and tweak key
+        p:passphrase
+        r:recovery password
+        s:file to startup key (.bek)
+
+        :return: the Volume contained in the BDE container, or None on failure.
+        """
+
+        self.bde_path = tempfile.mkdtemp(prefix='image_mounter_bde_')
+
+        try:
+            if str(self.index) in self.keys:
+                t, v = self.keys[str(self.index)].split(':')
+                key = ['-' + t, v]
+            else:
+                logger.warning("No key material provided for %s", self)
+                key = []
+        except ValueError:
+            logger.exception("Invalid key material provided (%s) for %s. Expecting [arg]:[value]",
+                             self.keys.get(str(self.index)), self)
+            return None
+
+        # noinspection PyBroadException
+        try:
+            cmd = ["bdemount", self.get_raw_base_path(), self.bde_path, '-o', str(self.offset)]
+            cmd.extend(key)
+            _util.check_call_(cmd)
+        except Exception:
+            self.bde_path = ""
+            logger.exception("Failed mounting BDE volume %s.", self)
+            return None
+
+        container = Volume(disk=self.disk, stats=self.stats, fsforce=self.fsforce,
+                           fsfallback=self.fsfallback, fstypes=self.fstypes, keys=self.keys,
+                           pretty=self.pretty, mountdir=self.mountdir)
+        container.index = "{0}.0".format(self.index)
+        container.fsdescription = 'BDE containee'
+        container.flag = 'alloc'
+        container.parent = self
+        container.offset = 0
+        container.size = self.size
         self.volumes.append(container)
 
         return container
@@ -704,7 +764,7 @@ class Volume(object):
         for l in result.splitlines():
             if "--- Logical volume ---" in l:
                 self.volumes.append(Volume(disk=self.disk, stats=self.stats, fsforce=self.fsforce,
-                                           fsfallback=self.fsfallback, fstypes=self.fstypes,
+                                           fsfallback=self.fsfallback, fstypes=self.fstypes, keys=self.keys,
                                            pretty=self.pretty, mountdir=self.mountdir))
                 self.volumes[-1].index = "{0}.{1}".format(self.index, len(self.volumes) - 1)
                 self.volumes[-1].fsdescription = 'Logical Volume'
@@ -845,13 +905,11 @@ class Volume(object):
 
             self.volume_group = ""
 
-        if self.loopback and self.luks_path:
-            try:
-                _util.check_call_(['cryptsetup', 'luksClose', self.luks_path], stdout=subprocess.PIPE)
-            except Exception:
+        if self.bde_path:
+            if not _util.clean_unmount(['fusermount', '-u'], self.bde_path):
                 return False
 
-            self.luks_path = ""
+            self.bde_path = ""
 
         if self.loopback:
             try:

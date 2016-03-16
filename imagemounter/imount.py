@@ -87,6 +87,7 @@ def main():
             self._check_command("vmfs-fuse", "vmfs-tools", "VMFS volumes")
             self._check_command("mount.jffs2", "mtd-tools", "JFFS2 volumes")
             self._check_command("mount.squashfs", "squashfs-tools", "SquashFS volumes")
+            self._check_command("bdemount", "libbde-utils", "Bitlocker Drive Encryption volumes")
             parser.exit()
 
     parser = MyParser(description='Utility to mount volumes in Encase and dd images locally.')
@@ -154,6 +155,9 @@ def main():
                         help="force the use of the filesystem type specified with --fsfallback for all volumes")
     parser.add_argument('--fstypes', default=None,
                         help="allows the specification of the filesystem type per volume number; format: 0.1=lvm, ...")
+    parser.add_argument('--keys', default=None,
+                        help="allows the specification of key material per volume number; format: 0.1=p:pass, ...; "
+                             "exact format depends on volume type")
 
     # Toggles for default settings you may perhaps want to override
     parser.add_argument('--stats', action='store_true', default=False,
@@ -343,6 +347,17 @@ def main():
             args.fstypes = fstypes
         except Exception as e:
             print("[!] Failed to parse --fstypes: {}".format(e))
+
+    if args.keys:
+        try:
+            keys = {}
+            # noinspection PyUnresolvedReferences
+            for key in args.keys.split(','):
+                idx, keyspec = key.split('=', 1)
+                keys[idx.strip()] = keyspec.strip()
+            args.keys = keys
+        except Exception as e:
+            print("[!] Failed to parse --keys: {}".format(e))
 
     if args.only_mount:
         args.only_mount = args.only_mount.split(',')
