@@ -202,9 +202,10 @@ class Disk(object):
             else:
                 raise Exception("Unknown mount method {0}".format(self.method))
 
+        # add path and mountpoint to the cmds
         # if multifile is enabled, add additional mount methods to the end of it
         for cmd in cmds[:]:
-            if self.multifile:
+            if self.multifile and len(self.paths) > 1:
                 cmds.append(cmd[:])
                 cmds[-1].extend(self.paths)
                 cmds[-1].append(self.mountpoint)
@@ -227,7 +228,7 @@ class Disk(object):
                     self.method = cmd[0]
                 return raw_path is not None
 
-        logger.error('Unable to mount {0}'.format(self.paths[0]), exc_info=True)
+        logger.error('Unable to mount {0}'.format(self.paths[0]))
         os.rmdir(self.mountpoint)
         self.mountpoint = ""
 
