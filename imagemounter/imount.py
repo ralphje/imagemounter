@@ -110,6 +110,8 @@ def main():
                         help='keep volumes mounted after program exits')
     parser.add_argument('--no-interaction', action='store_true', default=False,
                         help="do not ask for any user input, implies --keep")
+    parser.add_argument('-o', '--only-mount', default=None,
+                        help="specify which volume(s) you want to mount, comma-separated")
     parser.add_argument('-v', '--verbose', action='count', default=False, help='enable verbose output')
     parser.add_argument('-c', '--color', action='store_true', default=False, help='force colorizing the output')
     parser.add_argument('--no-color', action='store_true', default=False, help='prevent colorizing the output')
@@ -342,6 +344,9 @@ def main():
         except Exception as e:
             print("[!] Failed to parse --fstypes: {}".format(e))
 
+    if args.only_mount:
+        args.only_mount = args.only_mount.split(',')
+
     if args.vstype != 'detect' and args.single:
         print("[!] There's no point in using --single in combination with --vstype.")
 
@@ -424,7 +429,7 @@ def main():
             sys.stdout.flush()
             has_left_mounted = False
 
-            for volume in p.mount_volumes(args.single):
+            for volume in p.mount_volumes(args.single, args.only_mount):
                 try:
                     # something failed?
                     if not volume.mountpoint and not volume.loopback:
@@ -444,6 +449,8 @@ def main():
                                           'yellow'))
                             if args.wait:
                                 input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+                        elif not volume._should_mount(args.only_mount):
+                            print(col('[-] Skipped {0}'.format(volume.get_description()), 'yellow'))
                         else:
                             print(col('[-] Could not mount volume {0}'.format(volume.get_description()), 'yellow'))
                             if args.wait:
