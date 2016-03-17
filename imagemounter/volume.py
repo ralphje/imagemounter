@@ -232,7 +232,7 @@ class Volume(object):
                 fsdesc = fsdesc.lower()
 
                 # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info
-                if fsdesc in ('logical volume', 'luks containee', 'bde containee', 'primary', 'basic data partition'):
+                if fsdesc in ('logical volume', 'luks volume', 'bde volume', 'primary', 'basic data partition'):
                     continue
 
                 if fsdesc == 'directory':
@@ -676,7 +676,7 @@ class Volume(object):
         container = Volume(disk=self.disk, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
                            pretty=self.pretty, mountdir=self.mountdir)
         container.index = "{0}.0".format(self.index)
-        container.fsdescription = 'LUKS containee'
+        container.fsdescription = 'LUKS Volume'
         container.flag = 'alloc'
         container.parent = self
         container.offset = 0
@@ -724,7 +724,7 @@ class Volume(object):
         container = Volume(disk=self.disk, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
                            pretty=self.pretty, mountdir=self.mountdir)
         container.index = "{0}.0".format(self.index)
-        container.fsdescription = 'BDE containee'
+        container.fsdescription = 'BDE Volume'
         container.flag = 'alloc'
         container.parent = self
         container.offset = 0

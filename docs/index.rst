@@ -15,15 +15,9 @@ In its default mode, imagemounter will try to start mounting the base image on a
 detect the volume system and then mount each volume seperately. If it fails finding a volume system,
 it will try to mount the entire image as a whole if it succeeds in detecting what it actually is.
 
-Important notes
----------------
-Not all combinations of file and volume systems have been tested. If you encounter an issue, please try to change some
-of your arguments first, before creating a new GitHub issue.
-
-Please note that many Linux based operating systems will try to mount LVMs for you. Although imagemounter tries to
-circumvent this automation, if you are unable to properly unmount, you should try to unmount through the interface of
-your OS first. Another useful command is ``vgchange -a n`` to disable all LVMs currently active (only use if you are not
-using a LVM for your own OS!).
+.. note::
+   Not all combinations of file and volume systems have been tested. If you encounter an issue, please try to change
+   some of your arguments first, before creating a new GitHub issue.
 
 Contents
 --------
@@ -34,4 +28,5 @@ Contents
    installation
    commandline
    python
+   specifics
    changelog
