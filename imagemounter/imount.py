@@ -26,6 +26,18 @@ def main():
             self.print_help()
             sys.exit(2)
 
+    class AppendDictAction(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            items = getattr(namespace, self.dest, {})
+            try:
+                vals = values.split(',')
+                for t in vals:
+                    k, v = t.split('=', 1)
+                    items[k] = v
+            except ValueError:
+                parser.error("invalid argument {}".format(self.dest))
+            setattr(namespace, self.dest, items)
+
     class CheckAction(argparse.Action):
         def _check_command(self, command, package="", why=""):
             if _util.command_exists(command):
@@ -148,35 +160,43 @@ def main():
     parser.add_argument('--vstype', choices=VOLUME_SYSTEM_TYPES,
                         default="detect", help='specify type of volume system (partition table); if you don\'t know, '
                                                'use "detect" to try to detect (default: detect)')
-    parser.add_argument('--fsfallback', choices=FILE_SYSTEM_TYPES + ('none', ), default='unknown',
-                        help="specify fallback type of the filesystem, which is used when it could not be detected or "
-                             "is unsupported; use unknown to mount without specifying type")
-    parser.add_argument('--fsforce', action='store_true', default=False,
-                        help="force the use of the filesystem type specified with --fsfallback for all volumes")
-    parser.add_argument('--fstypes', default=None,
-                        help="allows the specification of the filesystem type per volume number; format: 0.1=lvm, ...")
-    parser.add_argument('--keys', default=None,
-                        help="allows the specification of key material per volume number; format: 0.1=p:pass, ...; "
+    parser.add_argument('--fstypes', action=AppendDictAction, default={'?': 'unknown'},
+                        help="allows the specification of the file system type per volume number; format: 0.1=lvm,...; "
+                             "use volume number ? for all undetected file system types and * for all file systems; "
+                             "accepted file systems types are {}".format(", ".join(FILE_SYSTEM_TYPES)) +
+                             ", and none only for the ? volume (defaults to unknown)")
+    parser.add_argument('--keys', action=AppendDictAction, default={},
+                        help="allows the specification of key material per volume number; format: 0.1=p:pass,...; "
                              "exact format depends on volume type")
 
     # Toggles for default settings you may perhaps want to override
-    parser.add_argument('--stats', action='store_true', default=False,
-                        help='show limited information from fsstat, which will slow down mounting and may cause '
-                             'random issues such as partitions being unreadable (default)')
-    parser.add_argument('--no-stats', action='store_true', default=False,
-                        help='do not show limited information from fsstat')
-    parser.add_argument('--disktype', action='store_true', default=False,
-                        help='use the disktype command to get even more information about the volumes (default)')
-    parser.add_argument('--no-disktype', action='store_true', default=False,
-                        help='do not use disktype to get more information')
-    parser.add_argument('--raid', action='store_true', default=False,
-                        help="try to detect whether the volume is part of a RAID array (default)")
-    parser.add_argument('--no-raid', action='store_true', default=False,
-                        help="prevent trying to mount the volume in a RAID array")
-    parser.add_argument('--single', action='store_true', default=False,
-                        help="do not try to find a volume system, but assume the image contains a single volume")
-    parser.add_argument('--no-single', action='store_true', default=False,
-                        help="prevent trying to mount the image as a single volume if no volume system was found")
+
+    toggroup = parser.add_argument_group('toggles')
+    toggroup.add_argument('--stats', action='store_true', default=False,
+                          help='show limited information from fsstat, which will slow down mounting and may cause '
+                               'random issues such as partitions being unreadable (default)')
+    toggroup.add_argument('--no-stats', action='store_true', default=False,
+                          help='do not show limited information from fsstat')
+    toggroup.add_argument('--disktype', action='store_true', default=False,
+                          help='use the disktype command to get even more information about the volumes (default)')
+    toggroup.add_argument('--no-disktype', action='store_true', default=False,
+                          help='do not use disktype to get more information')
+    toggroup.add_argument('--raid', action='store_true', default=False,
+                          help="try to detect whether the volume is part of a RAID array (default)")
+    toggroup.add_argument('--no-raid', action='store_true', default=False,
+                          help="prevent trying to mount the volume in a RAID array")
+    toggroup.add_argument('--single', action='store_true', default=False,
+                          help="do not try to find a volume system, but assume the image contains a single volume")
+    toggroup.add_argument('--no-single', action='store_true', default=False,
+                          help="prevent trying to mount the image as a single volume if no volume system was found")
+
+    depgroup = parser.add_argument_group('deprecated arguments',
+                                         'these arguments are deprecated and should not be used anymore')
+    depgroup.add_argument('--fsfallback', choices=FILE_SYSTEM_TYPES + ('none', ),
+                          help="same as ? in --fstypes")
+    depgroup.add_argument('--fsforce', action='store_true', default=False,
+                          help="same as * in --fstypes")
+
     args = parser.parse_args()
 
     # Colorize the output by default if the terminal supports it
@@ -279,7 +299,7 @@ def main():
         print(col("[-] {0} is not installed!".format(args.method), 'red'))
         sys.exit(1)
     elif args.method == 'auto' and not any(map(_util.command_exists, ('xmount', 'affuse', 'ewfmount', 'vmware-mount',
-                                                                     'avfsd'))):
+                                                                      'avfsd'))):
         print(col("[-] No tools installed to mount the image base! Please install xmount, affuse (afflib-tools), "
                   "ewfmount (ewf-tools), vmware-mount or avfs first.", 'red'))
         sys.exit(1)
@@ -322,42 +342,27 @@ def main():
             print(col("[-] Reconstruction requires stats to be obtained, but stats can not be enabled.", 'red'))
             sys.exit(1)
 
-    if args.fsforce:
-        if not args.fsfallback or args.fsfallback == 'none':
-            print("[-] You are forcing a file system type, but have not specified the type to use. Ignoring force.")
-            args.fsforce = False
-        else:
-            print("[!] You are forcing the file system type to {0}. This may cause unexpected results."
-                  .format(args.fsfallback))
-    elif args.fsfallback and args.fsfallback not in ('unknown', 'none'):
-        print("[!] You are using the file system type {0} as fallback. This may cause unexpected results."
-              .format(args.fsfallback))
-
     if args.fstypes:
-        try:
-            fstypes = {}
-            # noinspection PyUnresolvedReferences
-            types = args.fstypes.split(',')
-            for typ in types:
-                idx, fstype = typ.split('=', 1)
-                if fstype.strip() not in FILE_SYSTEM_TYPES:
-                    print("[!] Error while parsing --fstypes: {} is invalid".format(fstype))
-                else:
-                    fstypes[idx.strip()] = fstype.strip()
-            args.fstypes = fstypes
-        except Exception as e:
-            print("[!] Failed to parse --fstypes: {}".format(e))
+        for k, v in args.fstypes.items():
+            if v.strip() not in FILE_SYSTEM_TYPES and not (k == '?' and v.strip().lower() == 'none'):
+                print("[!] Error while parsing --fstypes: {} is invalid".format(v))
+                sys.exit(1)
 
-    if args.keys:
-        try:
-            keys = {}
-            # noinspection PyUnresolvedReferences
-            for key in args.keys.split(','):
-                idx, keyspec = key.split('=', 1)
-                keys[idx.strip()] = keyspec.strip()
-            args.keys = keys
-        except Exception as e:
-            print("[!] Failed to parse --keys: {}".format(e))
+    # deprecated arguments
+    if args.fsfallback and args.fsfallback != 'none':
+        args.fstypes['?'] = args.fsfallback
+        if args.fsforce:
+            args.fstypes['*'] = args.fsfallback
+    del args.fsfallback
+    del args.fsforce
+    # /end deprecation
+
+    if '*' in args.fstypes:
+        print("[!] You are forcing the file system type to {0}. This may cause unexpected results."
+              .format(args.fstypes['*']))
+    elif '?' in args.fstypes and args.fstypes['?'] not in ('unknown', 'none'):
+        print("[!] You are using the file system type {0} as fallback. This may cause unexpected results."
+              .format(args.fstypes['?']))
 
     if args.only_mount:
         args.only_mount = args.only_mount.split(',')
