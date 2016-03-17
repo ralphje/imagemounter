@@ -6,6 +6,12 @@ We try to reduce backwards compatibility breakage only to major version releases
 Release history
 ~~~~~~~~~~~~~~~
 
+Future version
+--------------
+* Add BDE (Bitlocker) support
+* Addition of --keys CLI argument and corresponding argument to Volume class, allowing to specify key material for crypto mounts. LUKS is not yet supported.
+* Deprecation of fsforce and fsfallback arguments and attributes to Volume, --fsforce and --fsfallback from CLI. Use * and ? as fstypes instead for the same effect. This should make the CLI more sensible, especially regarding the --fsforce argument. The FS fallback is still unknown, which can only be overridden by specifying --fstypes=?=none.
+
 2.0.4 (2016-03-15)
 ------------------
 * Add HFS+ support

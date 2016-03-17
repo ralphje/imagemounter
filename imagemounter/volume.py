@@ -11,6 +11,8 @@ import tempfile
 import threading
 import sys
 import shutil
+import warnings
+
 from imagemounter import _util, FILE_SYSTEM_TYPES
 
 
@@ -34,16 +36,17 @@ class Volume(object):
     :attr:`exception` attribute is set with an exception.
     """
 
-    def __init__(self, disk=None, stats=True, fsforce=False, fsfallback='unknown', fstypes=None, keys=None,
+    def __init__(self, disk=None, stats=True, fstypes=None, keys=None,
                  pretty=False, mountdir=None, **args):
         """Creates a Volume object that is not mounted yet.
+
+        Only use arguments stats and further as keyword arguments.
 
         :param disk: the parent disk
         :type disk: :class:`Disk`
         :param bool stats: indicates whether :func:`init` should try to fill statistics
-        :param bool fsforce: indicates whether the file system type in *fsfallback* should be used for all file systems
-        :param str fsfallback: the file system type to use when automatic detection fails
-        :param dict fstypes: dict mapping volume indices to file system types to (forcibly) use
+        :param dict fstypes: dict mapping volume indices to file system types to use; use * and ? as volume indexes for
+                             additional control. Only when ?=none, unknown will not be used as fallback.
         :param dict keys: dict mapping volume indices to key material
         :param bool pretty: indicates whether pretty names should be used for the mountpoints
         :param str mountdir: location where mountpoints are created, defaulting to a temporary location
@@ -52,11 +55,9 @@ class Volume(object):
 
         self.disk = disk
         self.stats = stats
-        self.fsforce = fsforce
-        self.fsfallback = fsfallback
-        if self.fsfallback == 'none':
-            self.fsfallback = None
-        self.fstypes = fstypes or {}
+        self.fstypes = fstypes or {'?': 'unknown'}
+        if '?' in self.fstypes and (not self.fstypes['?'] or self.fstypes['?'] == 'none'):
+            self.fstypes['?'] = None
         self.keys = keys or {}
         self.pretty = pretty
         self.mountdir = mountdir
@@ -101,6 +102,18 @@ class Volume(object):
         # Used by LUKS/BDE
         self.luks_path = ""
         self.bde_path = ""
+
+        # some backwards compatibility
+        if 'fsfallback' in args:
+            warnings.warn("fsfallback and fsforce arguments are deprecated", DeprecationWarning)
+            self.fstypes['?'] = args['fsfallback']
+            if 'fsforce' in args:
+                if args['fsforce']:
+                    self.fstypes['*'] = args['fsfallback']
+                del args['fsforce']
+            del args['fsfallback']
+        self.fsfallback = self.fstypes.get('?', None)
+        self.fsforce = '*' in self.fstypes
 
         self.args = args
 
@@ -201,8 +214,8 @@ class Volume(object):
         # Determine fs type. If forced, always use provided type.
         if str(self.index) in self.fstypes:
             self.fstype = self.fstypes[str(self.index)]
-        elif self.fsforce:
-            self.fstype = self.fsfallback
+        elif '*' in self.fstypes:
+            self.fstype = self.fstypes['*']
         elif self.fstype in FILE_SYSTEM_TYPES:
             pass  # already correctly set
         else:
@@ -271,10 +284,15 @@ class Volume(object):
                 logger.info("Detected {0} as {1}".format(fsdesc, self.fstype))
                 break  # we found something
             else:  # we found nothing
-                if not last_resort or (last_resort == 'unknown' and self.fsfallback):
-                    self.fstype = self.fsfallback
-                else:
+                # if last_resort is something more sensible than unknown, we use that
+                # if we have specified a fsfallback which is not set to None, we use that
+                # if last_resort is unknown or the fallback is not None, we use unknown
+                if last_resort and last_resort != 'unknown':
                     self.fstype = last_resort
+                elif '?' in self.fstypes and self.fstypes['?'] is not None:
+                    self.fstype = self.fstypes['?']
+                elif last_resort == 'unknown' or '?' not in self.fstypes:
+                    self.fstype = 'unknown'
 
         return self.fstype
 
@@ -655,8 +673,7 @@ class Volume(object):
         except Exception:
             pass
 
-        container = Volume(disk=self.disk, stats=self.stats, fsforce=self.fsforce,
-                           fsfallback=self.fsfallback, fstypes=self.fstypes, keys=self.keys,
+        container = Volume(disk=self.disk, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
                            pretty=self.pretty, mountdir=self.mountdir)
         container.index = "{0}.0".format(self.index)
         container.fsdescription = 'LUKS containee'
@@ -684,7 +701,7 @@ class Volume(object):
 
         try:
             if str(self.index) in self.keys:
-                t, v = self.keys[str(self.index)].split(':')
+                t, v = self.keys[str(self.index)].split(':', 1)
                 key = ['-' + t, v]
             else:
                 logger.warning("No key material provided for %s", self)
@@ -704,8 +721,7 @@ class Volume(object):
             logger.exception("Failed mounting BDE volume %s.", self)
             return None
 
-        container = Volume(disk=self.disk, stats=self.stats, fsforce=self.fsforce,
-                           fsfallback=self.fsfallback, fstypes=self.fstypes, keys=self.keys,
+        container = Volume(disk=self.disk, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
                            pretty=self.pretty, mountdir=self.mountdir)
         container.index = "{0}.0".format(self.index)
         container.fsdescription = 'BDE containee'
@@ -763,8 +779,7 @@ class Volume(object):
         result = _util.check_output_(["lvdisplay", self.volume_group])
         for l in result.splitlines():
             if "--- Logical volume ---" in l:
-                self.volumes.append(Volume(disk=self.disk, stats=self.stats, fsforce=self.fsforce,
-                                           fsfallback=self.fsfallback, fstypes=self.fstypes, keys=self.keys,
+                self.volumes.append(Volume(disk=self.disk, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
                                            pretty=self.pretty, mountdir=self.mountdir))
                 self.volumes[-1].index = "{0}.{1}".format(self.index, len(self.volumes) - 1)
                 self.volumes[-1].fsdescription = 'Logical Volume'

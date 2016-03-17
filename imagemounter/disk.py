@@ -26,6 +26,8 @@ class Disk(object):
         """Instantiation of this class does not automatically mount, detect or analyse the disk. You will need the
         :func:`init` method for this.
 
+        Only use arguments offset and further as keyword arguments.
+
         :param parser: the parent parser
         :type parser: :class:`ImageParser`
         :param int offset: offset of the disk where the volume (system) resides

@@ -146,10 +146,14 @@ While :mod:`imagemounter` will try to automatically detect as much as possible, 
 
 .. cmdoption:: --fstypes <types>
 
-   Allows the specification of filesystem type for each volume separately. You can use subvolumes, examples including::
+   Specifies the filesystem of a volume to use. Available options include `ext`, `ufs`, `ntfs`, `luks`, `lvm` and `unknown`, with the latter simply mounting the volume without specifying type. See the command-line help for all available volume types.
+
+   Filesystem types are specified for each volume separately. You can use subvolumes, examples including::
 
        1=ntfs
        2=luks,2.0=lvm,2.0.1=ext
+
+   If you wish to specify a fallback to use if automatic detection fails, you can use the special question mark (?) volume index. If you wish to override automatic detection at all for all unspecified volumes, you can use the asterisk (*) volume type. There is no point is specifying both a question mark and an asterisk.
 
 .. cmdoption:: --keys <keys>
 
