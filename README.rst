@@ -12,8 +12,7 @@ In its default mode, imagemounter will try to start mounting the base image on a
 detect the volume system and then mount each volume seperately. If it fails finding a volume system,
 it will try to mount the entire image as a whole if it succeeds in detecting what it actually is.
 
-This package supports Python 2.6 and 2.7, and Python 3.2+. Versions before 1.5.0 depended on pytsk3, but 1.5.0
-introduced the option to use the result of the ``mmls`` command instead.
+This package supports Python 2.7 and Python 3.2+.
 
 Documentation
 =============
@@ -42,9 +41,5 @@ of your arguments first, before creating a new GitHub issue.
 
 Please note that many Linux based operating systems will try to mount LVMs for you. Although imagemounter tries to
 circumvent this automation, if you are unable to properly unmount, you should try to unmount through the interface of
-your OS first. Another useful command is `vgchange -a n` to disable all LVMs currently active (only use if you are not
+your OS first. Another useful command is ``vgchange -a n`` to disable all LVMs currently active (only use if you are not
 using a LVM for your own OS!).
-
-With `imount --clear` you can clear MOST temporary files and mounts, though this will not clean everything. If you used
-`--pretty` this tool can't do anything for you. It is therefore recommended to first try and mount your image without
-`--pretty`, to allow you to easily clean up if something crashes.
