@@ -13,8 +13,11 @@ import sys
 import shutil
 import warnings
 
-from imagemounter import _util, FILE_SYSTEM_TYPES
+import time
+from collections import defaultdict
 
+from imagemounter import _util, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
+from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +29,12 @@ FILE_SYSTEM_GUIDS = {
     'C38C896A-D21D-B211-99A6-080020736631': 'zfs-member',
     '0FC63DAF-8483-4772-8E79-3D69D8477DE4': 'linux',
     'E6D6D379-F507-44C2-A23C-238F2A3DF928': 'lvm',
+    '79D3D6E6-07F5-C244-A23C-238F2A3DF928': 'lvm',
     'CA7D7CCB-63ED-4C53-861C-1742536059CC': 'luks'
 }
 
 
-class Volume(object):
+class Volume(VolumeSystem):
     """Information about a volume. Note that every detected volume gets their own Volume object, though it may or may
     not be mounted. This can be seen through the :attr:`mountpoint` attribute -- if it is not set, perhaps the
     :attr:`exception` attribute is set with an exception.
@@ -115,6 +119,9 @@ class Volume(object):
         self.fsfallback = self.fstypes.get('?', None)
         self.fsforce = '*' in self.fstypes
 
+        self.block_size = self.disk.block_size
+        self._disktype = defaultdict(dict)
+
         self.args = args
 
     def __unicode__(self):
@@ -122,6 +129,13 @@ class Volume(object):
 
     def __str__(self):
         return str(self.__unicode__())
+
+    def _make_subvolume(self):
+        v = Volume(disk=self.disk, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
+                   pretty=self.pretty, mountdir=self.mountdir)
+        v.parent = self
+        self.volumes.append(v)
+        return v
 
     def get_description(self, with_size=True):
         """Obtains a generic description of the volume, containing the file system type, index, label and NTFS version.
@@ -268,9 +282,11 @@ class Volume(object):
                     self.fstype = 'jffs2'
                 elif "minix filesystem" in fsdesc:
                     self.fstype = 'minix'
-                elif fsdesc in FILE_SYSTEM_GUIDS:
+                elif "dos/mbr boot sector" in fsdesc:
+                    self.fstype = 'dos'
+                elif fsdesc.upper() in FILE_SYSTEM_GUIDS:
                     # this is a bit of a workaround for the fill_guid method
-                    self.fstype = FILE_SYSTEM_GUIDS[fsdesc]
+                    self.fstype = FILE_SYSTEM_GUIDS[fsdesc.upper()]
                 elif '0x83' in fsdesc:
                     # this is a linux mount, but we can't figure out which one.
                     # we hand it off to the OS, maybe it can try something.
@@ -296,13 +312,15 @@ class Volume(object):
 
         return self.fstype
 
-    def get_raw_base_path(self):
+    def get_raw_path(self):
         """Retrieves the base mount path of the volume. Typically equals to :func:`Disk.get_fs_path` but may also be the
         path to a logical volume. This is used to determine the source path for a mount call.
         """
 
         if self.lv_path:
             return self.lv_path
+        elif self.parent and self.parent.lv_path:
+            return self.parent.lv_path
         elif self.parent and self.parent.bde_path:
             return self.parent.bde_path + '/bde1'
         elif self.luks_path:
@@ -369,7 +387,7 @@ class Volume(object):
                 return False
         else:
             try:
-                _util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.get_raw_base_path(),
+                _util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.get_raw_path(),
                                   str(self.slot) + (",freespace" if freespace else "") + ",search"])
                 return True
 
@@ -411,9 +429,10 @@ class Volume(object):
             yield self
         else:
             for v in self.volumes:
-                logger.info("Mounting subvolume {0}".format(v))
-                for s in v.init():
-                    yield s
+                if v.flag == 'alloc':
+                    logger.info("Mounting subvolume {0}".format(v))
+                    for s in v.init():
+                        yield s
 
     def _make_mountpoint(self, casename=None, var_name='mountpoint', suffix=''):
         """Creates a directory that can be used as a mountpoint. The directory is stored in :attr:`mountpoint`,
@@ -483,7 +502,7 @@ class Volume(object):
         if use_loopback:
             try:
                 cmd = ['losetup', '-o', str(self.offset), '--sizelimit', str(self.size),
-                       loopback, self.get_raw_base_path()]
+                       loopback, self.get_raw_path()]
                 if not self.disk.read_write:
                     cmd.insert(1, '-r')
                 _util.check_call_(cmd, stdout=subprocess.PIPE)
@@ -503,11 +522,12 @@ class Volume(object):
         :return: boolean indicating whether the mount succeeded
         """
 
-        raw_path = self.get_raw_base_path()
+        raw_path = self.get_raw_path()
         self.determine_fs_type()
 
         # we need a mountpoint if it is not a lvm or luks volume
-        if self.fstype not in ('luks', 'lvm', 'bde') and self.fstype in FILE_SYSTEM_TYPES and not self._make_mountpoint():
+        if self.fstype not in ('luks', 'lvm', 'bde', 'mbr') and \
+                self.fstype in FILE_SYSTEM_TYPES and not self._make_mountpoint():
             return False
 
         # Prepare mount command
@@ -573,6 +593,10 @@ class Volume(object):
             elif self.fstype == 'dir':
                 os.rmdir(self.mountpoint)
                 os.symlink(raw_path, self.mountpoint)
+
+            elif self.fstype in VOLUME_SYSTEM_TYPES:
+                for _ in self._mount_volumes('dos', self.disk.detection):
+                    pass
 
             else:
                 try:
@@ -673,15 +697,12 @@ class Volume(object):
         except Exception:
             pass
 
-        container = Volume(disk=self.disk, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
-                           pretty=self.pretty, mountdir=self.mountdir)
+        container = self._make_subvolume()
         container.index = "{0}.0".format(self.index)
         container.fsdescription = 'LUKS Volume'
         container.flag = 'alloc'
-        container.parent = self
         container.offset = 0
         container.size = size
-        self.volumes.append(container)
 
         return container
 
@@ -713,7 +734,7 @@ class Volume(object):
 
         # noinspection PyBroadException
         try:
-            cmd = ["bdemount", self.get_raw_base_path(), self.bde_path, '-o', str(self.offset)]
+            cmd = ["bdemount", self.get_raw_path(), self.bde_path, '-o', str(self.offset)]
             cmd.extend(key)
             _util.check_call_(cmd)
         except Exception:
@@ -721,15 +742,12 @@ class Volume(object):
             logger.exception("Failed mounting BDE volume %s.", self)
             return None
 
-        container = Volume(disk=self.disk, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
-                           pretty=self.pretty, mountdir=self.mountdir)
+        container = self._make_subvolume()
         container.index = "{0}.0".format(self.index)
         container.fsdescription = 'BDE Volume'
         container.flag = 'alloc'
-        container.parent = self
         container.offset = 0
         container.size = self.size
-        self.volumes.append(container)
 
         return container
 
@@ -746,7 +764,7 @@ class Volume(object):
         _util.check_call_(['modprobe', '-v', 'jffs2'])
         _util.check_call_(['modprobe', '-v', 'mtdram', 'total_size={}'.format(size_in_kb), 'erase_size=256'])
         _util.check_call_(['modprobe', '-v', 'mtdblock'])
-        _util.check_call_(['dd', 'if=' + self.get_raw_base_path(), 'of=/dev/mtd0'])
+        _util.check_call_(['dd', 'if=' + self.get_raw_path(), 'of=/dev/mtd0'])
         _util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', self.mountpoint])
 
         return True
@@ -761,30 +779,30 @@ class Volume(object):
         if not self.loopback and not force:
             return []
 
+        time.sleep(0.2)
+
         # Scan for new lvm volumes
         result = _util.check_output_(["lvm", "pvscan"])
         for l in result.splitlines():
-            if self.loopback in l or (self.offset == 0 and self.get_raw_base_path() in l):
+            if self.loopback in l or (self.offset == 0 and self.get_raw_path() in l):
                 for vg in re.findall(r'VG (\S+)', l):
                     self.volume_group = vg
 
         if not self.volume_group:
-            logger.warning("Volume is not a volume group.")
+            logger.warning("Volume is not a volume group. (Searching for %s)", self.loopback)
             return []
 
         # Enable lvm volumes
-        _util.check_call_(["vgchange", "-a", "y", self.volume_group], stdout=subprocess.PIPE)
+        _util.check_call_(["lvm", "vgchange", "-a", "y", self.volume_group], stdout=subprocess.PIPE)
 
         # Gather information about lvolumes, gathering their label, size and raw path
-        result = _util.check_output_(["lvdisplay", self.volume_group])
+        result = _util.check_output_(["lvm", "lvdisplay", self.volume_group])
         for l in result.splitlines():
             if "--- Logical volume ---" in l:
-                self.volumes.append(Volume(disk=self.disk, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
-                                           pretty=self.pretty, mountdir=self.mountdir))
+                self._make_subvolume()
                 self.volumes[-1].index = "{0}.{1}".format(self.index, len(self.volumes) - 1)
                 self.volumes[-1].fsdescription = 'Logical Volume'
                 self.volumes[-1].flag = 'alloc'
-                self.volumes[-1].parent = self
             if "LV Name" in l:
                 self.volumes[-1].label = l.replace("LV Name", "").strip()
             if "LV Size" in l:
@@ -816,7 +834,7 @@ class Volume(object):
 
         def stats_thread():
             try:
-                cmd = ['fsstat', self.get_raw_base_path(), '-o', str(self.offset // self.disk.block_size)]
+                cmd = ['fsstat', self.get_raw_path(), '-o', str(self.offset // self.disk.block_size)]
                 logger.debug('$ {0}'.format(' '.join(cmd)))
                 # noinspection PyShadowingNames
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -914,7 +932,7 @@ class Volume(object):
 
         if self.loopback and self.volume_group:
             try:
-                _util.check_call_(['vgchange', '-a', 'n', self.volume_group], stdout=subprocess.PIPE)
+                _util.check_call_(["lvm", 'vgchange', '-a', 'n', self.volume_group], stdout=subprocess.PIPE)
             except Exception:
                 return False
 
@@ -968,3 +986,4 @@ class Volume(object):
     open_luks_container = _open_luks_container
     open_jffs2 = _open_jffs2
     find_lvm_volumes = _find_lvm_volumes
+    get_raw_base_path = get_raw_path

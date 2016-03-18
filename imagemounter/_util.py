@@ -30,7 +30,7 @@ def clean_unmount(cmd, mountpoint, tries=5, rmdir=True):
         # noinspection PyBroadException
         try:
             check_call_(cmd)
-        except:
+        except Exception:
             return False
 
     # Remove mountpoint only if needed
