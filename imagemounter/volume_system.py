@@ -18,20 +18,27 @@ class VolumeSystem(object):
     """
 
     def __init__(self, parent, vstype='detect', detection='auto', **args):
+        """Creates a VolumeSystem.
+
+        :param parent: the parent may either be a :class:`Disk` or a :class:`Volume` that contains this  VolumeSystem.
+        :param str vstype: the volume system type to use.
+        :param str detection: the volume system detection method to use
+        :param args: additional arguments to pass to :class:`Volume`s created
+        """
+
         self.parent = parent
-        self.mount_directories = True
-        self.vstype = vstype
         self.disk = parent.disk if hasattr(parent, 'disk') else parent
 
+        self.vstype = vstype
         if detection == 'auto':
             self.detection = VolumeSystem._determine_auto_detection_method()
         else:
             self.detection = detection
 
         self.volume_source = ""
-        self._disktype = defaultdict(dict)
-
         self.volumes = []
+
+        self._disktype = defaultdict(dict)
         self.args = args
 
     def __iter__(self):
@@ -49,12 +56,18 @@ class VolumeSystem(object):
         raise KeyError
 
     def _make_subvolume(self):
+        """Creates a subvolume, adds it to this class and returns it."""
+
         from imagemounter.volume import Volume
-        v = Volume(disk=self.disk, parent=self.parent, **self.args)
+        # we also pass in the detection and vstype, so it gets to Volume.args, which gets passed back when the Volume
+        # creates a new VolumeType
+        v = Volume(disk=self.disk, parent=self.parent, detection=self.detection, vstype=self.vstype, **self.args)
         self.volumes.append(v)
         return v
 
     def _make_single_subvolume(self):
+        """Creates a subvolume, adds it to this class, sets the volume index to 0 and returns it."""
+
         volume = self._make_subvolume()
         if self.parent.index is None:
             volume.index = 0
@@ -62,13 +75,25 @@ class VolumeSystem(object):
             volume.index = '{0}.0'.format(self.parent.index)
         return volume
 
-    def detect_volumes(self, vstype='detect', method='auto'):
-        """Iterator for detecting volumes within this volume system."""
+    def detect_volumes(self, vstype=None, method=None):
+        """Iterator for detecting volumes within this volume system.
+
+        :param str vstype: The volume system type to use. If None, uses :attr:`vstype`
+        :param str method: The detection method to use. If None, uses :attr:`detection`
+        """
+
+        if vstype is None:
+            vstype = self.vstype
+        if method is None:
+            method = self.detection
 
         if method == 'auto':
             method = VolumeSystem._determine_auto_detection_method()
 
-        if method == 'mmls':
+        if vstype == 'lvm':
+            for v in self._detect_lvm_volumes(self.parent.volume_group):
+                yield v
+        elif method == 'mmls':
             for v in self._detect_mmls_volumes(vstype):
                 yield v
         elif method == 'parted':
@@ -83,12 +108,22 @@ class VolumeSystem(object):
 
     @staticmethod
     def _determine_auto_detection_method():
+        """Return the detection method to use when the detection method is 'auto'"""
+
         if _util.module_exists('pytsk3'):
             return 'pytsk3'
         elif _util.command_exists('mmls'):
             return 'mmls'
         else:
             return 'parted'
+
+    def _format_index(self, idx):
+        """Returns a formatted index given the disk index idx."""
+
+        if self.parent.index is not None:
+            return '{0}.{1}'.format(self.parent.index, idx)
+        else:
+            return idx
 
     def _find_pytsk3_volumes(self, vstype='detect'):
         """Finds all volumes based on the pytsk3 library."""
@@ -105,9 +140,10 @@ class VolumeSystem(object):
             # ewf raw image is now available on base mountpoint
             # either as ewf1 file or as .dd file
             raw_path = self.parent.get_raw_path()
+            # noinspection PyBroadException
             try:
                 baseimage = pytsk3.Img_Info(raw_path)
-            except Exception as e:
+            except Exception:
                 logger.error("Failed retrieving image info (possible empty image).", exc_info=True)
                 return []
 
@@ -120,13 +156,14 @@ class VolumeSystem(object):
                 # some bug in sleuthkit makes detection sometimes difficult, so we hack around it:
                 if "(GPT or DOS at 0)" in str(e) and vstype != 'gpt':
                     self.vstype = 'gpt'
+                    # noinspection PyBroadException
                     try:
                         logger.warning("Error in retrieving volume info: TSK couldn't decide between GPT and DOS, "
                                        "choosing GPT for you. Use --vstype=dos to force DOS.", exc_info=True)
                         volumes = pytsk3.Volume_Info(baseimage, getattr(pytsk3, 'TSK_VS_TYPE_GPT'))
                         self.volume_source = 'multi'
                         return volumes
-                    except Exception as e:
+                    except Exception:
                         logger.exception("Failed retrieving image info (possible empty image).")
                         return []
                 else:
@@ -148,10 +185,7 @@ class VolumeSystem(object):
             # Fill volume with more information
             volume.offset = p.start * self.disk.block_size
             volume.fsdescription = p.desc.strip()
-            if self.parent.index is not None:
-                volume.index = '{0}.{1}'.format(self.parent.index, p.addr)
-            else:
-                volume.index = p.addr
+            volume.index = self._format_index(p.addr)
             volume.size = p.len * self.disk.block_size
 
             if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
@@ -185,13 +219,14 @@ class VolumeSystem(object):
             # some bug in sleuthkit makes detection sometimes difficult, so we hack around it:
             if hasattr(e, 'output') and "(GPT or DOS at 0)" in e.output.decode() and vstype != 'gpt':
                 self.vstype = 'gpt'
+                # noinspection PyBroadException
                 try:
                     logger.warning("Error in retrieving volume info: mmls couldn't decide between GPT and DOS, "
                                    "choosing GPT for you. Use --vstype=dos to force DOS.", exc_info=True)
                     cmd = ['mmls', '-t', 'gpt', self.parent.get_raw_path()]
                     output = _util.check_output_(cmd, stderr=subprocess.STDOUT)
                     self.volume_source = 'multi'
-                except Exception as e:
+                except Exception:
                     logger.exception("Failed executing mmls command")
                     return
             else:
@@ -202,6 +237,7 @@ class VolumeSystem(object):
         for line in output.splitlines():
             if not line:
                 continue
+            # noinspection PyBroadException
             try:
                 values = line.split(None, 5)
 
@@ -214,12 +250,9 @@ class VolumeSystem(object):
                 volume = self._make_subvolume()
                 volume.offset = int(start) * self.disk.block_size
                 volume.fsdescription = description
-                if self.parent.index is not None:
-                    volume.index = '{0}.{1}'.format(self.parent.index, int(index[:-1]))
-                else:
-                    volume.index = int(index[:-1])
+                volume.index = self._format_index(int(index[:-1]))
                 volume.size = int(length) * self.disk.block_size
-            except Exception as e:
+            except Exception:
                 logger.exception("Error while parsing mmls output")
                 continue
 
@@ -247,6 +280,7 @@ class VolumeSystem(object):
         # for some reason, parted does not properly return extended volume types in its machine
         # output, so we need to execute it twice.
         meta_volumes = []
+        # noinspection PyBroadException
         try:
             output = _util.check_output_(['parted', self.parent.get_raw_path(), 'print'])
             for line in output.splitlines():
@@ -256,12 +290,13 @@ class VolumeSystem(object):
             logger.exception("Failed executing parted command.")
             # skip detection of meta volumes
 
+        # noinspection PyBroadException
         try:
             # parted does not support passing in the vstype. It either works, or it doesn't.
             cmd = ['parted', self.parent.get_raw_path(), '-sm', 'unit s', 'print free']
             output = _util.check_output_(cmd)
             self.volume_source = 'multi'
-        except Exception as e:
+        except Exception:
             logger.exception("Failed executing parted command")
             return
 
@@ -277,37 +312,62 @@ class VolumeSystem(object):
                 else:
                     description, label, flags = description, '', ''
 
+                try:
+                    slot = int(slot)
+                except ValueError:
+                    continue
+
                 volume = self._make_subvolume()
                 volume.offset = int(start[:-1]) * self.disk.block_size  # remove last s
                 volume.size = int(length[:-1]) * self.disk.block_size
                 volume.fsdescription = description
-                if self.parent.index is not None:
-                    volume.index = '{0}.{1}'.format(self.parent.index, num)
-                else:
-                    volume.index = num
+                volume.index = self._format_index(num)
 
                 # TODO: detection of meta volumes
 
                 if description == 'free':
                     volume.flag = 'unalloc'
-                    logger.info("Found unallocated space: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
-                elif int(slot) in meta_volumes:
+                    logger.info("Found unallocated space: block offset: {0}, length: {1}".format(start[:-1],
+                                                                                                 length[:-1]))
+                elif slot in meta_volumes:
                     volume.flag = 'meta'
-                    volume.slot = int(slot)
+                    volume.slot = slot
                     logger.info("Found meta volume: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
                 else:
                     volume.flag = 'alloc'
-                    volume.slot = int(slot)
+                    volume.slot = slot
                     self._assign_disktype_data(volume)
                     logger.info("Found allocated {2}: block offset: {0}, length: {1} ".format(start[:-1], length[:-1],
                                                                                               volume.fsdescription))
-            except AttributeError as e:
+            except AttributeError:
                 logger.exception("Error while parsing parted output")
                 continue
 
             num += 1
 
             yield volume
+
+    def _detect_lvm_volumes(self, volume_group):
+        """Gather information about lvolumes, gathering their label, size and raw path"""
+
+        result = _util.check_output_(["lvm", "lvdisplay", volume_group])
+        cur_v = None
+        for l in result.splitlines():
+            if "--- Logical volume ---" in l:
+                cur_v = self._make_subvolume()
+                cur_v.index = self._format_index(len(self) - 1)
+                cur_v.fsdescription = 'Logical Volume'
+                cur_v.flag = 'alloc'
+            if "LV Name" in l:
+                cur_v.label = l.replace("LV Name", "").strip()
+            if "LV Size" in l:
+                cur_v.size = l.replace("LV Size", "").strip()
+            if "LV Path" in l:
+                cur_v.lv_path = l.replace("LV Path", "").strip()
+                cur_v.offset = 0
+
+        logger.info("{0} volumes found".format(len(self)))
+        return self.volumes
 
     def load_disktype_data(self):
         """Calls the :command:`disktype` command and obtains the disk GUID from GPT volume systems. As we
@@ -326,6 +386,7 @@ class VolumeSystem(object):
         for line in disktype.splitlines():
             if not line:
                 continue
+            # noinspection PyBroadException
             try:
                 line = line.strip()
 
@@ -339,7 +400,7 @@ class VolumeSystem(object):
                     elif line.startswith("Partition Name "):
                         self._disktype[current_partition]['label'] = \
                             line[line.index('Name ') + 6:-1].strip()  # output is between ""
-            except Exception as e:
+            except Exception:
                 logger.exception("Error while parsing disktype output")
                 return
 
