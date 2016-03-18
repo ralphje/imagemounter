@@ -17,7 +17,7 @@ from imagemounter.volume_system import VolumeSystem
 logger = logging.getLogger(__name__)
 
 
-class Disk(VolumeSystem):
+class Disk(object):
     """Representation of a disk, image file or anything else that can be considered a disk. """
 
     # noinspection PyUnusedLocal
@@ -80,7 +80,7 @@ class Disk(VolumeSystem):
         self.name = os.path.split(path)[1]
         self.mountpoint = ''
         self.avfs_mountpoint = ''
-        self.volumes = []
+        self.volumes = VolumeSystem(parent=self, vstype=self.vstype, detection=self.detection, **args)
         self.volume_source = ""
 
         self.offset = 0
@@ -95,10 +95,8 @@ class Disk(VolumeSystem):
     def __str__(self):
         return self.__unicode__()
 
-    def _make_subvolume(self):
-        v = Volume(disk=self, **self.args)
-        self.volumes.append(v)
-        return v
+    def __getitem__(self, item):
+        return self.volumes[item]
 
     def init(self, single=None, raid=True, disktype=True):
         """Calls several methods required to perform a full initialisation: :func:`mount`, :func:`add_to_raid` and
@@ -115,9 +113,9 @@ class Disk(VolumeSystem):
         if raid:
             self.add_to_raid()
         if disktype:
-            self.load_disktype_data()
+            self.volumes.load_disktype_data()
 
-        for v in self.mount_volumes(single):
+        for v in self.volumes.mount_volumes(single):
             yield v
 
     def mount(self):
@@ -346,14 +344,6 @@ class Disk(VolumeSystem):
 
         return True
 
-    def get_volumes(self):
-        """Gets a list of all volumes in this disk, including volumes that are contained in other volumes."""
-
-        volumes = []
-        for v in self.volumes:
-            volumes.extend(v.get_volumes())
-        return volumes
-
     def mount_volumes(self, single=None, only_mount=None):
         """Generator that detects and mounts all volumes in the disk.
 
@@ -392,20 +382,15 @@ class Disk(VolumeSystem):
         if not self.mount_directories:
             return
 
-        volume = self._make_subvolume()
+        volume = self.volumes._make_single_subvolume()
         volume.offset = 0
-        if self.index is None:
-            volume.index = 0
-        else:
-            volume.index = '{0}.0'.format(self.index)
+        volume.flag = 'alloc'
+        volume.fsdescription = 'Directory'
 
         filesize = _util.check_output_(['du', '-scDb', self.get_fs_path()]).strip()
         if filesize:
             volume.size = int(filesize.splitlines()[-1].split()[0])
 
-        volume.flag = 'alloc'
-        volume.fsdescription = 'Directory'
-        self.volumes = [volume]
         self.volume_source = 'directory'
 
         for v in volume.init(no_stats=True, only_mount=only_mount):  # stats can't be retrieved from directory
@@ -421,26 +406,21 @@ class Disk(VolumeSystem):
         may be returned.
         """
 
-        volume = self._make_subvolume()
+        volume = self.volumes._make_single_subvolume()
         volume.offset = 0
-        if self.index is None:
-            volume.index = 0
-        else:
-            volume.index = '{0}.0'.format(self.index)
 
-        description = _util.check_output_(['file', '-sL', self.get_fs_path()]).strip()
+        description = _util.check_output_(['file', '-sL', self.disk.get_fs_path()]).strip()
         if description:
             # description is the part after the :, until the first comma
             volume.fsdescription = description.split(': ', 1)[1].split(',', 1)[0].strip()
             if 'size' in description:
                 volume.size = int(re.findall(r'size:? (\d+)', description)[0])
             else:
-                volume.size = os.path.getsize(self.get_fs_path())
+                volume.size = os.path.getsize(self.disk.get_fs_path())
 
         volume.flag = 'alloc'
-        self.volumes = [volume]
         self.volume_source = 'single'
-        self._assign_disktype_data(volume)
+        self.volumes._assign_disktype_data(volume)
 
         for v in volume.init(no_stats=True, only_mount=only_mount):  # stats can't  be retrieved from single volumes
             yield v
@@ -450,8 +430,17 @@ class Disk(VolumeSystem):
         information and call :func:`init` on these.
         """
 
-        for v in self._mount_volumes(self.vstype, self.detection, only_mount):
-            yield v
+        for v in self.volumes.detect_volumes(self.vstype, self.detection):
+            for w in v.init(only_mount=only_mount):
+                yield w
+
+    def get_volumes(self):
+        """Gets a list of all volumes in this disk, including volumes that are contained in other volumes."""
+
+        volumes = []
+        for v in self.volumes:
+            volumes.extend(v.get_volumes())
+        return volumes
 
     def rw_active(self):
         """Indicates whether anything has been written to a read-write cache."""
