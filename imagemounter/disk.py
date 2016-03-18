@@ -11,7 +11,6 @@ import tempfile
 import time
 
 from imagemounter import _util, BLOCK_SIZE
-from imagemounter.volume import Volume
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
@@ -21,7 +20,7 @@ class Disk(object):
     """Representation of a disk, image file or anything else that can be considered a disk. """
 
     # noinspection PyUnusedLocal
-    def __init__(self, parser, path, offset=0, vstype='detect', read_write=False, method='auto', detection='auto',
+    def __init__(self, parser, path, offset=0, read_write=False, method='auto',
                  multifile=True, index=None, mount_directories=True, **args):
         """Instantiation of this class does not automatically mount, detect or analyse the disk. You will need the
         :func:`init` method for this.
@@ -31,10 +30,8 @@ class Disk(object):
         :param parser: the parent parser
         :type parser: :class:`ImageParser`
         :param int offset: offset of the disk where the volume (system) resides
-        :param str vstype: the volume system type
         :param bool read_write: indicates whether the disk should be mounted with a read-write cache enabled
         :param str method: the method to mount the base image with
-        :param str detection: the method to detect volumes in the volume system with
         :param bool multifile: indicates whether :func:`mount` should attempt to call the underlying mount method with
                 all files of a split file when passing a single file does not work
         :param str index: the base index of this Disk
@@ -57,18 +54,9 @@ class Disk(object):
         self.paths = sorted(_util.expand_path(path))
 
         self.offset = offset
-        self.vstype = vstype.lower()
-
         self.block_size = BLOCK_SIZE
-
         self.read_write = read_write
-
         self.method = method
-
-        if detection == 'auto':
-            self.detection = VolumeSystem._determine_auto_detection_method()
-        else:
-            self.detection = detection
 
         self.read_write = read_write
         self.rwpath = ""
@@ -80,7 +68,7 @@ class Disk(object):
         self.name = os.path.split(path)[1]
         self.mountpoint = ''
         self.avfs_mountpoint = ''
-        self.volumes = VolumeSystem(parent=self, vstype=self.vstype, detection=self.detection, **args)
+        self.volumes = VolumeSystem(parent=self, **args)
         self.volume_source = ""
 
         self.offset = 0
@@ -115,7 +103,7 @@ class Disk(object):
         if disktype:
             self.volumes.load_disktype_data()
 
-        for v in self.volumes.mount_volumes(single):
+        for v in self.mount_volumes(single):
             yield v
 
     def mount(self):
@@ -306,7 +294,8 @@ class Disk(object):
         This function will first test whether it is actually a RAID volume by using :func:`is_raid` and, if so, will
         add the disk to the array via a loopback device.
 
-        :return: whether the addition succeeded"""
+        :return: whether the addition succeeded
+        """
 
         if not self.is_raid():
             return False
@@ -409,14 +398,14 @@ class Disk(object):
         volume = self.volumes._make_single_subvolume()
         volume.offset = 0
 
-        description = _util.check_output_(['file', '-sL', self.disk.get_fs_path()]).strip()
+        description = _util.check_output_(['file', '-sL', self.get_fs_path()]).strip()
         if description:
             # description is the part after the :, until the first comma
             volume.fsdescription = description.split(': ', 1)[1].split(',', 1)[0].strip()
             if 'size' in description:
                 volume.size = int(re.findall(r'size:? (\d+)', description)[0])
             else:
-                volume.size = os.path.getsize(self.disk.get_fs_path())
+                volume.size = os.path.getsize(self.get_fs_path())
 
         volume.flag = 'alloc'
         self.volume_source = 'single'
@@ -430,7 +419,7 @@ class Disk(object):
         information and call :func:`init` on these.
         """
 
-        for v in self.volumes.detect_volumes(self.vstype, self.detection):
+        for v in self.volumes.detect_volumes():
             for w in v.init(only_mount=only_mount):
                 yield w
 

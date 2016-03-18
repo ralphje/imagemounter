@@ -103,7 +103,7 @@ The best example of the use of the Python interface is the :command:`imount` com
 
    .. attribute:: volumes
 
-      List of all direct child volumes of this disk, excluding all subvolumes. See :func:`get_volumes`.
+      :class:`VolumeSystem` of all direct child volumes of this disk, excluding all subvolumes. See :func:`get_volumes`.
 
    .. attribute:: volume_source
 
@@ -124,9 +124,7 @@ The best example of the use of the Python interface is the :command:`imount` com
    .. attribute:: parser
                   path
                   offset
-                  vstype
                   read_write
-                  detection
                   multifile
                   args
 
@@ -148,7 +146,7 @@ The best example of the use of the Python interface is the :command:`imount` com
    These functions offer access to some internals:
 
    .. automethod:: determine_fs_type
-   .. automethod:: get_raw_base_path
+   .. automethod:: get_raw_path
    .. automethod:: mount
    .. automethod:: bindmount
    .. automethod:: fill_stats
@@ -221,7 +219,7 @@ The best example of the use of the Python interface is the :command:`imount` com
    .. attribute:: volumes
                   parent
 
-      :attr:`volumes` contains a list of all subvolumes of this volume; :attr:`parent` contains the parent volume (if
+      :attr:`volumes` contains a :class:`VolumeSystem` of all subvolumes of this volume; :attr:`parent` contains the parent volume (if
       any).
 
    .. attribute:: volume_group
@@ -243,6 +241,17 @@ The best example of the use of the Python interface is the :command:`imount` com
                   args
 
       See the constructor of :class:`Volume`.
+
+.. autoclass:: VolumeSystem
+
+   .. automethod:: detect_volumes
+   .. automethod:: load_disktype_data
+
+   .. attribute:: vstype
+                  detection
+                  args
+
+      See the constructor of :class:`VolumeSystem`.
 
 .. autoclass:: Unmounter
 

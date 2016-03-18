@@ -57,6 +57,7 @@ class Volume(object):
         :param args: additional arguments
         """
 
+        self.parent = parent
         self.disk = disk
         self.stats = stats
         self.fstypes = fstypes or {'?': 'unknown'}
@@ -96,8 +97,8 @@ class Volume(object):
         self.carvepoint = ""
 
         # Used by functions that create subvolumes
-        self.volumes = VolumeSystem(parent=self, **args)
-        self.parent = parent
+        self.volumes = VolumeSystem(parent=self, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
+                                    pretty=self.pretty, mountdir=self.mountdir, **args)
 
         # Used by lvm specific functions
         self.volume_group = ""
@@ -120,7 +121,6 @@ class Volume(object):
         self.fsforce = '*' in self.fstypes
 
         self.block_size = self.disk.block_size
-        self._disktype = defaultdict(dict)
 
         self.args = args
 
@@ -214,100 +214,6 @@ class Volume(object):
             logger.warning("The python-magic module is not available, but another module named magic was found.")
         return None
 
-    def determine_fs_type(self):
-        """Determines the FS type for this partition. This function is used internally to determine which mount system
-        to use, based on the file system description. Return values include *ext*, *ufs*, *ntfs*, *lvm* and *luks*.
-
-        Note: does not do anything if fstype is already set to something sensible.
-        """
-
-        # Determine fs type. If forced, always use provided type.
-        if str(self.index) in self.fstypes:
-            self.fstype = self.fstypes[str(self.index)]
-        elif '*' in self.fstypes:
-            self.fstype = self.fstypes['*']
-        elif self.fstype in FILE_SYSTEM_TYPES:
-            pass  # already correctly set
-        else:
-            last_resort = None  # use this if we can't determine the FS type more reliably
-            # we have two possible sources for determining the FS type: the description given to us by the detection
-            # method, and the type given to us by the stat function
-            for fsdesc in (self.fsdescription, self.statfstype, self.guid, self.get_magic_type):
-                # For efficiency reasons, not all functions are called instantly.
-                if callable(fsdesc):
-                    fsdesc = fsdesc()
-                logger.debug("Trying to determine fs type from '{}'".format(fsdesc))
-                if not fsdesc:
-                    continue
-                fsdesc = fsdesc.lower()
-
-                # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info
-                if fsdesc in ('logical volume', 'luks volume', 'bde volume', 'primary', 'basic data partition'):
-                    continue
-
-                if fsdesc == 'directory':
-                    self.fstype = 'dir'  # dummy fs type
-                elif re.search(r'\bext[0-9]*\b', fsdesc):
-                    self.fstype = 'ext'
-                elif 'bsd' in fsdesc:
-                    self.fstype = 'ufs'
-                elif '0x07' in fsdesc or 'ntfs' in fsdesc:
-                    self.fstype = 'ntfs'
-                elif '0x8e' in fsdesc or 'lvm' in fsdesc:
-                    self.fstype = 'lvm'
-                elif 'hfs+' in fsdesc:
-                    self.fstype = 'hfs+'
-                elif 'hfs' in fsdesc:
-                    self.fstype = 'hfs'
-                elif 'luks' in fsdesc:
-                    self.fstype = 'luks'
-                elif 'fat' in fsdesc or 'efi system partition' in fsdesc:
-                    # based on http://en.wikipedia.org/wiki/EFI_System_partition, efi is always fat.
-                    self.fstype = 'fat'
-                elif 'iso 9660' in fsdesc:
-                    self.fstype = 'iso'
-                elif 'linux compressed rom file system' in fsdesc or 'cramfs' in fsdesc:
-                    self.fstype = 'cramfs'
-                elif fsdesc.startswith("sgi xfs") or re.search(r'\bxfs\b', fsdesc):
-                    self.fstype = "xfs"
-                elif 'swap file' in fsdesc or 'linux swap' in fsdesc or 'linux-swap' in fsdesc:
-                    self.fstype = 'swap'
-                elif 'squashfs' in fsdesc:
-                    self.fstype = 'squashfs'
-                elif "jffs2" in fsdesc:
-                    self.fstype = 'jffs2'
-                elif "minix filesystem" in fsdesc:
-                    self.fstype = 'minix'
-                elif "dos/mbr boot sector" in fsdesc:
-                    self.fstype = 'dos'
-                elif fsdesc.upper() in FILE_SYSTEM_GUIDS:
-                    # this is a bit of a workaround for the fill_guid method
-                    self.fstype = FILE_SYSTEM_GUIDS[fsdesc.upper()]
-                elif '0x83' in fsdesc:
-                    # this is a linux mount, but we can't figure out which one.
-                    # we hand it off to the OS, maybe it can try something.
-                    # if we use last_resort for more enhanced stuff, we may need to check if we are not setting
-                    # it to something less specific here
-                    last_resort = 'unknown'
-                    continue
-                else:
-                    continue  # this loop failed
-
-                logger.info("Detected {0} as {1}".format(fsdesc, self.fstype))
-                break  # we found something
-            else:  # we found nothing
-                # if last_resort is something more sensible than unknown, we use that
-                # if we have specified a fsfallback which is not set to None, we use that
-                # if last_resort is unknown or the fallback is not None, we use unknown
-                if last_resort and last_resort != 'unknown':
-                    self.fstype = last_resort
-                elif '?' in self.fstypes and self.fstypes['?'] is not None:
-                    self.fstype = self.fstypes['?']
-                elif last_resort == 'unknown' or '?' not in self.fstypes:
-                    self.fstype = 'unknown'
-
-        return self.fstype
-
     def get_raw_path(self):
         """Retrieves the base mount path of the volume. Typically equals to :func:`Disk.get_fs_path` but may also be the
         path to a logical volume. This is used to determine the source path for a mount call.
@@ -364,12 +270,14 @@ class Volume(object):
                     return False
                 loopback_was_created_for_carving = True
 
+            # noinspection PyBroadException
             try:
                 _util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.loopback,
                                   ("freespace," if freespace else "") + "search"])
 
                 # clean out the loop device if we created it specifically for carving
                 if loopback_was_created_for_carving:
+                    # noinspection PyBroadException
                     try:
                         _util.check_call_(['losetup', '-d', self.loopback])
                     except Exception:
@@ -382,6 +290,7 @@ class Volume(object):
                 logger.exception("Failed carving the volume.")
                 return False
         else:
+            # noinspection PyBroadException
             try:
                 _util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.get_raw_path(),
                                   str(self.slot) + (",freespace" if freespace else "") + ",search"])
@@ -510,6 +419,100 @@ class Volume(object):
                 return False
         return True
 
+    def determine_fs_type(self):
+        """Determines the FS type for this partition. This function is used internally to determine which mount system
+        to use, based on the file system description. Return values include *ext*, *ufs*, *ntfs*, *lvm* and *luks*.
+
+        Note: does not do anything if fstype is already set to something sensible.
+        """
+
+        # Determine fs type. If forced, always use provided type.
+        if str(self.index) in self.fstypes:
+            self.fstype = self.fstypes[str(self.index)]
+        elif '*' in self.fstypes:
+            self.fstype = self.fstypes['*']
+        elif self.fstype in FILE_SYSTEM_TYPES:
+            pass  # already correctly set
+        else:
+            last_resort = None  # use this if we can't determine the FS type more reliably
+            # we have two possible sources for determining the FS type: the description given to us by the detection
+            # method, and the type given to us by the stat function
+            for fsdesc in (self.fsdescription, self.statfstype, self.guid, self.get_magic_type):
+                # For efficiency reasons, not all functions are called instantly.
+                if callable(fsdesc):
+                    fsdesc = fsdesc()
+                logger.debug("Trying to determine fs type from '{}'".format(fsdesc))
+                if not fsdesc:
+                    continue
+                fsdesc = fsdesc.lower()
+
+                # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info
+                if fsdesc in ('logical volume', 'luks volume', 'bde volume', 'primary', 'basic data partition'):
+                    continue
+
+                if fsdesc == 'directory':
+                    self.fstype = 'dir'  # dummy fs type
+                elif re.search(r'\bext[0-9]*\b', fsdesc):
+                    self.fstype = 'ext'
+                elif 'bsd' in fsdesc:
+                    self.fstype = 'ufs'
+                elif '0x07' in fsdesc or 'ntfs' in fsdesc:
+                    self.fstype = 'ntfs'
+                elif '0x8e' in fsdesc or 'lvm' in fsdesc:
+                    self.fstype = 'lvm'
+                elif 'hfs+' in fsdesc:
+                    self.fstype = 'hfs+'
+                elif 'hfs' in fsdesc:
+                    self.fstype = 'hfs'
+                elif 'luks' in fsdesc:
+                    self.fstype = 'luks'
+                elif 'fat' in fsdesc or 'efi system partition' in fsdesc:
+                    # based on http://en.wikipedia.org/wiki/EFI_System_partition, efi is always fat.
+                    self.fstype = 'fat'
+                elif 'iso 9660' in fsdesc:
+                    self.fstype = 'iso'
+                elif 'linux compressed rom file system' in fsdesc or 'cramfs' in fsdesc:
+                    self.fstype = 'cramfs'
+                elif fsdesc.startswith("sgi xfs") or re.search(r'\bxfs\b', fsdesc):
+                    self.fstype = "xfs"
+                elif 'swap file' in fsdesc or 'linux swap' in fsdesc or 'linux-swap' in fsdesc:
+                    self.fstype = 'swap'
+                elif 'squashfs' in fsdesc:
+                    self.fstype = 'squashfs'
+                elif "jffs2" in fsdesc:
+                    self.fstype = 'jffs2'
+                elif "minix filesystem" in fsdesc:
+                    self.fstype = 'minix'
+                elif "dos/mbr boot sector" in fsdesc:
+                    self.fstype = 'detect'  # vsdetect, choosing between dos and gpt is hard
+                elif fsdesc.upper() in FILE_SYSTEM_GUIDS:
+                    # this is a bit of a workaround for the fill_guid method
+                    self.fstype = FILE_SYSTEM_GUIDS[fsdesc.upper()]
+                elif '0x83' in fsdesc:
+                    # this is a linux mount, but we can't figure out which one.
+                    # we hand it off to the OS, maybe it can try something.
+                    # if we use last_resort for more enhanced stuff, we may need to check if we are not setting
+                    # it to something less specific here
+                    last_resort = 'unknown'
+                    continue
+                else:
+                    continue  # this loop failed
+
+                logger.info("Detected {0} as {1}".format(fsdesc, self.fstype))
+                break  # we found something
+            else:  # we found nothing
+                # if last_resort is something more sensible than unknown, we use that
+                # if we have specified a fsfallback which is not set to None, we use that
+                # if last_resort is unknown or the fallback is not None, we use unknown
+                if last_resort and last_resort != 'unknown':
+                    self.fstype = last_resort
+                elif '?' in self.fstypes and self.fstypes['?'] is not None:
+                    self.fstype = self.fstypes['?']
+                elif last_resort == 'unknown' or '?' not in self.fstypes:
+                    self.fstype = 'unknown'
+
+        return self.fstype
+
     def mount(self):
         """Based on the file system type as determined by :func:`determine_fs_type`, the proper mount command is executed
         for this volume. The volume is mounted in a temporary path (or a pretty path if :attr:`pretty` is enabled) in
@@ -580,21 +583,17 @@ class Volume(object):
                 self._open_bde_container()
 
             elif self.fstype == 'lvm':
-                # LVM
-                os.environ['LVM_SUPPRESS_FD_WARNINGS'] = '1'
+                self._open_lvm()
 
-                # find free loopback device
-                if not self._find_loopback():
-                    return False
-
-                self._find_lvm_volumes()
+                for _ in self.volumes.detect_volumes('lvm'):
+                    pass
 
             elif self.fstype == 'dir':
                 os.rmdir(self.mountpoint)
                 os.symlink(raw_path, self.mountpoint)
 
             elif self.fstype in VOLUME_SYSTEM_TYPES:
-                for _ in self.volumes.detect_volumes(self.fstype, self.disk.detection):
+                for _ in self.volumes.detect_volumes(self.fstype):
                     pass
 
             else:
@@ -768,15 +767,15 @@ class Volume(object):
 
         return True
 
-    def _find_lvm_volumes(self, force=False):
-        """Performs post-mount actions on a LVM. Scans for active volume groups from the loopback device, activates it
+    def _open_lvm(self):
+        """Performs mount actions on a LVM. Scans for active volume groups from the loopback device, activates it
         and fills :attr:`volumes` with the logical volumes.
-
-        If *force* is true, the LVM detection is ran even when the LVM is not mounted on a loopback device.
         """
+        os.environ['LVM_SUPPRESS_FD_WARNINGS'] = '1'
 
-        if not self.loopback and not force:
-            return []
+        # find free loopback device
+        if not self._find_loopback():
+            return False
 
         time.sleep(0.2)
 
@@ -789,31 +788,12 @@ class Volume(object):
 
         if not self.volume_group:
             logger.warning("Volume is not a volume group. (Searching for %s)", self.loopback)
-            return []
+            return False
 
         # Enable lvm volumes
         _util.check_call_(["lvm", "vgchange", "-a", "y", self.volume_group], stdout=subprocess.PIPE)
 
-        # Gather information about lvolumes, gathering their label, size and raw path
-        result = _util.check_output_(["lvm", "lvdisplay", self.volume_group])
-        cur_v = None
-        for l in result.splitlines():
-            if "--- Logical volume ---" in l:
-                cur_v = self.volumes._make_subvolume()
-                cur_v.index = "{0}.{1}".format(self.index, len(self.volumes) - 1)
-                cur_v.fsdescription = 'Logical Volume'
-                cur_v.flag = 'alloc'
-            if "LV Name" in l:
-                cur_v.label = l.replace("LV Name", "").strip()
-            if "LV Size" in l:
-                cur_v.size = l.replace("LV Size", "").strip()
-            if "LV Path" in l:
-                cur_v.lv_path = l.replace("LV Path", "").strip()
-                cur_v.offset = 0
-
-        logger.info("{0} volumes found".format(len(self.volumes)))
-
-        return self.volumes
+        return True
 
     def get_volumes(self):
         """Recursively gets a list of all subvolumes and the current volume."""
@@ -985,5 +965,5 @@ class Volume(object):
     # backwards compatibility
     open_luks_container = _open_luks_container
     open_jffs2 = _open_jffs2
-    find_lvm_volumes = _find_lvm_volumes
+    find_lvm_volumes = _open_lvm
     get_raw_base_path = get_raw_path

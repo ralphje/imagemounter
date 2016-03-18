@@ -1,7 +1,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-__ALL__ = ['Volume', 'Disk', 'ImageParser', 'Unmounter']
+__ALL__ = ['Volume', 'VolumeSystem', 'Disk', 'ImageParser', 'Unmounter']
 __version__ = '2.0.4'
 
 BLOCK_SIZE = 512
@@ -12,8 +12,8 @@ FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'hfs', 'hfs+', 'xfs', 'iso', 'udf', '
                      'dos', 'mac', 'bsd', 'sun', 'gpt',
                      'dir', 'unknown')
 
-
 from imagemounter.parser import ImageParser
 from imagemounter.disk import Disk
 from imagemounter.volume import Volume
 from imagemounter.unmounter import Unmounter
+from imagemounter.volume_system import VolumeSystem
