@@ -138,3 +138,5 @@ Volume systems
 DOS
 ---
 In some cases, the DOS volume system is recognized as either a DOS or a GPT volume system. This appears to be a bug in The Sleuth Kit used by some detection methods. imagemounter works around this by choosing in this case for the GPT volume system and will log a warning. In the case that this is not the right choice, you must use :option:`--vstype` to explicitly provide the correct volume system.
+
+You can also use the DOS volume system as a

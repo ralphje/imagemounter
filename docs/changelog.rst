@@ -11,6 +11,7 @@ Future version
 * Add BDE (Bitlocker) support
 * Addition of :option:`--keys` CLI argument and corresponding argument to Volume class, allowing to specify key material for crypto mounts. LUKS is not yet supported.
 * Deprecation of fsforce and fsfallback arguments and attributes to Volume, :option:`--fsforce` and :option:`--fsfallback` from CLI. Use ``*`` and ``?`` as fstypes instead for the same effect. This should make the CLI more sensible, especially regarding the :option:`--fsforce` argument. The default FS fallback is still ``unknown``, which can only be overridden by specifying ``--fstypes=?=none``.
+* Experimental: support for volume systems inside a volume. This is useful when e.g. a LVM volume contains in itself a MBR. Methods for mounting this have been moved from :class:`Disk` to :class:`VolumeSystem` and both :class:`Volume` and :class:`Disk` extend from this base class. This will probably warrant a totally new design where :class:`VolumeSystem` becomes an iterable for volumes.
 
 2.0.4 (2016-03-15)
 ------------------
