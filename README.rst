@@ -6,7 +6,7 @@ imagemounter is a command-line utility and Python package to ease the mounting a
 and dd disk images (and other formats supported by supported tools). It supports mounting disk images using xmount (with
 optional RW cache), affuse, ewfmount and vmware-mount; detecting DOS, BSD, Sun, Mac and GPT volume systems; mounting
 FAT, Ext, XFS UFS, HFS+, LUKS and NTFS volumes, in addition to some less known filesystems; detecting (nested) LVM
-volume systems and mounting its subvolumes; and reconstructing RAID arrays.
+volume systems and mounting its subvolumes; and reconstructing MD-RAID arrays.
 
 In its default mode, imagemounter will try to start mounting the base image on a temporary mount point,
 detect the volume system and then mount each volume seperately. If it fails finding a volume system,
@@ -14,12 +14,31 @@ it will try to mount the entire image as a whole if it succeeds in detecting wha
 
 This package supports Python 2.7 and Python 3.2+.
 
+Example
+=======
+A very basic example of a valid mount is as follows. The command-line utility has much more features, but results vary
+wildly depending on the exact type of disk you are trying to mount::
+
+    # imount lvm_containing_dos_volumesystem_containing_ext4
+    [+] Mounting image lvm_containing_dos_volumesystem_containing_ext4 using auto...
+    [+] Mounted raw image [1/1]
+    [+] Mounted volume 2.0 GiB 4.0.2:Ext4 / [Linux] on /tmp/im_4.0.2_8l86mZ.
+    >>> Press [enter] to unmount the volume, or ^C to keep mounted...
+    [+] Parsed all volumes!
+    [+] Analysis complete, unmounting...
+    [+] All cleaned up
+
+If you want to see for yourself, you could try executing ``imount /dev/sda`` first.
+
 Documentation
 =============
 Full documentation of this project is available from http://imagemounter.readthedocs.org/ or in the ``docs/`` directory.
 
 Installation
 ============
+This package does not require other packages, though ``termcolor`` is recommended and ``pytsk3`` is needed if you wish to
+use this package for volume detection.
+
 Just perform the following commands for a full install, including all optional dependencies::
 
     apt-get install python-setuptools xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm cryptsetup libmagic1 avfs disktype squashfs-tools mtd-tools vmfs-tools
@@ -29,17 +48,18 @@ You can install ``vmware-mount`` by installing VMware Workstation on your system
 
 Use ``imount --check`` to verify which packages are (not) installed.
 
-Python packages
----------------
-This package does not require other packages, though ``termcolor`` is recommended and ``pytsk3`` is needed if you wish to
-use this package for volume detection.
+Contributing
+============
+Since imagemounter is an open source project, contributions of many forms are welcomed. Examples of possible
+contributions include:
 
-Important notes
-===============
+* Bug patches
+* New features
+* Documentation improvements
+* Bug reports and reviews of pull requests
+
+We use GitHub to keep track of issues and pull requests. You can always
+`submit an issue <https://github.com/ralphje/imagemounter/issues>`_ when you encounter something out of the ordinary.
+
 Not all combinations of file and volume systems have been tested. If you encounter an issue, please try to change some
 of your arguments first, before creating a new GitHub issue.
-
-Please note that many Linux based operating systems will try to mount LVMs for you. Although imagemounter tries to
-circumvent this automation, if you are unable to properly unmount, you should try to unmount through the interface of
-your OS first. Another useful command is ``vgchange -a n`` to disable all LVMs currently active (only use if you are not
-using a LVM for your own OS!).
