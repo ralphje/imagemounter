@@ -34,13 +34,13 @@ FILE_SYSTEM_GUIDS = {
 }
 
 
-class Volume(VolumeSystem):
+class Volume(object):
     """Information about a volume. Note that every detected volume gets their own Volume object, though it may or may
     not be mounted. This can be seen through the :attr:`mountpoint` attribute -- if it is not set, perhaps the
     :attr:`exception` attribute is set with an exception.
     """
 
-    def __init__(self, disk=None, stats=True, fstypes=None, keys=None,
+    def __init__(self, disk=None, parent=None, stats=True, fstypes=None, keys=None,
                  pretty=False, mountdir=None, **args):
         """Creates a Volume object that is not mounted yet.
 
@@ -96,8 +96,8 @@ class Volume(VolumeSystem):
         self.carvepoint = ""
 
         # Used by functions that create subvolumes
-        self.volumes = []
-        self.parent = None
+        self.volumes = VolumeSystem(parent=self, **args)
+        self.parent = parent
 
         # Used by lvm specific functions
         self.volume_group = ""
@@ -130,12 +130,8 @@ class Volume(VolumeSystem):
     def __str__(self):
         return str(self.__unicode__())
 
-    def _make_subvolume(self):
-        v = Volume(disk=self.disk, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
-                   pretty=self.pretty, mountdir=self.mountdir)
-        v.parent = self
-        self.volumes.append(v)
-        return v
+    def __getitem__(self, item):
+        return self.volumes[item]
 
     def get_description(self, with_size=True):
         """Obtains a generic description of the volume, containing the file system type, index, label and NTFS version.
@@ -319,13 +315,13 @@ class Volume(VolumeSystem):
 
         if self.lv_path:
             return self.lv_path
-        elif self.parent and self.parent.lv_path:
+        elif self.parent and self.parent != self.disk and self.parent.lv_path:
             return self.parent.lv_path
-        elif self.parent and self.parent.bde_path:
+        elif self.parent and self.parent != self.disk and self.parent.bde_path:
             return self.parent.bde_path + '/bde1'
         elif self.luks_path:
             return '/dev/mapper/' + self.luks_path
-        elif self.parent and self.parent.luks_path:
+        elif self.parent and self.parent != self.disk and self.parent.luks_path:
             return '/dev/mapper/' + self.parent.luks_path
         else:
             return self.disk.get_fs_path()
@@ -413,6 +409,7 @@ class Volume(VolumeSystem):
         If only_mount is specified, only volume indexes in this list are mounted. Note that volume indexes are strings.
         """
 
+        logger.debug("Initializing volume {0}".format(self))
         if self.stats and not no_stats:
             self.fill_stats()
 
@@ -420,6 +417,10 @@ class Volume(VolumeSystem):
             yield self
             return
 
+        if self.flag != 'alloc':
+            return
+
+        logger.info("Mounting volume {0}".format(self))
         self.mount()
 
         if self.stats and not no_stats:
@@ -429,10 +430,8 @@ class Volume(VolumeSystem):
             yield self
         else:
             for v in self.volumes:
-                if v.flag == 'alloc':
-                    logger.info("Mounting subvolume {0}".format(v))
-                    for s in v.init():
-                        yield s
+                for s in v.init():
+                    yield s
 
     def _make_mountpoint(self, casename=None, var_name='mountpoint', suffix=''):
         """Creates a directory that can be used as a mountpoint. The directory is stored in :attr:`mountpoint`,
@@ -526,7 +525,7 @@ class Volume(VolumeSystem):
         self.determine_fs_type()
 
         # we need a mountpoint if it is not a lvm or luks volume
-        if self.fstype not in ('luks', 'lvm', 'bde', 'mbr') and \
+        if self.fstype not in ('luks', 'lvm', 'bde') and self.fstype not in VOLUME_SYSTEM_TYPES and \
                 self.fstype in FILE_SYSTEM_TYPES and not self._make_mountpoint():
             return False
 
@@ -595,7 +594,7 @@ class Volume(VolumeSystem):
                 os.symlink(raw_path, self.mountpoint)
 
             elif self.fstype in VOLUME_SYSTEM_TYPES:
-                for _ in self._mount_volumes('dos', self.disk.detection):
+                for _ in self.volumes.detect_volumes(self.fstype, self.disk.detection):
                     pass
 
             else:
@@ -697,7 +696,7 @@ class Volume(VolumeSystem):
         except Exception:
             pass
 
-        container = self._make_subvolume()
+        container = self.volumes._make_subvolume()
         container.index = "{0}.0".format(self.index)
         container.fsdescription = 'LUKS Volume'
         container.flag = 'alloc'
@@ -742,7 +741,7 @@ class Volume(VolumeSystem):
             logger.exception("Failed mounting BDE volume %s.", self)
             return None
 
-        container = self._make_subvolume()
+        container = self.volumes._make_subvolume()
         container.index = "{0}.0".format(self.index)
         container.fsdescription = 'BDE Volume'
         container.flag = 'alloc'
@@ -797,19 +796,20 @@ class Volume(VolumeSystem):
 
         # Gather information about lvolumes, gathering their label, size and raw path
         result = _util.check_output_(["lvm", "lvdisplay", self.volume_group])
+        cur_v = None
         for l in result.splitlines():
             if "--- Logical volume ---" in l:
-                self._make_subvolume()
-                self.volumes[-1].index = "{0}.{1}".format(self.index, len(self.volumes) - 1)
-                self.volumes[-1].fsdescription = 'Logical Volume'
-                self.volumes[-1].flag = 'alloc'
+                cur_v = self.volumes._make_subvolume()
+                cur_v.index = "{0}.{1}".format(self.index, len(self.volumes) - 1)
+                cur_v.fsdescription = 'Logical Volume'
+                cur_v.flag = 'alloc'
             if "LV Name" in l:
-                self.volumes[-1].label = l.replace("LV Name", "").strip()
+                cur_v.label = l.replace("LV Name", "").strip()
             if "LV Size" in l:
-                self.volumes[-1].size = l.replace("LV Size", "").strip()
+                cur_v.size = l.replace("LV Size", "").strip()
             if "LV Path" in l:
-                self.volumes[-1].lv_path = l.replace("LV Path", "").strip()
-                self.volumes[-1].offset = 0
+                cur_v.lv_path = l.replace("LV Path", "").strip()
+                cur_v.offset = 0
 
         logger.info("{0} volumes found".format(len(self.volumes)))
 

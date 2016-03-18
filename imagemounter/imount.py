@@ -442,7 +442,7 @@ def main():
                     print('[+] Created read-write cache at {0}'.format(disk.rwpath))
 
                 if args.disktype:
-                    disk.load_disktype_data()
+                    disk.volumes.load_disktype_data()
                 print('[+] Mounted raw image [{num}/{total}]'.format(num=num, total=len(args.images)))
 
             sys.stdout.write("[+] Mounting volume...\r")
