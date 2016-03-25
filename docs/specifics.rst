@@ -135,8 +135,28 @@ The unknown filesystem type is used as fallback by default, and is for instance 
 Volume systems
 ==============
 
-DOS
----
+DOS (MBR)
+---------
 In some cases, the DOS volume system is recognized as either a DOS or a GPT volume system. This appears to be a bug in The Sleuth Kit used by some detection methods. imagemounter works around this by choosing in this case for the GPT volume system and will log a warning. In the case that this is not the right choice, you must use :option:`--vstype` to explicitly provide the correct volume system.
 
-You can also use the DOS volume system as a
+In the case you have picked the wrong volume system, you can easily spot this. If you see ``GPT Safety Partition`` popping up, you should have chosen GPT.
+
+GPT
+---
+See the DOS/MBR volume system.
+
+BSD
+---
+No additional details.
+
+Sun
+---
+No additional details.
+
+MAC
+---
+No additional details.
+
+Detect
+------
+Lets the subsystem automatically decide the correct volume system type.

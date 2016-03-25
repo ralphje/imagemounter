@@ -182,7 +182,7 @@ Advanced toggles
 .. cmdoption:: --raid
                --no-raid
 
-   By default, a detection is ran to detect whether the volume is part of a (former) RAID array. You can disable the RAID check with :option:`--no-raid`. If you provide both :option:`--raid` and :option:`--no-raid`, :option:`raid` wins.
+   By default, a detection is ran to detect whether the volume is part of a (former) MD RAID array. You can disable the RAID check with :option:`--no-raid`. If you provide both :option:`--raid` and :option:`--no-raid`, :option:`raid` wins.
 
 .. cmdoption:: --single
                --no-single

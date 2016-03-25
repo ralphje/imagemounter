@@ -8,13 +8,14 @@ Data structure
 
 The basic structure of :mod:`imagemounter` is the :class:`imagemounter.ImageParser` class, which provides access to underlying :class:`imagemounter.Disk` and :class:`imagemounter.Volume` objects. Each file name passed to a new :class:`imagemounter.ImageParser` object results in one :class:`imagemounter.Disk` object. :class:`imagemounter.Volume` objects are created by analysis of the :class:`Disk` object (each volume generates one object, even if it is not mountable), and each :class:`imagemounter.Volume` can have one or more subvolumes.
 
-For instance, a LUKS volume may contain a LVM system that contains a Ext volume. This would create a :class:`Disk` with a :class:`Volume` containing a :class:`Volume` which contains the actual Ext :class:`Volume`.
+For instance, a LUKS volume may contain a LVM system that contains a Ext volume. This would create a :class:`Disk` with a :class:`Volume` containing a :class:`Volume` which contains the actual Ext :class:`Volume`. Subvolumes are managed through :class:`imagemounter.VolumeSystem`s, which is used by both the :class:`Volume` and :class:`Disk` classes.
 
 Most operations are managed on a :class:`Volume` level, although RAIDs (and volume detection) are managed on a :class:`Disk` level and reconstruction is performed on a :class:`ImageParser` level. This means the following main parts make up the Python package:
 
 - :class:`imagemounter.ImageParser`, maintaining a list of Disks, providing several methods that are carried out on all disks (e.g. mount) and reconstruct.
-- :class:`imagemounter.Disk`, which represents a single disk iamge and can be mounted, added to RAID, and detect and maintain volumes. It is also responsible for maintaining the write cache.
-- :class:`imagemounter.Volume`, which can detect its own type and fill its stats, can be mounted, and detect LVM (sub)volumes.
+- :class:`imagemounter.Disk`, which represents a single disk iamge and can be mounted, added to RAID, and maintain volumes. It is also responsible for maintaining the write cache.
+- :class:`imagemounter.Volume`, which can detect its own type and fill its stats, can be mounted, and maintain subvolumes.
+- :class:`imagemounter.VolumeSystem`, which is used to manage subvolumes and can detect volumes from a volume system.
 
 All three classes maintain an ``init()`` method that yields the volumes below it. You should call ``clean()`` on the parser as soon as you are done; you may also call ``unmount()`` on separate volumes or disks, which will also unmount all volumes below it. Warning: unmounting one of the RAID volumes in a RAID array, causes the entire array to be unmounted.
 
