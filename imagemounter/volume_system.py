@@ -259,7 +259,7 @@ class VolumeSystem(object):
             if slot.lower() == 'meta':
                 volume.flag = 'meta'
                 logger.info("Found meta volume: block offset: {0}, length: {1}".format(start, length))
-            elif slot.lower() == '-----':
+            elif slot.lower().startswith('-----'):
                 volume.flag = 'unalloc'
                 logger.info("Found unallocated space: block offset: {0}, length: {1}".format(start, length))
             else:
