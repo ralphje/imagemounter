@@ -42,7 +42,7 @@ following tools:
 
   * :command:`lvm` et al, all part of *lvm2* package
 
-* RAID arrays
+* MD RAID arrays
 
   * :command:`mdadm`
 
