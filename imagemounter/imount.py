@@ -240,6 +240,8 @@ def main():
     if 'a' in __version__ or 'b' in __version__:
         print(col("Development release v{0}. Please report any bugs you encounter.".format(__version__),
                   attrs=['dark']))
+        print(col("Bug reports: use -vvvv to get maximum verbosity and include  imount --check  output in your report",
+                  attrs=['dark']))
         print(col("Critical bug? Use git tag to list all versions and use git checkout <version>", attrs=['dark']))
 
     # Always assume stats, except when --no-stats is present, and --stats is not.
