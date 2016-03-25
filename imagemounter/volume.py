@@ -108,18 +108,6 @@ class Volume(object):
         self.luks_path = ""
         self.bde_path = ""
 
-        # some backwards compatibility
-        if 'fsfallback' in args:
-            warnings.warn("fsfallback and fsforce arguments are deprecated", DeprecationWarning)
-            self.fstypes['?'] = args['fsfallback']
-            if 'fsforce' in args:
-                if args['fsforce']:
-                    self.fstypes['*'] = args['fsfallback']
-                del args['fsforce']
-            del args['fsfallback']
-        self.fsfallback = self.fstypes.get('?', None)
-        self.fsforce = '*' in self.fstypes
-
         self.block_size = self.disk.block_size
 
         self.args = args
@@ -961,9 +949,3 @@ class Volume(object):
                 self.carvepoint = ""
 
         return True
-
-    # backwards compatibility
-    open_luks_container = _open_luks_container
-    open_jffs2 = _open_jffs2
-    find_lvm_volumes = _open_lvm
-    get_raw_base_path = get_raw_path

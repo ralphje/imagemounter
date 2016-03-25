@@ -29,7 +29,7 @@ setup(
     entry_points={'console_scripts': ['imount = imagemounter.imount:main']},
     install_requires=['termcolor>=1.0.0'],
     extras={"magic": ["python-magic>=0.4"]},
-    keywords=['encase', 'aff', 'dd', 'disk image', 'ewfmount', 'affuse', 'xmount', 'imount'],
+    keywords=['encase', 'aff', 'dd', 'disk image', 'ewfmount', 'affuse', 'xmount', 'imount', 'mount_images'],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Environment :: Console',
@@ -42,6 +42,7 @@ setup(
         'Programming Language :: Python :: 3.2',
         'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
         'Topic :: Scientific/Engineering :: Information Analysis',
         'Topic :: System :: Filesystems',
         'Topic :: Terminals',

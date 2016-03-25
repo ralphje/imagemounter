@@ -190,13 +190,6 @@ def main():
     toggroup.add_argument('--no-single', action='store_true', default=False,
                           help="prevent trying to mount the image as a single volume if no volume system was found")
 
-    depgroup = parser.add_argument_group('deprecated arguments',
-                                         'these arguments are deprecated and should not be used anymore')
-    depgroup.add_argument('--fsfallback', choices=FILE_SYSTEM_TYPES + ('none', ),
-                          help="same as ? in --fstypes")
-    depgroup.add_argument('--fsforce', action='store_true', default=False,
-                          help="same as * in --fstypes")
-
     args = parser.parse_args()
 
     # Colorize the output by default if the terminal supports it
@@ -347,15 +340,6 @@ def main():
             if v.strip() not in FILE_SYSTEM_TYPES and not (k == '?' and v.strip().lower() == 'none'):
                 print("[!] Error while parsing --fstypes: {} is invalid".format(v))
                 sys.exit(1)
-
-    # deprecated arguments
-    if args.fsfallback and args.fsfallback != 'none':
-        args.fstypes['?'] = args.fsfallback
-        if args.fsforce:
-            args.fstypes['*'] = args.fsfallback
-    del args.fsfallback
-    del args.fsforce
-    # /end deprecation
 
     if '*' in args.fstypes:
         print("[!] You are forcing the file system type to {0}. This may cause unexpected results."
