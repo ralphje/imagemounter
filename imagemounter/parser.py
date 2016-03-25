@@ -27,6 +27,9 @@ class ImageParser(object):
         :param args: arguments that should be passed down to :class:`Disk` and :class:`Volume` objects
         """
 
+        from imagemounter import __version__
+        logger.debug("imagemounter version %s", __version__)
+
         # Python 3 compatibility
         if sys.version_info[0] == 2:
             string_types = basestring
