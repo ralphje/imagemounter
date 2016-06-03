@@ -86,6 +86,7 @@ def main():
             print("-- Detecting volume types (all recommended, first two highly recommended) --")
             self._check_command("fsstat", "sleuthkit")
             self._check_command("file", "libmagic1")
+            self._check_command("blkid")
             self._check_module("magic", "python-magic")
             self._check_command("disktype", "disktype")
             print("-- Enhanced mounting and detecting disks (install when needed) --")
