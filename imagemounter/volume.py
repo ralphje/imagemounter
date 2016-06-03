@@ -165,6 +165,24 @@ class Volume(object):
         else:
             return self.size
 
+    def get_blkid_type(self):
+        """Retrieves the FS type from the blkid command."""
+        try:
+            result = _util.check_output_(['blkid', '-p', '-O', str(self.offset), self.get_raw_path()])
+            if not result:
+                return None
+
+            # noinspection PyTypeChecker
+            blkid_result = dict(re.findall(r'([A-Z]+)="(.+?)"', result))
+
+            if 'PTTYPE' in blkid_result and 'TYPE' not in blkid_result:
+                return blkid_result.get('PTTYPE')
+            else:
+                return blkid_result.get('TYPE')
+
+        except Exception:
+            return None
+
     def get_magic_type(self):
         """Checks the volume for its magic bytes and returns the magic."""
 
@@ -425,7 +443,7 @@ class Volume(object):
             last_resort = None  # use this if we can't determine the FS type more reliably
             # we have two possible sources for determining the FS type: the description given to us by the detection
             # method, and the type given to us by the stat function
-            for fsdesc in (self.fsdescription, self.statfstype, self.guid, self.get_magic_type):
+            for fsdesc in (self.fsdescription, self.statfstype, self.guid, self.get_blkid_type, self.get_magic_type):
                 # For efficiency reasons, not all functions are called instantly.
                 if callable(fsdesc):
                     fsdesc = fsdesc()
