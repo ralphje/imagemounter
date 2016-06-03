@@ -115,6 +115,7 @@ def check_output_(cmd, *args, **kwargs):
     result = subprocess.check_output(cmd, *args, **kwargs)
     if result:
         result = result.decode(encoding)
+        logger.debug('< {0}'.format(result))
     return result
 
 
