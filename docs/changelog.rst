@@ -17,7 +17,7 @@ Future major release
 * Calling :func:`init` will not automatically mount the volume when it is not ``alloc``.
 * Fix a bug where ``.e01`` files (lowercase) would not be recognized as Encase
 * Add support for newer versions of ``mmls``
-* Renamed ``get_raw_base_path`` to ``get_raw_path`` and removed ``open_jffs2``, ``find_lvm_volumes`` and ``open_luks_container`` from public API.
+* Renamed ``get_raw_base_path`` to ``get_raw_path`` and removed ``get_magic_type``, ``open_jffs2``, ``find_lvm_volumes`` and ``open_luks_container`` from public API.
 
 
 2.0.4 (2016-03-15)
