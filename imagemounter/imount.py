@@ -224,6 +224,9 @@ def main():
                 return col("[+] " + msg, 'cyan')
             elif msg.startswith('$'):
                 return col("  " + msg, 'cyan')
+            elif msg.startswith('<'):
+                if args.verbose >= 4:
+                    return col("  " + "\n  < ".join(msg.splitlines()), 'cyan')
             else:
                 return col("    " + msg, 'cyan')
 
