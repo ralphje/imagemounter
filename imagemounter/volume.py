@@ -214,6 +214,8 @@ class Volume(object):
             return self.parent._paths['lv']
         elif self.parent and self.parent != self.disk and self.parent._paths.get('bde'):
             return self.parent._paths['bde'] + '/bde1'
+        elif self.parent and self.parent != self.disk and self.parent._paths.get('md'):
+            return self.parent._paths['md']
         elif self._paths.get('luks'):
             return '/dev/mapper/' + self._paths['luks']
         elif self.parent and self.parent != self.disk and self.parent._paths.get('luks'):
@@ -502,6 +504,8 @@ class Volume(object):
                     self.fstype = 'minix'
                 elif "dos/mbr boot sector" in fsdesc:
                     self.fstype = 'detect'  # vsdetect, choosing between dos and gpt is hard
+                elif 'linux_raid_member' in fsdesc:
+                    self.fstype = 'raid'
                 elif fsdesc.upper() in FILE_SYSTEM_GUIDS:
                     # this is a bit of a workaround for the fill_guid method
                     self.fstype = FILE_SYSTEM_GUIDS[fsdesc.upper()]
@@ -604,6 +608,9 @@ class Volume(object):
 
                 for _ in self.volumes.detect_volumes('lvm'):
                     pass
+
+            elif self.fstype == 'raid':
+                self._open_raid_volume()
 
             elif self.fstype == 'dir':
                 os.rmdir(self.mountpoint)
@@ -813,6 +820,32 @@ class Volume(object):
 
         return True
 
+    def _open_raid_volume(self):
+        if not self._find_loopback():
+            logger.error("No loopback device created for %s", str(v))
+            return False
+
+        try:
+            # use mdadm to mount the loopback to a md device
+            # incremental and run as soon as available
+            output = _util.check_output_(['mdadm', '-IR', self.loopback], stderr=subprocess.STDOUT)
+            match = re.findall(r"attached to ([^ ,]+)", output)
+            if match:
+                self._paths['md'] = os.path.realpath(match[0])
+                logger.info("Mounted RAID to {0}".format(self._paths['md']))
+        except Exception:
+            logger.exception("Failed mounting RAID.")
+            return False
+
+        container = self.volumes._make_subvolume()
+        container.index = "{0}.0".format(self.index)
+        container.info['fsdescription'] = 'RAID Volume'
+        container.flag = 'alloc'
+        container.offset = 0
+        container.size = self.size
+
+        return True
+
     def get_volumes(self):
         """Recursively gets a list of all subvolumes and the current volume."""
 
@@ -950,6 +983,14 @@ class Volume(object):
                 return False
 
             del self._paths['bde']
+
+        if self._paths.get('md'):
+            try:
+                _util.check_output_(["mdadm", '--stop', self._paths['md']])
+            except Exception:
+                return False
+
+            del self._paths['md']
 
         if self._paths.get('vss'):
             if not _util.clean_unmount(['fusermount', '-u'], self._paths['vss']):
