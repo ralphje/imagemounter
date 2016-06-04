@@ -477,9 +477,9 @@ def main():
                         if args.carve and volume.flag in ('alloc', 'unalloc'):
                             sys.stdout.write("[+] Carving volume...\r")
                             sys.stdout.flush()
-                            if volume.carve(freespace=False):
-                                print('[+] Carved data is available at {0}.'.format(col(volume.carvepoint, 'green',
-                                                                                        attrs=['bold'])))
+                            path = volume.carve(freespace=False)
+                            if path:
+                                print('[+] Carved data is available at {0}.'.format(col(path, 'green', attrs=['bold'])))
                             else:
                                 print(col('[-] Carving failed.', 'red'))
                         else:
@@ -488,8 +488,9 @@ def main():
                         if args.vshadow and volume.fstype == 'ntfs':
                             sys.stdout.write("[+] Mounting volume shadow copies...\r")
                             sys.stdout.flush()
-                            if volume.carve(freespace=False):
-                                print('[+] Volume shadow copies available at {0}.'.format(col(volume.vsspoint, 'green',
+                            path = volume.vshadowmount()
+                            if path:
+                                print('[+] Volume shadow copies available at {0}.'.format(col(path, 'green',
                                                                                           attrs=['bold'])))
                             else:
                                 print(col('[-] Volume shadow copies could not be mounted.', 'red'))
@@ -578,7 +579,7 @@ def main():
                 else:
                     failed = []
                     for disk in p.disks:
-                        failed.extend([x for x in disk.volumes if not x.bindmountpoint and x.mountpoint and x != root])
+                        failed.extend([x for x in disk.volumes if 'bindmounts' not in x._paths and x.mountpoint and x != root])
                     if failed:
                         print("[+] Parts of the filesystem are reconstructed in {0}.".format(col(root.mountpoint,
                                                                                                  "green",

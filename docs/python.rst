@@ -194,10 +194,6 @@ The best example of the use of the Python interface is the :command:`imount` com
 
       The mountpoint of the volume after :func:`mount` has been called.
 
-   .. attribute:: bindmountpoint
-
-      The mountpoint of the volume after :func:`bindmount` has been called.
-
    .. attribute:: loopback
 
       The loopback device used by the volume after :func:`mount` (or related methods) has been called.
@@ -217,13 +213,8 @@ The best example of the use of the Python interface is the :command:`imount` com
       any).
 
    .. attribute:: volume_group
-                  lv_path
 
       Attributes used for LVM support
-
-   .. attribute:: luks_path
-
-      Attribute used for LUKS support
 
    .. attribute:: disk
                   stats
