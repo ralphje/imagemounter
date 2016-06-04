@@ -51,7 +51,7 @@ class VolumeSystem(object):
     def __getitem__(self, item):
         item_suffix = ".{}".format(item)
         for v in self.volumes:
-            if v.index.endswith(item_suffix) or str(v.index) == str(item):
+            if v.index.endswith(item_suffix) or v.index == str(item):
                 return v
         raise KeyError
 
@@ -70,7 +70,7 @@ class VolumeSystem(object):
 
         volume = self._make_subvolume()
         if self.parent.index is None:
-            volume.index = 0
+            volume.index = '0'
         else:
             volume.index = '{0}.0'.format(self.parent.index)
         return volume
@@ -123,7 +123,7 @@ class VolumeSystem(object):
         if self.parent.index is not None:
             return '{0}.{1}'.format(self.parent.index, idx)
         else:
-            return idx
+            return str(idx)
 
     def _find_pytsk3_volumes(self, vstype='detect'):
         """Finds all volumes based on the pytsk3 library."""

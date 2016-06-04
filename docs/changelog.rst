@@ -28,6 +28,7 @@ Removed and modified features:
 * Removal of fsforce and fsfallback arguments and attributes to Volume, and the removal of :option:`--fsforce` and :option:`--fsfallback` from CLI. Use ``*`` and ``?`` as fstypes instead for the same effect. This should make the CLI more sensible, especially regarding the :option:`--fsforce` argument. The default FS fallback is still ``unknown``, which can only be overridden by specifying ``--fstypes=?=none``.
 * Renamed ``get_raw_base_path`` to ``get_raw_path``, renamed ``fill_stats`` to ``load_fsstat_data``, renamed ``get_size_gib`` to ``get_formatted_size``, and removed ``get_magic_type``, ``open_jffs2``, ``find_lvm_volumes`` and ``open_luks_container`` from public API.
 * Moved several attributes of :class:`Volume` to a new :attr:`info` attribute.
+* :attr:`index` is now always ``str``.
 
 2.0.4 (2016-03-15)
 ------------------
