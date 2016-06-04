@@ -89,9 +89,6 @@ class Volume(object):
         self.volumes = VolumeSystem(parent=self, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
                                     pretty=self.pretty, mountdir=self.mountdir, **args)
 
-        # Used by lvm specific functions
-        self.volume_group = ""
-
         self.block_size = self.disk.block_size
 
         self.args = args
@@ -807,14 +804,14 @@ class Volume(object):
         for l in result.splitlines():
             if self.loopback in l or (self.offset == 0 and self.get_raw_path() in l):
                 for vg in re.findall(r'VG (\S+)', l):
-                    self.volume_group = vg
+                    self.info['volume_group'] = vg
 
-        if not self.volume_group:
+        if not self.info.get('volume_group'):
             logger.warning("Volume is not a volume group. (Searching for %s)", self.loopback)
             return False
 
         # Enable lvm volumes
-        _util.check_call_(["lvm", "vgchange", "-a", "y", self.volume_group], stdout=subprocess.PIPE)
+        _util.check_call_(["lvm", "vgchange", "-a", "y", self.info['volume_group']], stdout=subprocess.PIPE)
 
         return True
 
@@ -934,13 +931,13 @@ class Volume(object):
         for volume in self.volumes:
             volume.unmount()
 
-        if self.loopback and self.volume_group:
+        if self.loopback and self.info.get('volume_group'):
             try:
-                _util.check_call_(["lvm", 'vgchange', '-a', 'n', self.volume_group], stdout=subprocess.PIPE)
+                _util.check_call_(["lvm", 'vgchange', '-a', 'n', self.info['volume_group']], stdout=subprocess.PIPE)
             except Exception:
                 return False
 
-            self.volume_group = ""
+            self.info['volume_group'] = ""
 
         if self.loopback and self._paths.get('luks'):
             try:

@@ -91,7 +91,7 @@ class VolumeSystem(object):
             method = VolumeSystem._determine_auto_detection_method()
 
         if vstype == 'lvm':
-            for v in self._detect_lvm_volumes(self.parent.volume_group):
+            for v in self._detect_lvm_volumes(self.parent.info.get('volume_group')):
                 yield v
         elif method == 'mmls':
             for v in self._detect_mmls_volumes(vstype):
