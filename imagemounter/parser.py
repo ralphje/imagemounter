@@ -50,7 +50,7 @@ class ImageParser(object):
                 index = None
             else:
                 index += 1
-            self.disks.append(Disk(self, path, index=index, **self.args))
+            self.disks.append(Disk(self, path, index=str(index) if index else None, **self.args))
 
     def init(self, single=None, raid=True):
         """Handles all important disk-mounting tasks, i.e. calls the :func:`Disk.init` function on all underlying

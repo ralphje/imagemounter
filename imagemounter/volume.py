@@ -60,10 +60,10 @@ class Volume(object):
         self.parent = parent
         self.disk = disk
         self.stats = stats
-        self.fstypes = fstypes or {'?': 'unknown'}
+        self.fstypes = {str(k): v for k, v in fstypes.items()} or {'?': 'unknown'}
         if '?' in self.fstypes and (not self.fstypes['?'] or self.fstypes['?'] == 'none'):
             self.fstypes['?'] = None
-        self.keys = keys or {}
+        self.keys = {str(k): v for k, v in keys.items()} or {}
         self.pretty = pretty
         self.mountdir = mountdir
         if self.disk.parser.casename:
@@ -304,7 +304,7 @@ class Volume(object):
         """Indicates whether this volume should be mounted. Internal method, used by imount.py"""
 
         return only_mount is None or \
-            self.index in only_mount or str(self.index) in only_mount or \
+            self.index in only_mount or \
             self.info.get('lastmountpoint') in only_mount or \
             self.info.get('label') in only_mount
 
@@ -358,9 +358,9 @@ class Volume(object):
                         ".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]) or \
                         os.path.basename(self.disk.paths[0])
             if self.disk.parser.casename == case_name:  # the casename is already in the path in this case
-                pretty_label = "{0}-{1}".format(str(self.index), self.get_safe_label() or self.fstype or 'volume')
+                pretty_label = "{0}-{1}".format(self.index, self.get_safe_label() or self.fstype or 'volume')
             else:
-                pretty_label = "{0}-{1}-{2}".format(case_name, str(self.index),
+                pretty_label = "{0}-{1}-{2}".format(case_name, self.index,
                                                     self.get_safe_label() or self.fstype or 'volume')
             if suffix:
                 pretty_label += "-" + suffix
@@ -385,7 +385,7 @@ class Volume(object):
                 logger.exception("Could not create mountdir.")
                 return False
         else:
-            setattr(self, var_name, tempfile.mkdtemp(prefix='im_' + str(self.index) + '_',
+            setattr(self, var_name, tempfile.mkdtemp(prefix='im_' + self.index + '_',
                                                      suffix='_' + self.get_safe_label() +
                                                             ("_" + suffix if suffix else ""),
                                                      dir=self.mountdir))
@@ -427,8 +427,8 @@ class Volume(object):
         """
 
         # Determine fs type. If forced, always use provided type.
-        if str(self.index) in self.fstypes:
-            self.fstype = self.fstypes[str(self.index)]
+        if self.index in self.fstypes:
+            self.fstype = self.fstypes[self.index]
         elif '*' in self.fstypes:
             self.fstype = self.fstypes['*']
         elif self.fstype in FILE_SYSTEM_TYPES:
@@ -720,15 +720,15 @@ class Volume(object):
         self.bde_path = tempfile.mkdtemp(prefix='image_mounter_bde_')
 
         try:
-            if str(self.index) in self.keys:
-                t, v = self.keys[str(self.index)].split(':', 1)
+            if self.index in self.keys:
+                t, v = self.keys[self.index].split(':', 1)
                 key = ['-' + t, v]
             else:
                 logger.warning("No key material provided for %s", self)
                 key = []
         except ValueError:
             logger.exception("Invalid key material provided (%s) for %s. Expecting [arg]:[value]",
-                             self.keys.get(str(self.index)), self)
+                             self.keys.get(self.index), self)
             return None
 
         # noinspection PyBroadException
