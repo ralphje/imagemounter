@@ -111,7 +111,6 @@ The best example of the use of the Python interface is the :command:`imount` com
       The source of the volumes of this disk, either *single* or *multi*, filled after a call to :func:`mount_volumes`.
 
    .. attribute:: loopback
-                  md_device
 
       Used for RAID support.
 

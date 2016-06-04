@@ -68,6 +68,18 @@ Please note that many Linux based operating systems will try to mount LVMs for y
 
 Unmounting LVMs is supported both by properly closing from the script as well as by using :option:`--unmount`
 
+Linux RAID
+----------
+Linux RAID volume support is provided by the ``mdadm`` command. A volume is added to a RAID array incrementally; the ``mdadm`` command is responsible for adding the volume to the correct array. The location of the RAID array is captured by imagemounter so it can be unmounted again.
+
+However, if the RAID volume can not be started directly after adding the volume, mounting will have succeeded, but the mountpoint will not be available yet. If the RAID volume has already started by a previous volume, mounting will also succeed, but you will iterate over the same volumes a second time.
+
+.. warning::
+
+   Unmounting a RAID volume will also immediately unmount all other RAID volumes in the same array.
+
+Because of this, you should ensure that you keep all RAID volumes mounted until you are done building and examining a specific array.
+
 XFS
 ---
 XFS is supported through the *xfsprogs* package.
