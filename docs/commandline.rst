@@ -90,6 +90,10 @@ This command-line option enables an additional and useful feature.
 
    Carves the filesystem for missing files.
 
+.. cmdoption:: --vshadow
+
+   Also mounts volume shadow copies
+
 Mount behaviour
 ^^^^^^^^^^^^^^^
 These arguments alter some pieces of the mount behaviour of :mod:`imagemounter`, mostly to ease your work.

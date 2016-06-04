@@ -88,6 +88,7 @@ class Volume(object):
 
         # Used by carving
         self.carvepoint = ""
+        self.vsspoint = ""
 
         # Used by functions that create subvolumes
         self.volumes = VolumeSystem(parent=self, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
@@ -302,6 +303,26 @@ class Volume(object):
             except Exception:
                 logger.exception("Failed carving the volume.")
                 return False
+
+    def vshadowmount(self):
+        """Method to call vshadowmount and mount NTFS volume shadow copies.
+
+        :return: boolean indicating whether the command succeeded
+        """
+
+        if not _util.command_exists('vshadowmount'):
+            logger.warning("vshadowmount is not installed, could not mount volume shadow copies")
+            return False
+
+        if not self._make_mountpoint(var_name='vsspoint', suffix="vss"):
+            return False
+
+        try:
+            _util.check_call_(["vshadowmount", "-o", str(self.offset), self.get_raw_path(), self.vsspoint])
+
+        except Exception:
+            logger.exception("Failed mounting the volume shadow copies.")
+            return False
 
     def _should_mount(self, only_mount=None):
         """Indicates whether this volume should be mounted. Internal method, used by imount.py"""
@@ -936,6 +957,12 @@ class Volume(object):
                 return False
 
             self.bde_path = ""
+
+        if self.vsspoint:
+            if not _util.clean_unmount(['fusermount', '-u'], self.vsspoint):
+                return False
+
+            self.vsspoint = ""
 
         if self.loopback:
             try:
