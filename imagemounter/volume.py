@@ -72,9 +72,8 @@ class Volume(object):
         # Should be filled somewhere
         self.size = 0
         self.offset = 0
-        self.index = 0
+        self.index = "0"
         self.slot = 0
-        self.size = 0
         self.flag = 'alloc'
         self.fstype = ""
 
@@ -169,6 +168,8 @@ class Volume(object):
             # noinspection PyTypeChecker
             blkid_result = dict(re.findall(r'([A-Z]+)="(.+?)"', result))
 
+            self.info['blkid_data'] = blkid_result
+
             if 'PTTYPE' in blkid_result and 'TYPE' not in blkid_result:
                 return blkid_result.get('PTTYPE')
             else:
@@ -194,6 +195,7 @@ class Volume(object):
                 # using https://github.com/ahupp/python-magic
                 logger.debug("Using python-magic Python package for file type magic")
                 result = magic.from_buffer(fheader).decode()
+                self.info['magic_data'] = result
                 return result
 
             elif hasattr(magic, 'open'):
@@ -203,6 +205,7 @@ class Volume(object):
                 ms.load()
                 result = ms.buffer(fheader)
                 ms.close()
+                self.info['magic_data'] = result
                 return result
 
             else:
