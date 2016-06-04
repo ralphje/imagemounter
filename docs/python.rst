@@ -180,15 +180,16 @@ The best example of the use of the Python interface is the :command:`imount` com
 
       A dict containing information about the volume. Not all keys are always available. Some common keys include:
 
-      * fsdescription -- A description of the file system type, usually set by the detection method.
+      * fsdescription -- A description of the file system type, usually set by the detection method
       * lastmountpoint -- The last mountpoint of this volume. Set by :func:`load_fsstat_data` or
-        :func:`detect_mountpoint` and only available for UFS and Ext volumes.
-      * label -- The volume label as detected by :func:`load_fsstat_data`.
-      * version -- The volume version as detected by :func:`load_fsstat_data`.
-      * statfstype -- The volume file system type as detected by :func:`load_fsstat_data`.
+        :func:`detect_mountpoint` and only available for UFS and Ext volumes
+      * label -- The volume label as detected by :func:`load_fsstat_data`
+      * version -- The volume version as detected by :func:`load_fsstat_data`
+      * statfstype -- The volume file system type as detected by :func:`load_fsstat_data`
       * guid -- The volume GUID
+      * volume_group -- Used for LVM support
 
-      The contents of the info dict are not considered part of the public API and are subject to change in the future.
+      The contents of the info dict are not considered part of a stable API and are subject to change in the future.
 
    .. attribute:: mountpoint
 
@@ -211,10 +212,6 @@ The best example of the use of the Python interface is the :command:`imount` com
 
       :attr:`volumes` contains a :class:`VolumeSystem` of all subvolumes of this volume; :attr:`parent` contains the parent volume (if
       any).
-
-   .. attribute:: volume_group
-
-      Attributes used for LVM support
 
    .. attribute:: disk
                   stats
