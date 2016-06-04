@@ -112,11 +112,17 @@ def check_call_(cmd, *args, **kwargs):
 
 def check_output_(cmd, *args, **kwargs):
     logger.debug('$ {0}'.format(' '.join(cmd)))
-    result = subprocess.check_output(cmd, *args, **kwargs)
-    if result:
-        result = result.decode(encoding)
-        logger.debug('< {0}'.format(result))
-    return result
+    try:
+        result = subprocess.check_output(cmd, *args, **kwargs)
+        if result:
+            result = result.decode(encoding)
+            logger.debug('< {0}'.format(result))
+        return result
+    except subprocess.CalledProcessError as e:
+        if e.output:
+            result = e.output.decode(encoding)
+            logger.debug('< {0}'.format(result))
+        raise
 
 
 def determine_slot(table, slot):

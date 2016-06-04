@@ -8,7 +8,7 @@ BLOCK_SIZE = 512
 VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt')
 FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'hfs', 'hfs+', 'xfs', 'iso', 'udf', 'fat',
                      'vmfs', 'squashfs', 'jffs2', 'cramfs', 'minix',
-                     'luks', 'bde', 'lvm',
+                     'luks', 'bde', 'lvm', 'raid',
                      'dos', 'mac', 'bsd', 'sun', 'gpt',
                      'dir', 'unknown')
 

@@ -82,6 +82,7 @@ class Volume(object):
         self.loopback = ""
         self.exception = None
         self.was_mounted = False
+        self.was_unmounted = False
 
         # Used by functions that create subvolumes
         self.volumes = VolumeSystem(parent=self, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
@@ -208,20 +209,23 @@ class Volume(object):
         path to a logical volume. This is used to determine the source path for a mount call.
         """
 
-        if self._paths.get('lv'):
-            return self._paths['lv']
-        elif self.parent and self.parent != self.disk and self.parent._paths.get('lv'):
-            return self.parent._paths['lv']
-        elif self.parent and self.parent != self.disk and self.parent._paths.get('bde'):
-            return self.parent._paths['bde'] + '/bde1'
-        elif self.parent and self.parent != self.disk and self.parent._paths.get('md'):
-            return self.parent._paths['md']
-        elif self._paths.get('luks'):
-            return '/dev/mapper/' + self._paths['luks']
-        elif self.parent and self.parent != self.disk and self.parent._paths.get('luks'):
-            return '/dev/mapper/' + self.parent._paths['luks']
-        else:
-            return self.disk.get_fs_path()
+        v = self
+        while True:
+            if v._paths.get('lv'):
+                return v._paths['lv']
+            elif v._paths.get('bde'):
+                return v._paths['bde'] + '/bde1'
+            elif v._paths.get('luks'):
+                return '/dev/mapper/' + self._paths['luks']
+            elif v._paths.get('md'):
+                return v._paths['md']
+
+            # Only if the volume has a parent that is not a disk, we try to check the parent for a location.
+            if v.parent and v.parent != self.disk:
+                v = v.parent
+            else:
+                break
+        return self.disk.get_fs_path()
 
     def get_safe_label(self):
         """Returns a label that is safe to add to a path in the mountpoint for this volume."""
@@ -502,6 +506,8 @@ class Volume(object):
                     self.fstype = 'jffs2'
                 elif "minix filesystem" in fsdesc:
                     self.fstype = 'minix'
+                elif fsdesc == 'dos':
+                    self.fstype = 'dos'
                 elif "dos/mbr boot sector" in fsdesc:
                     self.fstype = 'detect'  # vsdetect, choosing between dos and gpt is hard
                 elif 'linux_raid_member' in fsdesc:
@@ -549,7 +555,7 @@ class Volume(object):
         self.determine_fs_type()
 
         # we need a mountpoint if it is not a lvm or luks volume
-        if self.fstype not in ('luks', 'lvm', 'bde') and self.fstype not in VOLUME_SYSTEM_TYPES and \
+        if self.fstype not in ('luks', 'lvm', 'bde', 'raid') and self.fstype not in VOLUME_SYSTEM_TYPES and \
                 self.fstype in FILE_SYSTEM_TYPES and not self._make_mountpoint():
             return False
 
@@ -560,7 +566,7 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
-                _util.check_call_(cmd, stdout=subprocess.PIPE)
+                _util.check_output_(cmd, stderr=subprocess.STDOUT)
 
             if self.fstype == 'ext':
                 call_mount('ext4', 'noexec,noload,loop,offset=' + str(self.offset))
@@ -821,6 +827,8 @@ class Volume(object):
         return True
 
     def _open_raid_volume(self):
+        """Add the volume to a RAID system. The RAID array is activated as soon as the array can be activated."""
+
         if not self._find_loopback():
             logger.error("No loopback device created for %s", str(v))
             return False
@@ -829,8 +837,11 @@ class Volume(object):
             # use mdadm to mount the loopback to a md device
             # incremental and run as soon as available
             output = _util.check_output_(['mdadm', '-IR', self.loopback], stderr=subprocess.STDOUT)
+
             match = re.findall(r"attached to ([^ ,]+)", output)
             if match:
+                if 'which is already active' in output:
+                    logger.info("RAID is already active in other volume, using %s", os.path.realpath(match[0]))
                 self._paths['md'] = os.path.realpath(match[0])
                 logger.info("Mounted RAID to {0}".format(self._paths['md']))
         except Exception:
@@ -962,6 +973,9 @@ class Volume(object):
         for volume in self.volumes:
             volume.unmount()
 
+        if self.was_mounted and not self.was_unmounted:
+            logger.info("Unmounting volume %s", self)
+
         if self.loopback and self.info.get('volume_group'):
             try:
                 _util.check_call_(["lvm", 'vgchange', '-a', 'n', self.info['volume_group']], stdout=subprocess.PIPE)
@@ -985,12 +999,21 @@ class Volume(object):
             del self._paths['bde']
 
         if self._paths.get('md'):
-            try:
-                _util.check_output_(["mdadm", '--stop', self._paths['md']])
-            except Exception:
-                return False
+            md_path = self._paths['md']
+            del self._paths['md']  # removing it here to ensure we do not enter an infinite loop, will add it back later
 
-            del self._paths['md']
+            # MD arrays are a bit complicated, we also check all other volumes that are part of this array and
+            # unmount them as well.
+            logger.debug("All other volumes that use %s as well will also be unmounted", md_path)
+            for v in self.disk.get_volumes():
+                if v != self and v._paths.get('md') == md_path:
+                    v.unmount()
+
+            try:
+                _util.check_output_(["mdadm", '--stop', md_path], stderr=subprocess.STDOUT)
+            except Exception:
+                self._paths['md'] = md_path
+                return False
 
         if self._paths.get('vss'):
             if not _util.clean_unmount(['fusermount', '-u'], self._paths['vss']):
@@ -1026,4 +1049,5 @@ class Volume(object):
             else:
                 del self._paths['carve']
 
+        self.was_unmounted = True
         return True
