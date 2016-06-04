@@ -34,6 +34,7 @@ Removed and modified features:
 * Also removed the ``*_path``, ``carvepoint`` and ``bindmountpoint`` attributes from the public API. For ``carvepoint``, the ``carve`` method now returns the path to the carvepoint. All data has been moved to the private ``_paths`` attribute. The ``mountpoint`` and ``loopback`` attributes are kept by the way.
 * Moved several attributes of :class:`Volume` to a new :attr:`info` attribute, which is publicly accessible, but its contents are not part of a stable public API.
 * :attr:`index` is now always ``str``.
+* Dropped support for Python 3.2, since everyone seems to be doing that these days.
 
 2.0.4 (2016-03-15)
 ------------------
