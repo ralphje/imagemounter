@@ -184,7 +184,7 @@ class VolumeSystem(object):
             volume = self._make_subvolume()
             # Fill volume with more information
             volume.offset = p.start * self.disk.block_size
-            volume.fsdescription = p.desc.strip()
+            volume.info['fsdescription'] = p.desc.strip()
             volume.index = self._format_index(p.addr)
             volume.size = p.len * self.disk.block_size
 
@@ -193,7 +193,7 @@ class VolumeSystem(object):
                 volume.slot = _util.determine_slot(p.table_num, p.slot_num)
                 self._assign_disktype_data(volume)
                 logger.info("Found allocated {2}: block offset: {0}, length: {1} ".format(p.start, p.len,
-                                                                                          volume.fsdescription))
+                                                                                          volume.info['fsdescription']))
             elif p.flags == pytsk3.TSK_VS_PART_FLAG_UNALLOC:
                 volume.flag = 'unalloc'
                 logger.info("Found unallocated space: block offset: {0}, length: {1} ".format(p.start, p.len))
@@ -249,7 +249,7 @@ class VolumeSystem(object):
 
                 volume = self._make_subvolume()
                 volume.offset = int(start) * self.disk.block_size
-                volume.fsdescription = description
+                volume.info['fsdescription'] = description
                 volume.index = self._format_index(int(index[:-1]))
                 volume.size = int(length) * self.disk.block_size
             except Exception:
@@ -270,7 +270,7 @@ class VolumeSystem(object):
                     volume.slot = _util.determine_slot(-1, slot)
                 self._assign_disktype_data(volume)
                 logger.info("Found allocated {2}: block offset: {0}, length: {1} ".format(start, length,
-                                                                                          volume.fsdescription))
+                                                                                          volume.info['fsdescription']))
 
             yield volume
 
@@ -320,7 +320,7 @@ class VolumeSystem(object):
                 volume = self._make_subvolume()
                 volume.offset = int(start[:-1]) * self.disk.block_size  # remove last s
                 volume.size = int(length[:-1]) * self.disk.block_size
-                volume.fsdescription = description
+                volume.info['fsdescription'] = description
                 volume.index = self._format_index(num)
 
                 # TODO: detection of meta volumes
@@ -337,8 +337,8 @@ class VolumeSystem(object):
                     volume.flag = 'alloc'
                     volume.slot = slot
                     self._assign_disktype_data(volume)
-                    logger.info("Found allocated {2}: block offset: {0}, length: {1} ".format(start[:-1], length[:-1],
-                                                                                              volume.fsdescription))
+                    logger.info("Found allocated {2}: block offset: {0}, length: {1} "
+                                .format(start[:-1], length[:-1], volume.info['fsdescription']))
             except AttributeError:
                 logger.exception("Error while parsing parted output")
                 continue
@@ -356,10 +356,10 @@ class VolumeSystem(object):
             if "--- Logical volume ---" in l:
                 cur_v = self._make_subvolume()
                 cur_v.index = self._format_index(len(self) - 1)
-                cur_v.fsdescription = 'Logical Volume'
+                cur_v.info['fsdescription'] = 'Logical Volume'
                 cur_v.flag = 'alloc'
             if "LV Name" in l:
-                cur_v.label = l.replace("LV Name", "").strip()
+                cur_v.info['label'] = l.replace("LV Name", "").strip()
             if "LV Size" in l:
                 cur_v.size = l.replace("LV Size", "").strip()
             if "LV Path" in l:
@@ -411,7 +411,7 @@ class VolumeSystem(object):
             slot = volume.slot
         if slot in self._disktype:
             data = self._disktype[slot]
-            if not volume.guid and 'guid' in data:
-                volume.guid = data['guid']
-            if not volume.label and 'label' in data:
-                volume.label = data['label']
+            if not volume.info.get('guid') and 'guid' in data:
+                volume.info['guid'] = data['guid']
+            if not volume.info.get('label') and 'label' in data:
+                volume.info['label'] = data['label']
