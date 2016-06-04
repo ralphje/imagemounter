@@ -101,6 +101,7 @@ def main():
             self._check_command("mount.jffs2", "mtd-tools", "JFFS2 volumes")
             self._check_command("mount.squashfs", "squashfs-tools", "SquashFS volumes")
             self._check_command("bdemount", "libbde-utils", "Bitlocker Drive Encryption volumes")
+            self._check_command("vshadowmount", "libvshadow-utils", "NTFS volume shadow copies")
             parser.exit()
 
     parser = MyParser(description='Utility to mount volumes in Encase and dd images locally.')
@@ -136,6 +137,8 @@ def main():
                              'at once')
     parser.add_argument('--carve', action='store_true', default=False,
                         help='automatically carve the free space of a mounted volume for deleted files')
+    parser.add_argument('--vshadow', action='store_true', default=False,
+                        help='automatically mount volume shadow copies')
 
     # Specify options to the subsystem
     parser.add_argument('-md', '--mountdir', default=None,
@@ -365,6 +368,11 @@ def main():
                   "installed. Carving will be disabled.", 'yellow'))
         args.carve = False
 
+    if args.vshadow and not _util.command_exists('vshadowmount'):
+        print(col("[-] The vhadowmount command is required to mount volume shadow copies, but is not "
+                  "installed. Mounting volume shadow copies will be disabled.", 'yellow'))
+        args.vshadow = False
+
     if not args.images and not args.unmount:
         print(col("[-] You must specify at least one path to a disk image", 'red'))
         sys.exit(1)
@@ -474,6 +482,17 @@ def main():
                                                                                         attrs=['bold'])))
                             else:
                                 print(col('[-] Carving failed.', 'red'))
+                        else:
+                            continue  # we do not need the unmounting sequence
+
+                        if args.vshadow and volume.fstype == 'ntfs':
+                            sys.stdout.write("[+] Mounting volume shadow copies...\r")
+                            sys.stdout.flush()
+                            if volume.carve(freespace=False):
+                                print('[+] Volume shadow copies available at {0}.'.format(col(volume.vsspoint, 'green',
+                                                                                          attrs=['bold'])))
+                            else:
+                                print(col('[-] Volume shadow copies could not be mounted.', 'red'))
                         else:
                             continue  # we do not need the unmounting sequence
 
