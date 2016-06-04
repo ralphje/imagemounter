@@ -76,8 +76,6 @@ class Volume(object):
         self.fstype = ""
 
         self.info = {}
-
-        # Should be filled by mount
         self._paths = {}
 
         self.mountpoint = ""
