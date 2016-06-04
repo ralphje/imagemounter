@@ -470,7 +470,8 @@ class Volume(object):
                 fsdesc = fsdesc.lower()
 
                 # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info
-                if fsdesc in ('logical volume', 'luks volume', 'bde volume', 'primary', 'basic data partition'):
+                if fsdesc in ('logical volume', 'luks volume', 'bde volume', 'raid volume',
+                              'primary', 'basic data partition'):
                     continue
 
                 if fsdesc == 'directory':
