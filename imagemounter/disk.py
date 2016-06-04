@@ -20,7 +20,7 @@ class Disk(object):
     """Representation of a disk, image file or anything else that can be considered a disk. """
 
     # noinspection PyUnusedLocal
-    def __init__(self, parser, path, offset=0, read_write=False, method='auto',
+    def __init__(self, parser, path, offset=0, block_size=BLOCK_SIZE, read_write=False, method='auto',
                  multifile=True, index=None, mount_directories=True, **args):
         """Instantiation of this class does not automatically mount, detect or analyse the disk. You will need the
         :func:`init` method for this.
@@ -54,31 +54,25 @@ class Disk(object):
         self.paths = sorted(_util.expand_path(path))
 
         self.offset = offset
-        self.block_size = BLOCK_SIZE
+        self.block_size = block_size
         self.read_write = read_write
         self.method = method
-
-        self.read_write = read_write
-        self.rwpath = ""
         self.multifile = multifile
         self.index = index
         self.mount_directories = mount_directories
         self.args = args
 
-        self.name = os.path.split(path)[1]
+        self._name = os.path.split(path)[1]
+        self._paths = {}
+        self.rwpath = ""
         self.mountpoint = ''
-        self.avfs_mountpoint = ''
+        self.loopback = ""
         self.volumes = VolumeSystem(parent=self, **args)
-        self.volume_source = ""
 
-        self.offset = 0
         self._disktype = defaultdict(dict)
 
-        self.loopback = ""
-        self.md_device = ""
-
     def __unicode__(self):
-        return self.name
+        return self._name
 
     def __str__(self):
         return self.__unicode__()
@@ -151,13 +145,13 @@ class Disk(object):
         cmds = []
         for method in methods:
             if method == 'avfs':  # avfs does not participate in the fallback stuff, unfortunately
-                self.avfs_mountpoint = tempfile.mkdtemp(prefix='image_mounter_avfs_')
+                self._paths['avfs'] = tempfile.mkdtemp(prefix='image_mounter_avfs_')
 
                 # start by calling the mountavfs command to initialize avfs
-                _util.check_call_(['avfsd', self.avfs_mountpoint, '-o', 'allow_other'], stdout=subprocess.PIPE)
+                _util.check_call_(['avfsd', self._paths['avfs'], '-o', 'allow_other'], stdout=subprocess.PIPE)
 
                 # no multifile support for avfs
-                avfspath = self.avfs_mountpoint + '/' + os.path.abspath(self.paths[0]) + '#'
+                avfspath = self._paths['avfs'] + '/' + os.path.abspath(self.paths[0]) + '#'
                 targetraw = os.path.join(self.mountpoint, 'avfs')
 
                 os.symlink(avfspath, targetraw)
@@ -259,8 +253,8 @@ class Disk(object):
         :rtype: str
         """
 
-        if self.md_device:
-            return self.md_device
+        if self._paths.get('md'):
+            return self._paths['md']
         elif self.loopback:
             return self.loopback
         else:
@@ -325,8 +319,8 @@ class Disk(object):
             output = _util.check_output_(['mdadm', '-IR', self.loopback], stderr=subprocess.STDOUT)
             match = re.findall(r"attached to ([^ ,]+)", output)
             if match:
-                self.md_device = os.path.realpath(match[0])
-                logger.info("Mounted RAID to {0}".format(self.md_device))
+                self._paths['md'] = os.path.realpath(match[0])
+                logger.info("Mounted RAID to {0}".format(self._paths['md']))
         except Exception as e:
             logger.exception("Failed mounting RAID.")
             return False
@@ -380,7 +374,7 @@ class Disk(object):
         if filesize:
             volume.size = int(filesize.splitlines()[-1].split()[0])
 
-        self.volume_source = 'directory'
+        self.volumes.volume_source = 'directory'
 
         for v in volume.init(no_stats=True, only_mount=only_mount):  # stats can't be retrieved from directory
             yield v
@@ -408,7 +402,7 @@ class Disk(object):
                 volume.size = os.path.getsize(self.get_fs_path())
 
         volume.flag = 'alloc'
-        self.volume_source = 'single'
+        self.volumes.volume_source = 'single'
         self.volumes._assign_disktype_data(volume)
 
         for v in volume.init(no_stats=True, only_mount=only_mount):  # stats can't  be retrieved from single volumes
@@ -446,14 +440,14 @@ class Disk(object):
                 logger.warning("Error unmounting volume {0}".format(m.mountpoint))
 
         # TODO: remove specific device from raid array
-        if self.md_device:
+        if self._paths.get('md'):
             # Removes the RAID device first. Actually, we should be able to remove the devices from the array separately,
             # but whatever.
             try:
-                _util.check_call_(['mdadm', '-S', self.md_device], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                self.md_device = None
+                _util.check_call_(['mdadm', '-S', self._paths['md']], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                del self._paths['md']
             except Exception as e:
-                logger.warning("Failed unmounting MD device {0}".format(self.md_device), exc_info=True)
+                logger.warning("Failed unmounting MD device {0}".format(self._paths['md']), exc_info=True)
 
         if self.loopback:
             # noinspection PyBroadException
@@ -467,8 +461,8 @@ class Disk(object):
             logger.error("Error unmounting base {0}".format(self.mountpoint))
             return False
 
-        if self.avfs_mountpoint and not _util.clean_unmount(['fusermount', '-u'], self.avfs_mountpoint):
-            logger.error("Error unmounting AVFS mountpoint {0}".format(self.avfs_mountpoint))
+        if self._paths.get('avfs') and not _util.clean_unmount(['fusermount', '-u'], self._paths['avfs']):
+            logger.error("Error unmounting AVFS mountpoint {0}".format(self._paths['avfs']))
             return False
 
         if self.rw_active() and remove_rw:
