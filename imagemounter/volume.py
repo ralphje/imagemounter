@@ -11,10 +11,8 @@ import tempfile
 import threading
 import sys
 import shutil
-import warnings
 
 import time
-from collections import defaultdict
 
 from imagemounter import _util, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
 from imagemounter.volume_system import VolumeSystem
@@ -80,15 +78,12 @@ class Volume(object):
         self.info = {}
 
         # Should be filled by mount
+        self._paths = {}
+
         self.mountpoint = ""
-        self.bindmountpoint = ""
         self.loopback = ""
         self.exception = None
         self.was_mounted = False
-
-        # Used by carving
-        self.carvepoint = ""
-        self.vsspoint = ""
 
         # Used by functions that create subvolumes
         self.volumes = VolumeSystem(parent=self, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
@@ -96,11 +91,6 @@ class Volume(object):
 
         # Used by lvm specific functions
         self.volume_group = ""
-        self.lv_path = ""
-
-        # Used by LUKS/BDE
-        self.luks_path = ""
-        self.bde_path = ""
 
         self.block_size = self.disk.block_size
 
@@ -223,16 +213,16 @@ class Volume(object):
         path to a logical volume. This is used to determine the source path for a mount call.
         """
 
-        if self.lv_path:
-            return self.lv_path
-        elif self.parent and self.parent != self.disk and self.parent.lv_path:
-            return self.parent.lv_path
-        elif self.parent and self.parent != self.disk and self.parent.bde_path:
-            return self.parent.bde_path + '/bde1'
-        elif self.luks_path:
-            return '/dev/mapper/' + self.luks_path
-        elif self.parent and self.parent != self.disk and self.parent.luks_path:
-            return '/dev/mapper/' + self.parent.luks_path
+        if self._paths.get('lv'):
+            return self._paths['lv']
+        elif self.parent and self.parent != self.disk and self.parent._paths.get('lv'):
+            return self.parent._paths['lv']
+        elif self.parent and self.parent != self.disk and self.parent._paths.get('bde'):
+            return self.parent._paths['bde'] + '/bde1'
+        elif self._paths.get('luks'):
+            return '/dev/mapper/' + self._paths['luks']
+        elif self.parent and self.parent != self.disk and self.parent._paths.get('luks'):
+            return '/dev/mapper/' + self.parent._paths['luks']
         else:
             return self.disk.get_fs_path()
 
@@ -255,15 +245,15 @@ class Volume(object):
 
         :param freespace: indicates whether the entire volume should be carved (False) or only the free space (True)
         :type freespace: bool
-        :return: boolean indicating whether the command succeeded
+        :return: string to the path where carved data is available, or None on failure
         """
 
         if not _util.command_exists('photorec'):
             logger.warning("photorec is not installed, could not carve volume")
-            return False
+            return None
 
-        if not self._make_mountpoint(var_name='carvepoint', suffix="carve"):
-            return False
+        if not self._make_mountpoint(var_name='carve', suffix="carve", in_paths=True):
+            return None
 
         # if no slot, we need to make a loopback that we can use to carve the volume
         loopback_was_created_for_carving = False
@@ -271,12 +261,12 @@ class Volume(object):
             if not self.loopback:
                 if not self._find_loopback():
                     logger.error("Can't carve if volume has no slot number and can't be mounted on loopback.")
-                    return False
+                    return None
                 loopback_was_created_for_carving = True
 
             # noinspection PyBroadException
             try:
-                _util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.loopback,
+                _util.check_call_(["photorec", "/d", self._paths['carve'] + os.sep, "/cmd", self.loopback,
                                   ("freespace," if freespace else "") + "search"])
 
                 # clean out the loop device if we created it specifically for carving
@@ -289,40 +279,40 @@ class Volume(object):
                     else:
                         self.loopback = ""
 
-                return True
+                return self._paths['carve']
             except Exception:
                 logger.exception("Failed carving the volume.")
-                return False
+                return None
         else:
             # noinspection PyBroadException
             try:
-                _util.check_call_(["photorec", "/d", self.carvepoint + os.sep, "/cmd", self.get_raw_path(),
+                _util.check_call_(["photorec", "/d", self._paths['carve'] + os.sep, "/cmd", self.get_raw_path(),
                                   str(self.slot) + (",freespace" if freespace else "") + ",search"])
                 return True
 
             except Exception:
                 logger.exception("Failed carving the volume.")
-                return False
+                return None
 
     def vshadowmount(self):
         """Method to call vshadowmount and mount NTFS volume shadow copies.
 
-        :return: boolean indicating whether the command succeeded
+        :return: string representing the path to the volume shadow copies, or None on failure
         """
 
         if not _util.command_exists('vshadowmount'):
             logger.warning("vshadowmount is not installed, could not mount volume shadow copies")
-            return False
+            return None
 
-        if not self._make_mountpoint(var_name='vsspoint', suffix="vss"):
-            return False
+        if not self._make_mountpoint(var_name='vss', suffix="vss", in_paths=True):
+            return None
 
         try:
-            _util.check_call_(["vshadowmount", "-o", str(self.offset), self.get_raw_path(), self.vsspoint])
-
+            _util.check_call_(["vshadowmount", "-o", str(self.offset), self.get_raw_path(), self._paths['vss']])
+            return self._paths['vss']
         except Exception:
             logger.exception("Failed mounting the volume shadow copies.")
-            return False
+            return None
 
     def _should_mount(self, only_mount=None):
         """Indicates whether this volume should be mounted. Internal method, used by imount.py"""
@@ -366,9 +356,10 @@ class Volume(object):
                 for s in v.init():
                     yield s
 
-    def _make_mountpoint(self, casename=None, var_name='mountpoint', suffix=''):
+    def _make_mountpoint(self, casename=None, var_name='mountpoint', suffix='', in_paths=False):
         """Creates a directory that can be used as a mountpoint. The directory is stored in :attr:`mountpoint`,
-        or the varname as specified by the argument.
+        or the varname as specified by the argument. If in_paths is True, the path is stored in the :attr:`_paths`
+        attribute instead.
 
         :return: boolean indicating whether the mountpoint was successfully created.
         """
@@ -403,16 +394,22 @@ class Volume(object):
             # noinspection PyBroadException
             try:
                 os.mkdir(path, 777)
-                setattr(self, var_name, path)
+                if in_paths:
+                    self._paths[var_name] = path
+                else:
+                    setattr(self, var_name, path)
                 return True
             except Exception:
                 logger.exception("Could not create mountdir.")
                 return False
         else:
-            setattr(self, var_name, tempfile.mkdtemp(prefix='im_' + self.index + '_',
-                                                     suffix='_' + self.get_safe_label() +
-                                                            ("_" + suffix if suffix else ""),
-                                                     dir=self.mountdir))
+            t = tempfile.mkdtemp(prefix='im_' + self.index + '_',
+                                 suffix='_' + self.get_safe_label() + ("_" + suffix if suffix else ""),
+                                 dir=self.mountdir)
+            if in_paths:
+                self._paths[var_name] = t
+            else:
+                setattr(self, var_name, t)
             return True
 
     def _find_loopback(self, use_loopback=True, var_name='loopback'):
@@ -650,8 +647,7 @@ class Volume(object):
             return False
 
     def bindmount(self, mountpoint):
-        """Bind mounts the volume to another mountpoint. Only works if the volume is already mounted. Note that only the
-        last bindmountpoint is remembered and cleaned.
+        """Bind mounts the volume to another mountpoint. Only works if the volume is already mounted.
 
         :return: bool indicating whether the bindmount succeeded
         """
@@ -659,11 +655,13 @@ class Volume(object):
         if not self.mountpoint:
             return False
         try:
-            self.bindmountpoint = mountpoint
-            _util.check_call_(['mount', '--bind', self.mountpoint, self.bindmountpoint], stdout=subprocess.PIPE)
+            _util.check_call_(['mount', '--bind', self.mountpoint, mountpoint], stdout=subprocess.PIPE)
+            if 'bindmounts' in self._paths:
+                self._paths['bindmounts'].append(mountpoint)
+            else:
+                self._paths['bindmounts'] = [mountpoint]
             return True
         except Exception as e:
-            self.bindmountpoint = ""
             logger.exception("Error bind mounting {0}.".format(self))
             return False
 
@@ -698,22 +696,22 @@ class Volume(object):
             return None
 
         # Open the LUKS container
-        self.luks_path = 'image_mounter_' + str(random.randint(10000, 99999))
+        self._paths['luks'] = 'image_mounter_' + str(random.randint(10000, 99999))
 
         # noinspection PyBroadException
         try:
-            cmd = ["cryptsetup", "luksOpen", self.loopback, self.luks_path]
+            cmd = ["cryptsetup", "luksOpen", self.loopback, self._paths['luks']]
             if not self.disk.read_write:
                 cmd.insert(1, '-r')
             _util.check_call_(cmd)
         except Exception:
-            self.luks_path = ""
+            del self._paths['luks']
             return None
 
         size = None
         # noinspection PyBroadException
         try:
-            result = _util.check_output_(["cryptsetup", "status", self.luks_path])
+            result = _util.check_output_(["cryptsetup", "status", self._paths['luks']])
             for l in result.splitlines():
                 if "size:" in l and "key" not in l:
                     size = int(l.replace("size:", "").replace("sectors", "").strip()) * self.disk.block_size
@@ -741,7 +739,7 @@ class Volume(object):
         :return: the Volume contained in the BDE container, or None on failure.
         """
 
-        self.bde_path = tempfile.mkdtemp(prefix='image_mounter_bde_')
+        self._paths['bde'] = tempfile.mkdtemp(prefix='image_mounter_bde_')
 
         try:
             if self.index in self.keys:
@@ -757,11 +755,11 @@ class Volume(object):
 
         # noinspection PyBroadException
         try:
-            cmd = ["bdemount", self.get_raw_path(), self.bde_path, '-o', str(self.offset)]
+            cmd = ["bdemount", self.get_raw_path(), self._paths['bde'], '-o', str(self.offset)]
             cmd.extend(key)
             _util.check_call_(cmd)
         except Exception:
-            self.bde_path = ""
+            del self._paths['bde']
             logger.exception("Failed mounting BDE volume %s.", self)
             return None
 
@@ -944,25 +942,25 @@ class Volume(object):
 
             self.volume_group = ""
 
-        if self.loopback and self.luks_path:
+        if self.loopback and self._paths.get('luks'):
             try:
-                _util.check_call_(['cryptsetup', 'luksClose', self.luks_path], stdout=subprocess.PIPE)
+                _util.check_call_(['cryptsetup', 'luksClose', self._paths['luks']], stdout=subprocess.PIPE)
             except Exception:
                 return False
 
-            self.luks_path = ""
+            del self._paths['luks']
 
-        if self.bde_path:
-            if not _util.clean_unmount(['fusermount', '-u'], self.bde_path):
+        if self._paths.get('bde'):
+            if not _util.clean_unmount(['fusermount', '-u'], self._paths['bde']):
                 return False
 
-            self.bde_path = ""
+            del self._paths['bde']
 
-        if self.vsspoint:
-            if not _util.clean_unmount(['fusermount', '-u'], self.vsspoint):
+        if self._paths.get('vss'):
+            if not _util.clean_unmount(['fusermount', '-u'], self._paths['vss']):
                 return False
 
-            self.vsspoint = ""
+            del self._paths['vss']
 
         if self.loopback:
             try:
@@ -972,11 +970,11 @@ class Volume(object):
 
             self.loopback = ""
 
-        if self.bindmountpoint:
-            if not _util.clean_unmount(['umount'], self.bindmountpoint, rmdir=False):
-                return False
-
-            self.bindmountpoint = ""
+        if self._paths.get('bindmounts'):
+            for mp in self._paths['bindmounts']:
+                if not _util.clean_unmount(['umount'], mp, rmdir=False):
+                    return False
+            del self._paths['bindmounts']
 
         if self.mountpoint:
             if not _util.clean_unmount(['umount'], self.mountpoint):
@@ -984,12 +982,12 @@ class Volume(object):
 
             self.mountpoint = ""
 
-        if self.carvepoint:
+        if self._paths.get('carve'):
             try:
-                shutil.rmtree(self.carvepoint)
+                shutil.rmtree(self._paths['carve'])
             except OSError:
                 return False
             else:
-                self.carvepoint = ""
+                del self._paths['carve']
 
         return True

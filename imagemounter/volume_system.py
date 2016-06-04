@@ -363,7 +363,7 @@ class VolumeSystem(object):
             if "LV Size" in l:
                 cur_v.size = l.replace("LV Size", "").strip()
             if "LV Path" in l:
-                cur_v.lv_path = l.replace("LV Path", "").strip()
+                cur_v._paths['lv'] = l.replace("LV Path", "").strip()
                 cur_v.offset = 0
 
         logger.info("{0} volumes found".format(len(self)))

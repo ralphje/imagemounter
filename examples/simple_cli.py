@@ -94,8 +94,9 @@ def main():
             # or their entire space, depending on whether we could mount it.
             sys.stdout.write("[+] Carving volume...\r")
             sys.stdout.flush()
-            if volume.carve(freespace=not volume.mountpoint):
-                print('[+] Carved data is available at {0}.'.format(colored(volume.carvepoint, 'green', attrs=['bold'])))
+            path = volume.carve(freespace=not volume.mountpoint)
+            if path:
+                print('[+] Carved data is available at {0}.'.format(colored(path, 'green', attrs=['bold'])))
             else:
                 print(colored('[-] Carving failed.', 'red'))
 
