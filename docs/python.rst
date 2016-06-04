@@ -141,7 +141,7 @@ The best example of the use of the Python interface is the :command:`imount` com
 
    .. automethod:: get_description
    .. automethod:: get_safe_label
-   .. automethod:: get_size_gib
+   .. automethod:: get_formatted_size
    .. automethod:: get_volumes
 
    These functions offer access to some internals:
@@ -150,7 +150,7 @@ The best example of the use of the Python interface is the :command:`imount` com
    .. automethod:: get_raw_path
    .. automethod:: mount
    .. automethod:: bindmount
-   .. automethod:: fill_stats
+   .. automethod:: load_fsstat_data
    .. automethod:: detect_mountpoint
 
    The following details may also be available as attributes:
@@ -172,30 +172,23 @@ The best example of the use of the Python interface is the :command:`imount` com
 
       Indicates whether this volume is allocated (*alloc*), unallocated (*unalloc*) or a meta volume (*meta*).
 
-   .. attribute:: fsdescription
-
-      A description of the file system type.
-
-   .. attribute:: lastmountpoint
-
-      The last mountpoint of this volume. Set by :func:`fill_stats` or :func:`detect_mountpoint` and only available
-      for UFS and Ext volumes.
-
-   .. attribute:: label
-
-      The volume label as detected by :func:`fill_stats`.
-
-   .. attribute:: version
-
-      The volume version as detected by :func:`fill_stats`.
-
-   .. attribute:: statfstype
-
-      The volume file system type as detected by :func:`fill_stats`.
-
    .. attribute:: fstype
 
       The volume file system type used internally as determined by :func:`determine_fs_type`.
+
+   .. attribute:: info
+
+      A dict containing information about the volume. Not all keys are always available. Some common keys include:
+
+      * fsdescription -- A description of the file system type, usually set by the detection method.
+      * lastmountpoint -- The last mountpoint of this volume. Set by :func:`load_fsstat_data` or
+        :func:`detect_mountpoint` and only available for UFS and Ext volumes.
+      * label -- The volume label as detected by :func:`load_fsstat_data`.
+      * version -- The volume version as detected by :func:`load_fsstat_data`.
+      * statfstype -- The volume file system type as detected by :func:`load_fsstat_data`.
+      * guid -- The volume GUID
+
+      The contents of the info dict are not considered part of the public API and are subject to change in the future.
 
    .. attribute:: mountpoint
 
@@ -234,8 +227,6 @@ The best example of the use of the Python interface is the :command:`imount` com
 
    .. attribute:: disk
                   stats
-                  fsforce
-                  fsfallback
                   fstypes
                   pretty
                   mountdir

@@ -8,17 +8,26 @@ Release history
 
 Future major release
 --------------------
+
+New features:
+
 * Add BDE (Bitlocker) support
-* Support ``blkid`` to retrieve FS type info
 * Addition of :option:`--keys` CLI argument and corresponding argument to Volume class, allowing to specify key material for crypto mounts. LUKS is not yet supported.
-* Removal of fsforce and fsfallback arguments and attributes to Volume, :option:`--fsforce` and :option:`--fsfallback` from CLI. Use ``*`` and ``?`` as fstypes instead for the same effect. This should make the CLI more sensible, especially regarding the :option:`--fsforce` argument. The default FS fallback is still ``unknown``, which can only be overridden by specifying ``--fstypes=?=none``.
 * Experimental: support for volume systems inside a volume. This is useful when e.g. a LVM volume contains in itself a MBR. Methods for mounting this have been moved from :class:`Disk` to :class:`VolumeSystem` and both :class:`Volume` and :class:`Disk` now use this (iterable) base class in their :attr:`volumes` attribute. If you relied on :attr:`volumes` being a ``list``, you should now use ``list(volumes)``. If you relied on indexing of the attribute, you could now also use ``disk[0]`` or ``volume[0]`` for finding the correct volume index.
 * Added a :func:`VolumeSystem.detect_volumes` iterable, which is used by :func:`Disk.mount_multiple_volumes`. Underlying methods do not automatically :func:`init` the volume anymore, just detection and populating the :class:`Volume` objects.
+* Support ``blkid`` to retrieve FS type info
+
+Bugfixes:
+
 * Calling :func:`init` will not automatically mount the volume when it is not ``alloc``.
 * Fix a bug where ``.e01`` files (lowercase) would not be recognized as Encase
-* Add support for newer versions of ``mmls``
-* Renamed ``get_raw_base_path`` to ``get_raw_path`` and removed ``get_magic_type``, ``open_jffs2``, ``find_lvm_volumes`` and ``open_luks_container`` from public API.
+* Fixed support for newer versions of ``mmls``
 
+Removed and modified features:
+
+* Removal of fsforce and fsfallback arguments and attributes to Volume, and the removal of :option:`--fsforce` and :option:`--fsfallback` from CLI. Use ``*`` and ``?`` as fstypes instead for the same effect. This should make the CLI more sensible, especially regarding the :option:`--fsforce` argument. The default FS fallback is still ``unknown``, which can only be overridden by specifying ``--fstypes=?=none``.
+* Renamed ``get_raw_base_path`` to ``get_raw_path``, renamed ``fill_stats`` to ``load_fsstat_data``, renamed ``get_size_gib`` to ``get_formatted_size``, and removed ``get_magic_type``, ``open_jffs2``, ``find_lvm_volumes`` and ``open_luks_container`` from public API.
+* Moved several attributes of :class:`Volume` to a new :attr:`info` attribute.
 
 2.0.4 (2016-03-15)
 ------------------

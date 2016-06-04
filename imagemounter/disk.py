@@ -374,7 +374,7 @@ class Disk(object):
         volume = self.volumes._make_single_subvolume()
         volume.offset = 0
         volume.flag = 'alloc'
-        volume.fsdescription = 'Directory'
+        volume.info['fsdescription'] = 'Directory'
 
         filesize = _util.check_output_(['du', '-scDb', self.get_fs_path()]).strip()
         if filesize:
@@ -401,7 +401,7 @@ class Disk(object):
         description = _util.check_output_(['file', '-sL', self.get_fs_path()]).strip()
         if description:
             # description is the part after the :, until the first comma
-            volume.fsdescription = description.split(': ', 1)[1].split(',', 1)[0].strip()
+            volume.info['fsdescription'] = description.split(': ', 1)[1].split(',', 1)[0].strip()
             if 'size' in description:
                 volume.size = int(re.findall(r'size:? (\d+)', description)[0])
             else:

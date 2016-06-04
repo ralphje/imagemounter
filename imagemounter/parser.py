@@ -173,11 +173,11 @@ class ImageParser(object):
 
         :return: None on failure, or the root :class:`Volume` on success
         """
-        volumes = list(sorted((v for v in self.get_volumes() if v.mountpoint and v.lastmountpoint),
+        volumes = list(sorted((v for v in self.get_volumes() if v.mountpoint and v.info.get('lastmountpoint')),
                               key=lambda v: v.mountpoint or "", reverse=True))
 
         try:
-            root = list(filter(lambda x: x.lastmountpoint == '/', volumes))[0]
+            root = list(filter(lambda x: x.info.get('lastmountpoint') == '/', volumes))[0]
         except IndexError:
             logger.error("Could not find / while reconstructing, aborting!")
             return None
@@ -185,6 +185,6 @@ class ImageParser(object):
         volumes.remove(root)
 
         for v in volumes:
-            v.bindmount(os.path.join(root.mountpoint, v.lastmountpoint[1:]))
+            v.bindmount(os.path.join(root.mountpoint, v.info.get('lastmountpoint')[1:]))
         return root
 

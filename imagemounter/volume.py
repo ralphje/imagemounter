@@ -76,15 +76,9 @@ class Volume(object):
         self.slot = 0
         self.size = 0
         self.flag = 'alloc'
-        self.guid = ""
-        self.fsdescription = ""
         self.fstype = ""
 
-        # Should be filled by fill_stats
-        self.lastmountpoint = ""
-        self.label = ""
-        self.version = ""
-        self.statfstype = ""
+        self.info = {}
 
         # Should be filled by mount
         self.mountpoint = ""
@@ -113,7 +107,7 @@ class Volume(object):
         self.args = args
 
     def __unicode__(self):
-        return '{0}:{1}'.format(self.index, self.fsdescription or '-')
+        return '{0}:{1}'.format(self.index, self.info.get('fsdescription') or '-')
 
     def __str__(self):
         return str(self.__unicode__())
@@ -129,19 +123,19 @@ class Volume(object):
         desc = ''
 
         if with_size and self.size:
-            desc += '{0} '.format(self.get_size_gib())
+            desc += '{0} '.format(self.get_formatted_size())
 
-        desc += '{1}:{0}'.format(self.statfstype or self.fsdescription or '-', self.index)
+        desc += '{1}:{0}'.format(self.info.get('statfstype') or self.info.get('fsdescription') or '-', self.index)
 
-        if self.label:
-            desc += ' {0}'.format(self.label)
+        if self.info.get('label'):
+            desc += ' {0}'.format(self.info.get('label'))
 
-        if self.version:  # NTFS
-            desc += ' [{0}]'.format(self.version)
+        if self.info.get('version'):  # NTFS
+            desc += ' [{0}]'.format(self.info.get('version'))
 
         return desc
 
-    def get_size_gib(self):
+    def get_formatted_size(self):
         """Obtains the size of the volume in a human-readable format (i.e. in TiBs, GiBs or MiBs)."""
 
         # Python 3 compatibility
@@ -241,10 +235,10 @@ class Volume(object):
     def get_safe_label(self):
         """Returns a label that is safe to add to a path in the mountpoint for this volume."""
 
-        if self.label == '/':
+        if self.info.get('label') == '/':
             return 'root'
 
-        suffix = re.sub(r"[/ \(\)]+", "_", self.label) if self.label else ""
+        suffix = re.sub(r"[/ \(\)]+", "_", self.info.get('label')) if self.info.get('label') else ""
         if suffix and suffix[0] == '_':
             suffix = suffix[1:]
         if len(suffix) > 2 and suffix[-1] == '_':
@@ -311,13 +305,13 @@ class Volume(object):
 
         return only_mount is None or \
             self.index in only_mount or str(self.index) in only_mount or \
-            self.lastmountpoint in only_mount or \
-            self.label in only_mount
+            self.info.get('lastmountpoint') in only_mount or \
+            self.info.get('label') in only_mount
 
     def init(self, no_stats=False, only_mount=None):
         """Generator that mounts this volume and either yields itself or recursively generates its subvolumes.
 
-        More specifically, this function will call :func:`fill_stats` (iff *no_stats* is False), followed by
+        More specifically, this function will call :func:`load_fsstat_data` (iff *no_stats* is False), followed by
         :func:`mount`, followed by a call to :func:`detect_mountpoint`, after which ``self`` is yielded, or the result
         of the :func:`init` call on each subvolume is yielded
 
@@ -326,7 +320,7 @@ class Volume(object):
 
         logger.debug("Initializing volume {0}".format(self))
         if self.stats and not no_stats:
-            self.fill_stats()
+            self.load_fsstat_data()
 
         if not self._should_mount(only_mount):
             yield self
@@ -443,7 +437,8 @@ class Volume(object):
             last_resort = None  # use this if we can't determine the FS type more reliably
             # we have two possible sources for determining the FS type: the description given to us by the detection
             # method, and the type given to us by the stat function
-            for fsdesc in (self.fsdescription, self.statfstype, self.guid, self._get_blkid_type, self._get_magic_type):
+            for fsdesc in (self.info.get('fsdescription'), self.info.get('statfstype'), self.info.get('guid'),
+                           self._get_blkid_type, self._get_magic_type):
                 # For efficiency reasons, not all functions are called instantly.
                 if callable(fsdesc):
                     fsdesc = fsdesc()
@@ -703,7 +698,7 @@ class Volume(object):
 
         container = self.volumes._make_subvolume()
         container.index = "{0}.0".format(self.index)
-        container.fsdescription = 'LUKS Volume'
+        container.info['fsdescription'] = 'LUKS Volume'
         container.flag = 'alloc'
         container.offset = 0
         container.size = size
@@ -748,7 +743,7 @@ class Volume(object):
 
         container = self.volumes._make_subvolume()
         container.index = "{0}.0".format(self.index)
-        container.fsdescription = 'BDE Volume'
+        container.info['fsdescription'] = 'BDE Volume'
         container.flag = 'alloc'
         container.offset = 0
         container.size = self.size
@@ -813,7 +808,7 @@ class Volume(object):
         else:
             return [self]
 
-    def fill_stats(self):
+    def load_fsstat_data(self):
         """Using :command:`fsstat`, adds some additional information of the volume to the Volume."""
 
         process = None
@@ -828,15 +823,15 @@ class Volume(object):
                 for line in iter(process.stdout.readline, b''):
                     line = line.decode()
                     if line.startswith("File System Type:"):
-                        self.statfstype = line[line.index(':') + 2:].strip()
+                        self.info['statfstype'] = line[line.index(':') + 2:].strip()
                     elif line.startswith("Last Mount Point:") or line.startswith("Last mounted on:"):
-                        self.lastmountpoint = line[line.index(':') + 2:].strip().replace("//", "/")
-                    elif line.startswith("Volume Name:") and not self.label:
-                        self.label = line[line.index(':') + 2:].strip()
+                        self.info['lastmountpoint'] = line[line.index(':') + 2:].strip().replace("//", "/")
+                    elif line.startswith("Volume Name:") and not self.info.get('label'):
+                        self.info['label'] = line[line.index(':') + 2:].strip()
                     elif line.startswith("Version:"):
-                        self.version = line[line.index(':') + 2:].strip()
+                        self.info['version'] = line[line.index(':') + 2:].strip()
                     elif line.startswith("Source OS:"):
-                        self.version = line[line.index(':') + 2:].strip()
+                        self.info['version'] = line[line.index(':') + 2:].strip()
                     elif 'CYLINDER GROUP INFORMATION' in line:
                         # noinspection PyBroadException
                         try:
@@ -845,15 +840,16 @@ class Volume(object):
                             pass
                         break
 
-                if self.lastmountpoint and self.label:
-                    self.label = "{0} ({1})".format(self.lastmountpoint, self.label)
-                elif self.lastmountpoint and not self.label:
-                    self.label = self.lastmountpoint
-                elif not self.lastmountpoint and self.label and self.label.startswith("/"):  # e.g. /boot1
-                    if self.label.endswith("1"):
-                        self.lastmountpoint = self.label[:-1]
+                if self.info.get('lastmountpoint') and self.info.get('label'):
+                    self.info['label'] = "{0} ({1})".format(self.info['lastmountpoint'], self.info['label'])
+                elif self.info.get('lastmountpoint') and not self.info.get('label'):
+                    self.info['label'] = self.info['lastmountpoint']
+                elif not self.info.get('lastmountpoint') and self.info.get('label') and \
+                        self.info['label'].startswith("/"):  # e.g. /boot1
+                    if self.info['label'].endswith("1"):
+                        self.info['lastmountpoint'] = self.info['label'][:-1]
                     else:
-                        self.lastmountpoint = self.label
+                        self.info['lastmountpoint'] = self.info['label']
 
             except Exception as e:  # ignore any exceptions here.
                 logger.exception("Error while obtaining stats.")
@@ -874,12 +870,12 @@ class Volume(object):
             logger.debug("Killed fsstat after {0}s".format(duration))
 
     def detect_mountpoint(self):
-        """Attempts to detect the previous mountpoint if this was not done through :func:`fill_stats`. This detection
-        does some heuristic method on the mounted volume.
+        """Attempts to detect the previous mountpoint if this was not done through :func:`load_fsstat_data`. This
+        detection does some heuristic method on the mounted volume.
         """
 
-        if self.lastmountpoint:
-            return self.lastmountpoint
+        if self.info.get('lastmountpoint'):
+            return self.info.get('lastmountpoint')
         if not self.mountpoint:
             return None
 
@@ -902,10 +898,10 @@ class Volume(object):
         #    result = '/'
 
         if result:
-            self.lastmountpoint = result
-            if not self.label:
-                self.label = self.lastmountpoint
-            logger.info("Detected mountpoint as {0} based on files in volume".format(self.lastmountpoint))
+            self.info['lastmountpoint'] = result
+            if not self.info.get('label'):
+                self.info['label'] = self.info['lastmountpoint']
+            logger.info("Detected mountpoint as {0} based on files in volume".format(self.info['lastmountpoint']))
 
         return result
 
