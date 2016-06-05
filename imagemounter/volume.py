@@ -344,6 +344,16 @@ class Volume(object):
         if self.flag != 'alloc':
             return
 
+        if self.info.get('raid_status') == 'waiting':
+            logger.info("RAID array %s not ready for mounting", self)
+            yield self
+            return
+
+        if self.was_mounted and not self.was_unmounted:
+            logger.info("%s is currently mounted, not mounting it again", self)
+            yield self
+            return
+
         logger.info("Mounting volume {0}".format(self))
         self.mount()
 
@@ -459,8 +469,8 @@ class Volume(object):
             last_resort = None  # use this if we can't determine the FS type more reliably
             # we have two possible sources for determining the FS type: the description given to us by the detection
             # method, and the type given to us by the stat function
-            for fsdesc in (self.info.get('fsdescription'), self.info.get('statfstype'), self.info.get('guid'),
-                           self._get_blkid_type, self._get_magic_type):
+            for fsdesc in (self.info.get('fsdescription'), self.info.get('guid'),
+                           self._get_blkid_type, self.info.get('statfstype'), self._get_magic_type):
                 # For efficiency reasons, not all functions are called instantly.
                 if callable(fsdesc):
                     fsdesc = fsdesc()
@@ -834,6 +844,7 @@ class Volume(object):
             logger.error("No loopback device created for %s", str(v))
             return False
 
+        raid_status = None
         try:
             # use mdadm to mount the loopback to a md device
             # incremental and run as soon as available
@@ -841,20 +852,37 @@ class Volume(object):
 
             match = re.findall(r"attached to ([^ ,]+)", output)
             if match:
-                if 'which is already active' in output:
-                    logger.info("RAID is already active in other volume, using %s", os.path.realpath(match[0]))
                 self._paths['md'] = os.path.realpath(match[0])
-                logger.info("Mounted RAID to {0}".format(self._paths['md']))
+                if 'which is already active' in output:
+                    logger.info("RAID is already active in other volume, using %s", self._paths['md'])
+                    raid_status = 'active'
+                elif 'not enough to start' in output:
+                    self._paths['md'] = self._paths['md'].replace("/dev/md/", "/dev/md")
+                    logger.info("RAID volume added, but not enough to start %s", self._paths['md'])
+                    raid_status = 'waiting'
+                else:
+                    logger.info("RAID started at {0}".format(self._paths['md']))
+                    raid_status = 'active'
         except Exception:
             logger.exception("Failed mounting RAID.")
             return False
 
-        container = self.volumes._make_subvolume()
-        container.index = "{0}.0".format(self.index)
-        container.info['fsdescription'] = 'RAID Volume'
-        container.flag = 'alloc'
-        container.offset = 0
-        container.size = self.size
+        # search for the RAID volume
+        for v in self.disk.parser.get_volumes():
+            if v._paths.get("md") == self._paths['md'] and v.volumes:
+                logger.debug("Adding existing volume %s to volume %s", v.volumes[0], self)
+                v.volumes[0].info['raid_status'] = raid_status
+                self.volumes.volumes.append(v.volumes[0])
+                break
+        else:
+            logger.debug("Creating RAID volume for %s", self)
+            container = self.volumes._make_subvolume()
+            container.index = "{0}.0".format(self.index)
+            container.info['fsdescription'] = 'RAID Volume'
+            container.info['raid_status'] = raid_status
+            container.flag = 'alloc'
+            container.offset = 0
+            container.size = self.size
 
         return True
 
