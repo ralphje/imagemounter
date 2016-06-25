@@ -10,6 +10,7 @@ import os
 import sys
 import locale
 
+from imagemounter.exceptions import SubsystemError, CleanupError
 
 logger = logging.getLogger(__name__)
 encoding = locale.getdefaultlocale()[1]
@@ -30,12 +31,12 @@ def clean_unmount(cmd, mountpoint, tries=5, rmdir=True):
         # noinspection PyBroadException
         try:
             check_call_(cmd)
-        except Exception:
-            return False
+        except Exception as e:
+            raise SubsystemError(e)
 
     # Remove mountpoint only if needed
     if not rmdir:
-        return True
+        return
 
     for _ in range(tries):
         if not os.path.ismount(mountpoint):
@@ -49,9 +50,7 @@ def clean_unmount(cmd, mountpoint, tries=5, rmdir=True):
             time.sleep(1)
 
     if os.path.isdir(mountpoint):
-        return False
-    else:
-        return True
+        raise CleanupError()
 
 
 def is_encase(path):
@@ -105,9 +104,15 @@ def module_exists(mod):
         return False
 
 
-def check_call_(cmd, *args, **kwargs):
+def check_call_(cmd, wrap_error=False, *args, **kwargs):
     logger.debug('$ {0}'.format(' '.join(cmd)))
-    return subprocess.check_call(cmd, *args, **kwargs)
+    try:
+        return subprocess.check_call(cmd, *args, **kwargs)
+    except Exception as e:
+        if wrap_error:
+            raise SubsystemError(e)
+        else:
+            raise
 
 
 def check_output_(cmd, *args, **kwargs):

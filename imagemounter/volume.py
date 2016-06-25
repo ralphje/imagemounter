@@ -15,6 +15,9 @@ import shutil
 import time
 
 from imagemounter import _util, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
+from imagemounter.exceptions import CommandNotFoundError, NoMountpointAvailableError, SubsystemError, \
+    NoLoopbackAvailableError, UnsupportedFilesystemError, NotMountedError, IncorrectFilesystemError, ArgumentError, \
+    ImageMounterError
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
@@ -80,7 +83,6 @@ class Volume(object):
 
         self.mountpoint = ""
         self.loopback = ""
-        self.exception = None
         self.was_mounted = False
         self.was_unmounted = False
 
@@ -163,7 +165,7 @@ class Volume(object):
                 return blkid_result.get('TYPE')
 
         except Exception:
-            return None
+            return None  # returning None is better here, since we do not care about the exception in determine_fs_type
 
     def _get_magic_type(self):
         """Checks the volume for its magic bytes and returns the magic."""
@@ -202,7 +204,7 @@ class Volume(object):
             logger.warning("The python-magic module is not available.")
         except AttributeError:
             logger.warning("The python-magic module is not available, but another module named magic was found.")
-        return None
+        return None  # returning None is better here, since we do not care about the exception in determine_fs_type
 
     def get_raw_path(self):
         """Retrieves the base mount path of the volume. Typically equals to :func:`Disk.get_fs_path` but may also be the
@@ -246,23 +248,25 @@ class Volume(object):
 
         :param freespace: indicates whether the entire volume should be carved (False) or only the free space (True)
         :type freespace: bool
-        :return: string to the path where carved data is available, or None on failure
+        :return: string to the path where carved data is available
+        :raises CommandNotFoundError: if the underlying command does not exist
+        :raises SubsystemError: if the underlying command fails
+        :raises NoMountpointAvailableError: if there is no mountpoint available
+        :raises NoLoopbackAvailableError: if there is no loopback available (only when volume has no slot number)
         """
 
         if not _util.command_exists('photorec'):
             logger.warning("photorec is not installed, could not carve volume")
-            return None
+            raise CommandNotFoundError("photorec")
 
-        if not self._make_mountpoint(var_name='carve', suffix="carve", in_paths=True):
-            return None
+        self._make_mountpoint(var_name='carve', suffix="carve", in_paths=True)
 
         # if no slot, we need to make a loopback that we can use to carve the volume
         loopback_was_created_for_carving = False
         if not self.slot:
             if not self.loopback:
-                if not self._find_loopback():
-                    logger.error("Can't carve if volume has no slot number and can't be mounted on loopback.")
-                    return None
+                self._find_loopback()
+                #Can't carve if volume has no slot number and can't be mounted on loopback.
                 loopback_was_created_for_carving = True
 
             # noinspection PyBroadException
@@ -281,39 +285,41 @@ class Volume(object):
                         self.loopback = ""
 
                 return self._paths['carve']
-            except Exception:
+            except Exception as e:
                 logger.exception("Failed carving the volume.")
-                return None
+                raise SubsystemError(e)
         else:
             # noinspection PyBroadException
             try:
                 _util.check_call_(["photorec", "/d", self._paths['carve'] + os.sep, "/cmd", self.get_raw_path(),
                                   str(self.slot) + (",freespace" if freespace else "") + ",search"])
-                return True
+                return self._paths['carve']
 
-            except Exception:
+            except Exception as e:
                 logger.exception("Failed carving the volume.")
-                return None
+                raise SubsystemError(e)
 
     def vshadowmount(self):
         """Method to call vshadowmount and mount NTFS volume shadow copies.
 
-        :return: string representing the path to the volume shadow copies, or None on failure
+        :return: string representing the path to the volume shadow copies
+        :raises CommandNotFoundError: if the underlying command does not exist
+        :raises SubSystemError: if the underlying command fails
+        :raises NoMountpointAvailableError: if there is no mountpoint available
         """
 
         if not _util.command_exists('vshadowmount'):
             logger.warning("vshadowmount is not installed, could not mount volume shadow copies")
-            return None
+            raise CommandNotFoundError('vshadowmount')
 
-        if not self._make_mountpoint(var_name='vss', suffix="vss", in_paths=True):
-            return None
+        self._make_mountpoint(var_name='vss', suffix="vss", in_paths=True)
 
         try:
             _util.check_call_(["vshadowmount", "-o", str(self.offset), self.get_raw_path(), self._paths['vss']])
             return self._paths['vss']
-        except Exception:
+        except Exception as e:
             logger.exception("Failed mounting the volume shadow copies.")
-            return None
+            raise SubsystemError(e)
 
     def _should_mount(self, only_mount=None):
         """Indicates whether this volume should be mounted. Internal method, used by imount.py"""
@@ -323,48 +329,59 @@ class Volume(object):
             self.info.get('lastmountpoint') in only_mount or \
             self.info.get('label') in only_mount
 
-    def init(self, no_stats=False, only_mount=None):
+    def init(self, no_stats=False, only_mount=None, swallow_exceptions=True):
         """Generator that mounts this volume and either yields itself or recursively generates its subvolumes.
 
         More specifically, this function will call :func:`load_fsstat_data` (iff *no_stats* is False), followed by
         :func:`mount`, followed by a call to :func:`detect_mountpoint`, after which ``self`` is yielded, or the result
         of the :func:`init` call on each subvolume is yielded
 
-        If only_mount is specified, only volume indexes in this list are mounted. Note that volume indexes are strings.
+        :param only_mount: if specified, only volume indexes in this list are mounted. Volume indexes are strings.
+        :param swallow_exceptions: if True, any error occuring when mounting the volume is swallowed and added as an
+            exception attribute to the yielded objects.
         """
+        if swallow_exceptions:
+            self.exception = None
 
-        logger.debug("Initializing volume {0}".format(self))
-        if self.stats and not no_stats:
-            self.load_fsstat_data()
+        try:
+            logger.debug("Initializing volume {0}".format(self))
+            if self.stats and not no_stats:
+                self.load_fsstat_data()
 
-        if not self._should_mount(only_mount):
-            yield self
-            return
+            if not self._should_mount(only_mount):
+                yield self
+                return
 
-        if self.flag != 'alloc':
-            return
+            if self.flag != 'alloc':
+                return
 
-        if self.info.get('raid_status') == 'waiting':
-            logger.info("RAID array %s not ready for mounting", self)
-            yield self
-            return
+            if self.info.get('raid_status') == 'waiting':
+                logger.info("RAID array %s not ready for mounting", self)
+                yield self
+                return
 
-        if self.was_mounted and not self.was_unmounted:
-            logger.info("%s is currently mounted, not mounting it again", self)
-            yield self
-            return
+            if self.was_mounted and not self.was_unmounted:
+                logger.info("%s is currently mounted, not mounting it again", self)
+                yield self
+                return
 
-        logger.info("Mounting volume {0}".format(self))
-        self.mount()
+            logger.info("Mounting volume {0}".format(self))
+            self.mount()
 
-        if self.stats and not no_stats:
-            self.detect_mountpoint()
+            if self.stats and not no_stats:
+                self.detect_mountpoint()
+
+        except ImageMounterError as e:
+            if swallow_exceptions:
+                self.exception = e
+            else:
+                raise
 
         if not self.volumes:
             yield self
         else:
             for v in self.volumes:
-                for s in v.init():
+                for s in v.init(no_stats, only_mount, swallow_exceptions):
                     yield s
 
     def _make_mountpoint(self, casename=None, var_name='mountpoint', suffix='', in_paths=False):
@@ -372,7 +389,8 @@ class Volume(object):
         or the varname as specified by the argument. If in_paths is True, the path is stored in the :attr:`_paths`
         attribute instead.
 
-        :return: boolean indicating whether the mountpoint was successfully created.
+        :returns: the mountpoint path
+        :raises NoMountpointAvailableError: if no mountpoint could be made
         """
 
         if self.mountdir and not os.path.exists(self.mountdir):
@@ -400,7 +418,7 @@ class Volume(object):
                         break
                 else:
                     logger.error("Could not find free mountdir.")
-                    return False
+                    raise NoMountpointAvailableError()
 
             # noinspection PyBroadException
             try:
@@ -409,10 +427,10 @@ class Volume(object):
                     self._paths[var_name] = path
                 else:
                     setattr(self, var_name, path)
-                return True
+                return path
             except Exception:
                 logger.exception("Could not create mountdir.")
-                return False
+                raise NoMountpointAvailableError()
         else:
             t = tempfile.mkdtemp(prefix='im_' + self.index + '_',
                                  suffix='_' + self.get_safe_label() + ("_" + suffix if suffix else ""),
@@ -421,13 +439,14 @@ class Volume(object):
                 self._paths[var_name] = t
             else:
                 setattr(self, var_name, t)
-            return True
+            return t
 
     def _find_loopback(self, use_loopback=True, var_name='loopback'):
         """Finds a free loopback device that can be used. The loopback is stored in :attr:`loopback`. If *use_loopback*
         is True, the loopback will also be used directly.
 
-        :return: boolean indicating whether a loopback device was found
+        :returns: the loopback address
+        :raises NoLoopbackAvailableError: if no loopback could be found
         """
 
         # noinspection PyBroadException
@@ -436,7 +455,7 @@ class Volume(object):
             setattr(self, var_name, loopback)
         except Exception:
             logger.warning("No free loopback device found.", exc_info=True)
-            return False
+            raise NoLoopbackAvailableError()
 
         # noinspection PyBroadException
         if use_loopback:
@@ -446,10 +465,10 @@ class Volume(object):
                 if not self.disk.read_write:
                     cmd.insert(1, '-r')
                 _util.check_call_(cmd, stdout=subprocess.PIPE)
-            except Exception as e:
+            except Exception:
                 logger.exception("Loopback device could not be mounted.")
-                return False
-        return True
+                raise NoLoopbackAvailableError()
+        return loopback
 
     def determine_fs_type(self):
         """Determines the FS type for this partition. This function is used internally to determine which mount system
@@ -559,7 +578,10 @@ class Volume(object):
         If the file system type is a LUKS container or LVM, additional methods may be called, adding subvolumes to
         :attr:`volumes`
 
-        :return: boolean indicating whether the mount succeeded
+        :raises NoMountpointAvailableError: if no mountpoint was found
+        :raises NoLoopbackAvailableError: if no loopback device was found
+        :raises UnsupportedFilesystemError: if the fstype is not supported for mounting
+        :raises SubsystemError: if one of the underlying commands failed
         """
 
         raw_path = self.get_raw_path()
@@ -567,8 +589,8 @@ class Volume(object):
 
         # we need a mountpoint if it is not a lvm or luks volume
         if self.fstype not in ('luks', 'lvm', 'bde', 'raid') and self.fstype not in VOLUME_SYSTEM_TYPES and \
-                self.fstype in FILE_SYSTEM_TYPES and not self._make_mountpoint():
-            return False
+                self.fstype in FILE_SYSTEM_TYPES:
+            self._make_mountpoint()
 
         # Prepare mount command
         try:
@@ -599,9 +621,7 @@ class Volume(object):
                 call_mount(mnt_type, 'loop,offset=' + str(self.offset))
 
             elif self.fstype == 'vmfs':
-                if not self._find_loopback():
-                    return False
-
+                self._find_loopback()
                 _util.check_call_(['vmfs-fuse', self.loopback, self.mountpoint], stdout=subprocess.PIPE)
 
             elif self.fstype == 'unknown':  # mounts without specifying the filesystem type
@@ -645,15 +665,11 @@ class Volume(object):
 
                 logger.warning("Unsupported filesystem {0} (type: {1}, block offset: {2}, length: {3})"
                                .format(self, self.fstype, self.offset / self.disk.block_size, size))
-                return False
+                raise UnsupportedFilesystemError()
 
             self.was_mounted = True
-
-            return True
         except Exception as e:
-            logger.exception("Execution failed due to {}".format(e), exc_info=True)
-            self.exception = e
-
+            logger.exception("Execution failed due to {} {}".format(type(e), e), exc_info=True)
             try:
                 if self.mountpoint:
                     os.rmdir(self.mountpoint)
@@ -663,16 +679,17 @@ class Volume(object):
             except Exception as e2:
                 logger.exception("Clean-up failed", exc_info=True)
 
-            return False
+            raise SubsystemError(e)
 
     def bindmount(self, mountpoint):
         """Bind mounts the volume to another mountpoint. Only works if the volume is already mounted.
 
-        :return: bool indicating whether the bindmount succeeded
+        :raises NotMountedError: when the volume is not yet mounted
+        :raises SubsystemError: when the underlying command failed
         """
 
         if not self.mountpoint:
-            return False
+            raise NotMountedError()
         try:
             _util.check_call_(['mount', '--bind', self.mountpoint, mountpoint], stdout=subprocess.PIPE)
             if 'bindmounts' in self._paths:
@@ -682,7 +699,7 @@ class Volume(object):
             return True
         except Exception as e:
             logger.exception("Error bind mounting {0}.".format(self))
-            return False
+            raise SubsystemError(e)
 
     def _open_luks_container(self):
         """Command that is an alternative to the :func:`mount` command that opens a LUKS container. The opened volume is
@@ -691,11 +708,13 @@ class Volume(object):
         TODO: add support for :attr:`keys`
 
         :return: the Volume contained in the LUKS container, or None on failure.
+        :raises NoLoopbackAvailableError: when no free loopback could be found
+        :raises IncorrectFilesystemError: when this is not a LUKS volume
+        :raises SubsystemError: when the underlying command fails
         """
 
         # Open a loopback device
-        if not self._find_loopback():
-            return None
+        self._find_loopback()
 
         # Check if this is a LUKS device
         # noinspection PyBroadException
@@ -711,8 +730,7 @@ class Volume(object):
                 self.loopback = ""
             except Exception:
                 pass
-
-            return None
+            raise IncorrectFilesystemError()
 
         # Open the LUKS container
         self._paths['luks'] = 'image_mounter_' + str(random.randint(10000, 99999))
@@ -723,9 +741,9 @@ class Volume(object):
             if not self.disk.read_write:
                 cmd.insert(1, '-r')
             _util.check_call_(cmd)
-        except Exception:
+        except Exception as e:
             del self._paths['luks']
-            return None
+            raise SubsystemError(e)
 
         size = None
         # noinspection PyBroadException
@@ -755,7 +773,9 @@ class Volume(object):
         r:recovery password
         s:file to startup key (.bek)
 
-        :return: the Volume contained in the BDE container, or None on failure.
+        :return: the Volume contained in the BDE container
+        :raises ArgumentError: if the keys argument is invalid
+        :raises SubsystemError: when the underlying command fails
         """
 
         self._paths['bde'] = tempfile.mkdtemp(prefix='image_mounter_bde_')
@@ -770,17 +790,17 @@ class Volume(object):
         except ValueError:
             logger.exception("Invalid key material provided (%s) for %s. Expecting [arg]:[value]",
                              self.keys.get(self.index), self)
-            return None
+            raise ArgumentError()
 
         # noinspection PyBroadException
         try:
             cmd = ["bdemount", self.get_raw_path(), self._paths['bde'], '-o', str(self.offset)]
             cmd.extend(key)
             _util.check_call_(cmd)
-        except Exception:
+        except Exception as e:
             del self._paths['bde']
             logger.exception("Failed mounting BDE volume %s.", self)
-            return None
+            raise SubsystemError(e)
 
         container = self.volumes._make_subvolume()
         container.index = "{0}.0".format(self.index)
@@ -807,18 +827,17 @@ class Volume(object):
         _util.check_call_(['dd', 'if=' + self.get_raw_path(), 'of=/dev/mtd0'])
         _util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', self.mountpoint])
 
-        return True
-
     def _open_lvm(self):
         """Performs mount actions on a LVM. Scans for active volume groups from the loopback device, activates it
         and fills :attr:`volumes` with the logical volumes.
+
+        :raises NoLoopbackAvailableError: when no loopback was available
+        :raises IncorrectFilesystemError: when the volume is not a volume group
         """
         os.environ['LVM_SUPPRESS_FD_WARNINGS'] = '1'
 
         # find free loopback device
-        if not self._find_loopback():
-            return False
-
+        self._find_loopback()
         time.sleep(0.2)
 
         # Scan for new lvm volumes
@@ -830,19 +849,18 @@ class Volume(object):
 
         if not self.info.get('volume_group'):
             logger.warning("Volume is not a volume group. (Searching for %s)", self.loopback)
-            return False
+            raise IncorrectFilesystemError()
 
         # Enable lvm volumes
         _util.check_call_(["lvm", "vgchange", "-a", "y", self.info['volume_group']], stdout=subprocess.PIPE)
 
-        return True
-
     def _open_raid_volume(self):
-        """Add the volume to a RAID system. The RAID array is activated as soon as the array can be activated."""
+        """Add the volume to a RAID system. The RAID array is activated as soon as the array can be activated.
 
-        if not self._find_loopback():
-            logger.error("No loopback device created for %s", str(v))
-            return False
+        :raises NoLoopbackAvailableError: if no loopback device was found
+        """
+
+        self._find_loopback()
 
         raid_status = None
         try:
@@ -863,9 +881,9 @@ class Volume(object):
                 else:
                     logger.info("RAID started at {0}".format(self._paths['md']))
                     raid_status = 'active'
-        except Exception:
+        except Exception as e:
             logger.exception("Failed mounting RAID.")
-            return False
+            raise SubsystemError(e)
 
         # search for the RAID volume
         for v in self.disk.parser.get_volumes():
@@ -873,7 +891,7 @@ class Volume(object):
                 logger.debug("Adding existing volume %s to volume %s", v.volumes[0], self)
                 v.volumes[0].info['raid_status'] = raid_status
                 self.volumes.volumes.append(v.volumes[0])
-                break
+                return v.volumes[0]
         else:
             logger.debug("Creating RAID volume for %s", self)
             container = self.volumes._make_subvolume()
@@ -883,8 +901,7 @@ class Volume(object):
             container.flag = 'alloc'
             container.offset = 0
             container.size = self.size
-
-        return True
+            return container
 
     def get_volumes(self):
         """Recursively gets a list of all subvolumes and the current volume."""
@@ -997,34 +1014,32 @@ class Volume(object):
 
     # noinspection PyBroadException
     def unmount(self):
-        """Unounts the volume from the filesystem."""
+        """Unounts the volume from the filesystem.
+
+        :raises SubsystemError: if one of the underlying processes fails
+        :raises CleanupError: if the cleanup fails
+        """
 
         for volume in self.volumes:
-            volume.unmount()
+            try:
+                volume.unmount()
+            except ImageMounterError:
+                pass
 
         if self.was_mounted and not self.was_unmounted:
             logger.info("Unmounting volume %s", self)
 
         if self.loopback and self.info.get('volume_group'):
-            try:
-                _util.check_call_(["lvm", 'vgchange', '-a', 'n', self.info['volume_group']], stdout=subprocess.PIPE)
-            except Exception:
-                return False
-
+            _util.check_call_(["lvm", 'vgchange', '-a', 'n', self.info['volume_group']],
+                              wrap_error=True, stdout=subprocess.PIPE)
             self.info['volume_group'] = ""
 
         if self.loopback and self._paths.get('luks'):
-            try:
-                _util.check_call_(['cryptsetup', 'luksClose', self._paths['luks']], stdout=subprocess.PIPE)
-            except Exception:
-                return False
-
+            _util.check_call_(['cryptsetup', 'luksClose', self._paths['luks']], wrap_error=True, stdout=subprocess.PIPE)
             del self._paths['luks']
 
         if self._paths.get('bde'):
-            if not _util.clean_unmount(['fusermount', '-u'], self._paths['bde']):
-                return False
-
+            _util.clean_unmount(['fusermount', '-u'], self._paths['bde'])
             del self._paths['bde']
 
         if self._paths.get('md'):
@@ -1040,43 +1055,33 @@ class Volume(object):
 
             try:
                 _util.check_output_(["mdadm", '--stop', md_path], stderr=subprocess.STDOUT)
-            except Exception:
+            except Exception as e:
                 self._paths['md'] = md_path
-                return False
+                raise SubsystemError(e)
 
         if self._paths.get('vss'):
-            if not _util.clean_unmount(['fusermount', '-u'], self._paths['vss']):
-                return False
-
+            _util.clean_unmount(['fusermount', '-u'], self._paths['vss'])
             del self._paths['vss']
 
         if self.loopback:
-            try:
-                _util.check_call_(['losetup', '-d', self.loopback])
-            except Exception:
-                return False
-
+            _util.check_call_(['losetup', '-d', self.loopback], wrap_error=True)
             self.loopback = ""
 
         if self._paths.get('bindmounts'):
             for mp in self._paths['bindmounts']:
-                if not _util.clean_unmount(['umount'], mp, rmdir=False):
-                    return False
+                _util.clean_unmount(['umount'], mp, rmdir=False)
             del self._paths['bindmounts']
 
         if self.mountpoint:
-            if not _util.clean_unmount(['umount'], self.mountpoint):
-                return False
-
+            _util.clean_unmount(['umount'], self.mountpoint)
             self.mountpoint = ""
 
         if self._paths.get('carve'):
             try:
                 shutil.rmtree(self._paths['carve'])
-            except OSError:
-                return False
+            except OSError as e:
+                raise SubsystemError(e)
             else:
                 del self._paths['carve']
 
         self.was_unmounted = True
-        return True

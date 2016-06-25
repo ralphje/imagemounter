@@ -49,8 +49,6 @@ The best example of the use of the Python interface is the :command:`imount` com
 
    .. automethod:: mount_disks
    .. automethod:: mount_raid
-   .. automethod:: mount_single_volume
-   .. automethod:: mount_multiple_volumes
    .. automethod:: mount_volumes
 
    For completeness, this is a list of all attributes of :class:`ImageParser`:
@@ -197,10 +195,6 @@ The best example of the use of the Python interface is the :command:`imount` com
    .. attribute:: loopback
 
       The loopback device used by the volume after :func:`mount` (or related methods) has been called.
-
-   .. attribute:: exception
-
-      Contains an exception that occurred during a call to :func:`mount`.
 
    .. attribute:: was_mounted
 

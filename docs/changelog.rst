@@ -26,9 +26,11 @@ Bugfixes:
 * Fix a bug where ``.e01`` files (lowercase) would not be recognized as Encase
 * Fixed support for newer versions of ``mmls``
 
-Removed and modified features:
+Removed and modified features (backwards incompatible):
 
+* Stopped providing :const:`None` and :const:`False` results when things go wrong for most methods. Instead, numerous exceptions were added. These exceptions should be catched instead, or when using ``mount_volumes`` or ``init``, you can specify ``swallow_exceptions`` (default) to restore previous behaviour. This is useful, since iteration will continue regardless of exceptions.
 * Removal of fsforce and fsfallback arguments and attributes to Volume, and the removal of :option:`--fsforce` and :option:`--fsfallback` from CLI. Use ``*`` and ``?`` as fstypes instead for the same effect. This should make the CLI more sensible, especially regarding the :option:`--fsforce` argument. The default FS fallback is still ``unknown``, which can only be overridden by specifying ``--fstypes=?=none``.
+* In :class:`ImageParser`, removed ``mount_single_volume`` and ``mount_multiple_volumes``. Use ``mount_volumes`` instead, or use a custom loop for more control.
 * In :class:`Disk`, removed ``name``, ``avfs_mountpoint`` and ``md_device`` from public API.
 * In :class:`Volume`, renamed ``get_raw_base_path`` to ``get_raw_path``, renamed ``fill_stats`` to ``load_fsstat_data``, renamed ``get_size_gib`` to ``get_formatted_size``, and removed ``get_magic_type``, ``open_jffs2``, ``find_lvm_volumes`` and ``open_luks_container`` from public API.
 * Also removed the ``*_path``, ``carvepoint`` and ``bindmountpoint`` attributes from the public API. For ``carvepoint``, the ``carve`` method now returns the path to the carvepoint. All data has been moved to the private ``_paths`` attribute. The ``mountpoint`` and ``loopback`` attributes are kept by the way.

@@ -5,7 +5,7 @@ import logging
 import sys
 import os
 from imagemounter.disk import Disk
-
+from imagemounter.exceptions import NoRootFoundError, ImageMounterError
 
 logger = logging.getLogger(__name__)
 
@@ -101,29 +101,7 @@ class ImageParser(object):
             result = disk.add_to_raid() and result
         return result
 
-    def mount_single_volume(self):
-        """Detects the full disk as a single volume and yields the volume. This calls
-        :func:`Disk.mount_single_volume` on all disks and should be called after :func:`mount_disks`
-
-        :rtype: generator"""
-
-        for disk in self.disks:
-            logger.info("Mounting volumes in {0}".format(disk))
-            for volume in disk.mount_single_volume():
-                yield volume
-
-    def mount_multiple_volumes(self):
-        """Detects volumes in all disks (all mounted as a volume system) and yields the volumes. This calls
-        :func:`Disk.mount_multiple_volumes` on all disks and should be called after :func:`mount_disks`.
-
-        :rtype: generator"""
-
-        for disk in self.disks:
-            logger.info("Mounting volumes in {0}".format(disk))
-            for volume in disk.mount_multiple_volumes():
-                yield volume
-
-    def mount_volumes(self, single=None, only=None):
+    def mount_volumes(self, single=None, only=None, swallow_exceptions=True):
         """Detects volumes (as volume system or as single volume) in all disks and yields the volumes. This calls
         :func:`Disk.mount_multiple_volumes` on all disks and should be called after :func:`mount_disks`.
 
@@ -131,7 +109,7 @@ class ImageParser(object):
 
         for disk in self.disks:
             logger.info("Mounting volumes in {0}".format(disk))
-            for volume in disk.mount_volumes(single, only):
+            for volume in disk.mount_volumes(single, only, swallow_exceptions=swallow_exceptions):
                 yield volume
 
     def get_volumes(self):
@@ -150,28 +128,30 @@ class ImageParser(object):
 
         :param bool remove_rw: indicates whether a read-write cache should be removed
         :return: whether the command completed successfully
-        :rtype: boolean"""
+        :rtype: boolean
+        :raises SubsystemError: when one of the underlying commands fails. Some are swallowed.
+        :raises CleanupError: when actual cleanup fails. Some are swallowed.
+        """
 
         # To ensure clean unmount after reconstruct, we sort across all volumes in all our disks to provide a proper
         # order
         volumes = list(sorted(self.get_volumes(), key=lambda v: v.mountpoint or "", reverse=True))
         for v in volumes:
-            if not v.unmount():
+            try:
+                v.unmount()
+            except ImageMounterError:
                 logger.error("Error unmounting volume {0}".format(v.mountpoint))
 
         # Now just clean the rest.
         for disk in self.disks:
-            if not disk.unmount(remove_rw):
-                logger.error("Error unmounting {0}".format(disk))
-                return False
-
-        return True
+            disk.unmount(remove_rw)
 
     def reconstruct(self):
         """Reconstructs the filesystem of all volumes mounted by the parser by inspecting the last mount point and
         bind mounting everything.
 
-        :return: None on failure, or the root :class:`Volume` on success
+        :raises: NoRootFoundError if no root could be found
+        :return: the root :class:`Volume`
         """
         volumes = list(sorted((v for v in self.get_volumes() if v.mountpoint and v.info.get('lastmountpoint')),
                               key=lambda v: v.mountpoint or "", reverse=True))
@@ -180,7 +160,7 @@ class ImageParser(object):
             root = list(filter(lambda x: x.info.get('lastmountpoint') == '/', volumes))[0]
         except IndexError:
             logger.error("Could not find / while reconstructing, aborting!")
-            return None
+            raise NoRootFoundError()
 
         volumes.remove(root)
 
