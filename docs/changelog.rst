@@ -26,7 +26,7 @@ Bugfixes:
 * Fix a bug where ``.e01`` files (lowercase) would not be recognized as Encase
 * Fixed support for newer versions of ``mmls``
 
-Removed and modified features (backwards incompatible):
+Removed and modified features:
 
 * Stopped providing :const:`None` and :const:`False` results when things go wrong for most methods. Instead, numerous exceptions were added. These exceptions should be catched instead, or when using ``mount_volumes`` or ``init``, you can specify ``swallow_exceptions`` (default) to restore previous behaviour. This is useful, since iteration will continue regardless of exceptions.
 * Removal of fsforce and fsfallback arguments and attributes to Volume, and the removal of :option:`--fsforce` and :option:`--fsfallback` from CLI. Use ``*`` and ``?`` as fstypes instead for the same effect. This should make the CLI more sensible, especially regarding the :option:`--fsforce` argument. The default FS fallback is still ``unknown``, which can only be overridden by specifying ``--fstypes=?=none``.

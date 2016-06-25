@@ -52,7 +52,7 @@ class ImageParser(object):
                 index += 1
             self.disks.append(Disk(self, path, index=str(index) if index else None, **self.args))
 
-    def init(self, single=None, raid=True):
+    def init(self, single=None, raid=True, swallow_exceptions=True):
         """Handles all important disk-mounting tasks, i.e. calls the :func:`Disk.init` function on all underlying
         disks. It yields every volume that is encountered, including volumes that have not been mounted.
 
@@ -61,10 +61,11 @@ class ImageParser(object):
         :type single: bool|None
         :param raid: indicates whether RAID detection is enabled
         :type raid: bool
+        :param swallow_exceptions: specify whether you want the init calls to swallow exceptions
         :rtype: generator
         """
         for d in self.disks:
-            for v in d.init(single, raid):
+            for v in d.init(single, raid, swallow_exceptions=swallow_exceptions):
                 yield v
 
     def mount_disks(self):

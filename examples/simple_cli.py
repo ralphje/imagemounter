@@ -14,14 +14,13 @@ from __future__ import print_function
 import os
 import sys
 
-from imagemounter.exceptions import ImageMounterError
-
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import argparse
 import logging
 import sys
 from imagemounter import ImageParser, __version__
+from imagemounter.exceptions import ImageMounterError
 from termcolor import colored
 
 
@@ -108,11 +107,12 @@ def main():
         if args.vshadow and volume.fstype == 'ntfs':
             sys.stdout.write("[+] Mounting volume shadow copies...\r")
             sys.stdout.flush()
-            path = volume.vshadowmount()
-            if path:
-                print('[+] Volume shadow copies available at {0}.'.format(colored(path, 'green', attrs=['bold'])))
-            else:
+            try:
+                path = volume.vshadowmount()
+            except ImageMounterError:
                 print(colored('[-] Volume shadow copies could not be mounted.', 'red'))
+            else:
+                print('[+] Volume shadow copies available at {0}.'.format(colored(path, 'green', attrs=['bold'])))
         else:
             continue  # we do not need the unmounting sequence
 
