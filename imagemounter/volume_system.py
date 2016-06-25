@@ -8,6 +8,7 @@ from collections import defaultdict
 import re
 
 from imagemounter import _util
+from imagemounter.exceptions import ArgumentError, SubsystemError, ModuleNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +105,7 @@ class VolumeSystem(object):
                 yield v
         else:
             logger.error("No viable detection method found")
-            return
+            raise ArgumentError("No viable detection method found")
 
     @staticmethod
     def _determine_auto_detection_method():
@@ -133,7 +134,7 @@ class VolumeSystem(object):
             import pytsk3
         except ImportError:
             logger.error("pytsk3 not installed, could not detect volumes")
-            return []
+            raise ModuleNotFoundError("pytsk3")
 
         baseimage = None
         try:
@@ -163,12 +164,12 @@ class VolumeSystem(object):
                         volumes = pytsk3.Volume_Info(baseimage, getattr(pytsk3, 'TSK_VS_TYPE_GPT'))
                         self.volume_source = 'multi'
                         return volumes
-                    except Exception:
+                    except Exception as e:
                         logger.exception("Failed retrieving image info (possible empty image).")
-                        return []
+                        raise SubsystemError(e)
                 else:
                     logger.exception("Failed retrieving image info (possible empty image).")
-                    return []
+                    raise SubsystemError(e)
         finally:
             if baseimage:
                 baseimage.close()
@@ -226,12 +227,12 @@ class VolumeSystem(object):
                     cmd = ['mmls', '-t', 'gpt', self.parent.get_raw_path()]
                     output = _util.check_output_(cmd, stderr=subprocess.STDOUT)
                     self.volume_source = 'multi'
-                except Exception:
+                except Exception as e:
                     logger.exception("Failed executing mmls command")
-                    return
+                    raise SubsystemError(e)
             else:
                 logger.exception("Failed executing mmls command")
-                return
+                raise SubsystemError(e)
 
         output = output.split("Description", 1)[-1]
         for line in output.splitlines():
@@ -296,9 +297,9 @@ class VolumeSystem(object):
             cmd = ['parted', self.parent.get_raw_path(), '-sm', 'unit s', 'print free']
             output = _util.check_output_(cmd)
             self.volume_source = 'multi'
-        except Exception:
+        except Exception as e:
             logger.exception("Failed executing parted command")
-            return
+            raise SubsystemError(e)
 
         num = 0
         for line in output.splitlines():

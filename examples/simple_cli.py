@@ -13,6 +13,9 @@ from __future__ import absolute_import
 from __future__ import print_function
 import os
 import sys
+
+from imagemounter.exceptions import ImageMounterError
+
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import argparse
@@ -95,11 +98,12 @@ def main():
             # or their entire space, depending on whether we could mount it.
             sys.stdout.write("[+] Carving volume...\r")
             sys.stdout.flush()
-            path = volume.carve(freespace=not volume.mountpoint)
-            if path:
-                print('[+] Carved data is available at {0}.'.format(colored(path, 'green', attrs=['bold'])))
-            else:
+            try:
+                path = volume.carve(freespace=not volume.mountpoint)
+            except ImageMounterError:
                 print(colored('[-] Carving failed.', 'red'))
+            else:
+                print('[+] Carved data is available at {0}.'.format(colored(path, 'green', attrs=['bold'])))
 
         if args.vshadow and volume.fstype == 'ntfs':
             sys.stdout.write("[+] Mounting volume shadow copies...\r")

@@ -12,6 +12,7 @@ import os
 from imagemounter import _util, ImageParser, Unmounter, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
 
 # Python 2 compatibility
+from imagemounter.exceptions import NoRootFoundError, ImageMounterError
 
 try:
     input = raw_input
@@ -427,13 +428,19 @@ def main():
                 print('[+] Mounting image {0} using {1}...'.format(p.paths[0], disk.method))
 
                 # Mount the base image using the preferred method
-                if not disk.mount():
+                try:
+                    disk.mount()
+                except ImageMounterError:
                     print(col("[-] Failed mounting base image. Perhaps try another mount method than {0}?"
                               .format(disk.method), "red"))
                     return
 
                 if args.raid:
-                    if disk.add_to_raid():
+                    try:
+                        disk.add_to_raid()
+                    except ImageMounterError:
+                        pass
+                    else:
                         found_raid = True
 
                 if args.read_write:
@@ -447,7 +454,7 @@ def main():
             sys.stdout.flush()
             has_left_mounted = False
 
-            for volume in p.mount_volumes(args.single, args.only_mount):
+            for volume in p.mount_volumes(args.single, args.only_mount, swallow_exceptions=True):
                 try:
                     # something failed?
                     if not volume.mountpoint and not volume.loopback:
@@ -477,23 +484,12 @@ def main():
                         if args.carve and volume.flag in ('alloc', 'unalloc'):
                             sys.stdout.write("[+] Carving volume...\r")
                             sys.stdout.flush()
-                            path = volume.carve(freespace=False)
-                            if path:
-                                print('[+] Carved data is available at {0}.'.format(col(path, 'green', attrs=['bold'])))
-                            else:
+                            try:
+                                path = volume.carve(freespace=False)
+                            except ImageMounterError:
                                 print(col('[-] Carving failed.', 'red'))
-                        else:
-                            continue  # we do not need the unmounting sequence
-
-                        if args.vshadow and volume.fstype == 'ntfs':
-                            sys.stdout.write("[+] Mounting volume shadow copies...\r")
-                            sys.stdout.flush()
-                            path = volume.vshadowmount()
-                            if path:
-                                print('[+] Volume shadow copies available at {0}.'.format(col(path, 'green',
-                                                                                          attrs=['bold'])))
                             else:
-                                print(col('[-] Volume shadow copies could not be mounted.', 'red'))
+                                print('[+] Carved data is available at {0}.'.format(col(path, 'green', attrs=['bold'])))
                         else:
                             continue  # we do not need the unmounting sequence
 
@@ -513,11 +509,23 @@ def main():
                         if args.carve:
                             sys.stdout.write("[+] Carving volume...\r")
                             sys.stdout.flush()
-                            if volume.carve():
-                                print('[+] Carved data is available at {0}.'.format(col(volume.carvepoint, 'green',
-                                                                                        attrs=['bold'])))
-                            else:
+                            try:
+                                path = volume.carve()
+                            except ImageMounterError:
                                 print(col('[-] Carving failed.', 'red'))
+                            else:
+                                print('[+] Carved data is available at {0}.'.format(col(path, 'green', attrs=['bold'])))
+
+                        if args.vshadow and volume.fstype == 'ntfs':
+                            sys.stdout.write("[+] Mounting volume shadow copies...\r")
+                            sys.stdout.flush()
+                            try:
+                                path = volume.vshadowmount()
+                            except ImageMounterError:
+                                print(col('[-] Volume shadow copies could not be mounted.', 'red'))
+                            else:
+                                print('[+] Volume shadow copies available at {0}.'.format(col(path, 'green',
+                                                                                          attrs=['bold'])))
 
                     # Do not offer unmount when reconstructing
                     if args.reconstruct or args.keep:
@@ -529,9 +537,10 @@ def main():
                     # Case where image should be unmounted, but has failed to do so. Keep asking whether the user wants
                     # to unmount.
                     while True:
-                        if volume.unmount():
+                        try:
+                            volume.unmount()
                             break
-                        else:
+                        except ImageMounterError:
                             try:
                                 print(col("[-] Error unmounting volume. Perhaps files are still open?", "red"))
                                 input(col('>>> Press [enter] to retry unmounting, or ^C to skip... ', attrs=['dark']))
@@ -573,8 +582,9 @@ def main():
                 # Reverse order so '/' gets unmounted last
 
                 print("[+] Performing reconstruct... ")
-                root = p.reconstruct()
-                if not root:
+                try:
+                    root = p.reconstruct()
+                except NoRootFoundError:
                     print(col("[-] Failed reconstructing filesystem: could not find root directory.", 'red'))
                 else:
                     failed = []
@@ -620,16 +630,17 @@ def main():
                     remove_rw = False
 
                 while True:
-                    if p.clean(remove_rw):
+                    try:
+                        p.clean(remove_rw)
+                        print("[+] All cleaned up")
                         break
-                    else:
+                    except ImageMounterError:
                         try:
                             print(col("[-] Error unmounting base image. Perhaps volumes are still open?", 'red'))
                             input(col('>>> Press [enter] to retry unmounting, or ^C to cancel... ', attrs=['dark']))
                         except KeyboardInterrupt:
                             print("")  # ^C does not print \n
                             break
-                print("[+] All cleaned up")
 
 
 if __name__ == '__main__':

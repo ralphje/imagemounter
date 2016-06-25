@@ -11,6 +11,8 @@ import tempfile
 import time
 
 from imagemounter import _util, BLOCK_SIZE
+from imagemounter.exceptions import ImageMounterError, ArgumentError, CommandNotFoundError, NoLoopbackAvailableError, \
+    IncorrectFilesystemError, SubsystemError, MountpointEmptyError, MountFailedError
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
@@ -160,7 +162,10 @@ class Disk(object):
                 logger.debug("Raw path to avfs is {}".format(raw_path))
                 if self.method == 'auto':
                     self.method = 'avfs'
-                return raw_path is not None
+
+                if raw_path is None:
+                    raise MountpointEmptyError()
+                return
 
             elif method == 'xmount':
                 cmds.append(['xmount', '--in', 'ewf' if self.type == 'encase' else 'dd'])
@@ -180,10 +185,10 @@ class Disk(object):
                 os.rmdir(self.mountpoint)
                 self.mountpoint = ""
                 logger.debug("Raw path to dummy is {}".format(self.get_raw_path()))
-                return True
+                return
 
             else:
-                raise Exception("Unknown mount method {0}".format(self.method))
+                raise ArgumentError("Unknown mount method {0}".format(self.method))
 
         # add path and mountpoint to the cmds
         # if multifile is enabled, add additional mount methods to the end of it
@@ -209,13 +214,15 @@ class Disk(object):
                 logger.debug("Raw path to disk is {}".format(raw_path))
                 if self.method == 'auto':
                     self.method = cmd[0]
-                return raw_path is not None
+
+                if raw_path is None:
+                    raise MountpointEmptyError()
+                return
 
         logger.error('Unable to mount {0}'.format(self.paths[0]))
         os.rmdir(self.mountpoint)
         self.mountpoint = ""
-
-        return False
+        raise MountFailedError()
 
     def get_raw_path(self):
         """Returns the raw path to the mounted disk image, i.e. the raw :file:`.dd`, :file:`.raw` or :file:`ewf1`
@@ -265,6 +272,7 @@ class Disk(object):
 
         if not _util.command_exists('mdadm'):
             logger.info("mdadm not installed, could not detect RAID")
+            # swallowed and just returns false
             return False
 
         # Scan for new lvm volumes
@@ -291,8 +299,11 @@ class Disk(object):
         :return: whether the addition succeeded
         """
 
+        if not _util.command_exists('mdadm'):
+            raise CommandNotFoundError("mdadm")
+
         if not self.is_raid():
-            return False
+            raise IncorrectFilesystemError()
 
         # find free loopback device
         # noinspection PyBroadException
@@ -300,7 +311,7 @@ class Disk(object):
             self.loopback = _util.check_output_(['losetup', '-f']).strip()
         except Exception:
             logger.warning("No free loopback device found for RAID", exc_info=True)
-            return False
+            raise NoLoopbackAvailableError()
 
         # mount image as loopback
         cmd = ['losetup', '-o', str(self.offset), self.loopback, self.get_raw_path()]
@@ -311,7 +322,7 @@ class Disk(object):
             _util.check_call_(cmd, stdout=subprocess.PIPE)
         except Exception:
             logger.exception("Failed mounting image to loopback")
-            return False
+            raise NoLoopbackAvailableError()
 
         try:
             # use mdadm to mount the loopback to a md device
@@ -323,11 +334,11 @@ class Disk(object):
                 logger.info("Mounted RAID to {0}".format(self._paths['md']))
         except Exception as e:
             logger.exception("Failed mounting RAID.")
-            return False
+            raise SubsystemError(e)
 
         return True
 
-    def mount_volumes(self, single=None, only_mount=None):
+    def mount_volumes(self, single=None, only_mount=None, swallow_exceptions=True):
         """Generator that detects and mounts all volumes in the disk.
 
         If *single* is :const:`True`, this method will call :Func:`mount_single_volumes`. If *single* is False, only
@@ -337,27 +348,30 @@ class Disk(object):
 
         if os.path.isdir(self.get_raw_path()) and self.mount_directories:
             logger.info("Raw path is a directory: using directory mount method")
-            for v in self.mount_directory(only_mount):
+            for v in self.mount_directory(only_mount, swallow_exceptions=swallow_exceptions):
                 yield v
 
         elif single:
             # if single, then only use single_Volume
-            for v in self.mount_single_volume(only_mount):
+            for v in self.mount_single_volume(only_mount, swallow_exceptions=swallow_exceptions):
                 yield v
         else:
             # if single == False or single == None, loop over all volumes
             amount = 0
-            for v in self.mount_multiple_volumes(only_mount):
-                amount += 1
-                yield v
+            try:
+                for v in self.mount_multiple_volumes(only_mount, swallow_exceptions=swallow_exceptions):
+                    amount += 1
+                    yield v
+            except ImageMounterError:
+                pass  # ignore and continue to single mount
 
             # if single == None and no volumes were mounted, use single_volume
             if single is None and amount == 0:
                 logger.info("Mounting as single volume instead")
-                for v in self.mount_single_volume(only_mount):
+                for v in self.mount_single_volume(only_mount, swallow_exceptions=swallow_exceptions):
                     yield v
 
-    def mount_directory(self, only_mount=None):
+    def mount_directory(self, only_mount=None, swallow_exceptions=True):
         """Method that 'mounts' a directory. It actually just symlinks it. It is useful for AVFS mounts, that
         are not otherwise detected. This is a last resort method.
         """
@@ -376,10 +390,11 @@ class Disk(object):
 
         self.volumes.volume_source = 'directory'
 
-        for v in volume.init(no_stats=True, only_mount=only_mount):  # stats can't be retrieved from directory
+        for v in volume.init(no_stats=True, only_mount=only_mount, swallow_exceptions=swallow_exceptions):
+            # stats can't be retrieved from directory
             yield v
 
-    def mount_single_volume(self, only_mount=None):
+    def mount_single_volume(self, only_mount=None, swallow_exceptions=True):
         """Mounts a volume assuming that the mounted image does not contain a full disk image, but only a
         single volume.
 
@@ -405,16 +420,17 @@ class Disk(object):
         self.volumes.volume_source = 'single'
         self.volumes._assign_disktype_data(volume)
 
-        for v in volume.init(no_stats=True, only_mount=only_mount):  # stats can't  be retrieved from single volumes
+        for v in volume.init(no_stats=True, only_mount=only_mount, swallow_exceptions=swallow_exceptions):
+            # stats can't  be retrieved from single volumes
             yield v
 
-    def mount_multiple_volumes(self, only_mount=None):
+    def mount_multiple_volumes(self, only_mount=None, swallow_exceptions=True):
         """Generator that will detect volumes in the disk file, generate :class:`Volume` objects based on this
         information and call :func:`init` on these.
         """
 
         for v in self.volumes.detect_volumes():
-            for w in v.init(only_mount=only_mount):
+            for w in v.init(only_mount=only_mount, swallow_exceptions=swallow_exceptions):
                 yield w
 
     def get_volumes(self):
@@ -433,10 +449,15 @@ class Disk(object):
     def unmount(self, remove_rw=False):
         """Removes all ties of this disk to the filesystem, so the image can be unmounted successfully. Warning: this
         method will destruct the entire RAID array in which this disk takes part.
+
+        :raises SubsystemError: when one of the underlying commands fails. Some are swallowed.
+        :raises CleanupError: when actual cleanup fails. Some are swallowed.
         """
 
         for m in list(sorted(self.volumes, key=lambda v: v.mountpoint or "", reverse=True)):
-            if not m.unmount():
+            try:
+                m.unmount()
+            except ImageMounterError:
                 logger.warning("Error unmounting volume {0}".format(m.mountpoint))
 
         # TODO: remove specific device from raid array
@@ -457,16 +478,13 @@ class Disk(object):
             except Exception:
                 logger.warning("Failed deleting loopback device {0}".format(self.loopback), exc_info=True)
 
-        if self.mountpoint and not _util.clean_unmount(['fusermount', '-u'], self.mountpoint):
-            logger.error("Error unmounting base {0}".format(self.mountpoint))
-            return False
+        if self.mountpoint:
+            _util.clean_unmount(['fusermount', '-u'], self.mountpoint)
 
-        if self._paths.get('avfs') and not _util.clean_unmount(['fusermount', '-u'], self._paths['avfs']):
-            logger.error("Error unmounting AVFS mountpoint {0}".format(self._paths['avfs']))
-            return False
+        if self._paths.get('avfs'):
+            _util.clean_unmount(['fusermount', '-u'], self._paths['avfs'])
 
         if self.rw_active() and remove_rw:
             os.remove(self.rwpath)
 
-        return True
 
