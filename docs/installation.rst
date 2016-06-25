@@ -16,56 +16,9 @@ package from your distribution is also required. After that, you can easily inst
 
 Other dependencies
 ------------------
-This package highly depends on other utilities to be present on your system. For a full installation, you require the
-following tools:
+This package highly depends on other utilities to be present on your system. For a full installation, you require more tools. YYou can run ``imount --check`` to get a full list of all required tools.
 
-* Mount tools
-
-  * :command:`xmount`
-  * :command:`ewfmount`, part of *ewf-tools* package, see note below
-  * :command:`affuse`, part of *afflib-tools* package
-  * :command:`vmware-mount`, part of VMware Workstation
-
-* Volume detection
-
-  * :command:`mmls`, part of *sleuthkit* package
-  * :mod:`pytsk3`
-  * :command:`disktype`
-  * :command:`file`, part of *libmagic1* package
-  * :mod:`python-magic`
-
-* Statistics, e.g. last mountpoint of volumes
-
-  * :command:`fsstat`, part of *sleuthkit* package
-
-* LVM volumes
-
-  * :command:`lvm` et al, all part of *lvm2* package
-
-* MD RAID arrays
-
-  * :command:`mdadm`
-
-* LUKS volumes
-
-  * :command:`cryptsetup`
-
-* Compressed dd-images, iso's et al
-
-  * :command:`mountavfs`, part of *avfs* package
-
-* Other Filesystems mount tools:
-
-  * :command:`vmfs-fuse`, part of *vmfs-tools* package
-  * :command:`mount.jffs2`, :mod:`mtd`, all part of *mtd-tools* package
-  * :command:`mount.squashfs`, part of *squashfs-tools* package
-  * :command:`mount.xfs`, part of *xfsprogs* package
-  * :command:`mount.cramfs`, part of standard (Ubuntu) installation
-  * :command:`mount.minix`, part of standard (Ubuntu) installation
-  * :command:`mount.vfat`, part of standard (Ubuntu) installation
-  * :command:`mount.iso9660`, standard (Ubuntu) installation
-
-A basic installation contains at least one of the mount tools. Highly recommended is also `fsstat`, others are required
+A basic installation contains at least one of the mount tools. Highly recommended is also ``fsstat``, others are required
 for specific file system types.
 
 ewfmount on Ubuntu 13.10

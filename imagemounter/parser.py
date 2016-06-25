@@ -52,20 +52,18 @@ class ImageParser(object):
                 index += 1
             self.disks.append(Disk(self, path, index=str(index) if index else None, **self.args))
 
-    def init(self, single=None, raid=True, swallow_exceptions=True):
+    def init(self, single=None, swallow_exceptions=True):
         """Handles all important disk-mounting tasks, i.e. calls the :func:`Disk.init` function on all underlying
         disks. It yields every volume that is encountered, including volumes that have not been mounted.
 
         :param single: indicates whether the :class:`Disk` should be mounted as a single disk, not as a single disk or
             whether it should try both (defaults to :const:`None`)
         :type single: bool|None
-        :param raid: indicates whether RAID detection is enabled
-        :type raid: bool
         :param swallow_exceptions: specify whether you want the init calls to swallow exceptions
         :rtype: generator
         """
         for d in self.disks:
-            for v in d.init(single, raid, swallow_exceptions=swallow_exceptions):
+            for v in d.init(single, swallow_exceptions=swallow_exceptions):
                 yield v
 
     def mount_disks(self):
@@ -87,19 +85,6 @@ class ImageParser(object):
         result = False
         for disk in self.disks:
             result = disk.rw_active() or result
-        return result
-
-    def mount_raid(self):
-        """Creates a RAID device and adds all devices to the RAID array, i.e. calling :func:`Disk.add_to_raid` on all
-        underlying disks. Should be called before :func:`mount_disks`.
-
-        :return: whether all disks were successfully added
-        :rtype: bool
-        """
-
-        result = True
-        for disk in self.disks:
-            result = disk.add_to_raid() and result
         return result
 
     def mount_volumes(self, single=None, only=None, swallow_exceptions=True):

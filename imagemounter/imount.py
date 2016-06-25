@@ -80,6 +80,7 @@ def main():
             self._check_command("ewfmount", "ewf-tools", "EWF images (partially covered by xmount)")
             self._check_command("affuse", "afflib-tools", "AFF images (partially covered by xmount)")
             self._check_command("vmware-mount", why="VMWare disks")
+            self._check_command("mountavfs", "avfs", "compressed disk images")
             print("-- Detecting volumes and volume types (at least one required) --")
             self._check_command("mmls", "sleuthkit")
             self._check_module("pytsk3")
@@ -90,10 +91,6 @@ def main():
             self._check_command("blkid")
             self._check_module("magic", "python-magic")
             self._check_command("disktype", "disktype")
-            print("-- Enhanced mounting and detecting disks (install when needed) --")
-            self._check_command("mdadm", "mdadm", "RAID disks")
-            self._check_command("cryptsetup", "cryptsetup", "LUKS containers")
-            self._check_command("mountavfs", "avfs", "compressed disk images")
             print("-- Mounting volumes (install when needed) --")
             self._check_command("mount.xfs", "xfsprogs", "XFS volumes")
             self._check_command("mount.ntfs", "ntfs-3g", "NTFS volumes")
@@ -101,6 +98,8 @@ def main():
             self._check_command("vmfs-fuse", "vmfs-tools", "VMFS volumes")
             self._check_command("mount.jffs2", "mtd-tools", "JFFS2 volumes")
             self._check_command("mount.squashfs", "squashfs-tools", "SquashFS volumes")
+            self._check_command("mdadm", "mdadm", "RAID volumes")
+            self._check_command("cryptsetup", "cryptsetup", "LUKS containers")
             self._check_command("bdemount", "libbde-utils", "Bitlocker Drive Encryption volumes")
             self._check_command("vshadowmount", "libvshadow-utils", "NTFS volume shadow copies")
             parser.exit()
@@ -186,10 +185,6 @@ def main():
                           help='use the disktype command to get even more information about the volumes (default)')
     toggroup.add_argument('--no-disktype', action='store_true', default=False,
                           help='do not use disktype to get more information')
-    toggroup.add_argument('--raid', action='store_true', default=False,
-                          help="try to detect whether the volume is part of a RAID array (default)")
-    toggroup.add_argument('--no-raid', action='store_true', default=False,
-                          help="prevent trying to mount the volume in a RAID array")
     toggroup.add_argument('--single', action='store_true', default=False,
                           help="do not try to find a volume system, but assume the image contains a single volume")
     toggroup.add_argument('--no-single', action='store_true', default=False,
@@ -267,15 +262,6 @@ def main():
             explicit_disktype = True
         args.disktype = True
 
-    # Make args.raid default to True
-    explicit_raid = False
-    if not args.raid and args.no_raid:
-        args.raid = False
-    else:
-        if args.raid:
-            explicit_raid = True
-        args.raid = True
-
     # Make args.single default to None
     if args.single == args.no_single:
         args.single = None
@@ -320,17 +306,11 @@ def main():
                   'red'))
         sys.exit(1)
 
-    # Check if raid is available
-    if args.raid and not _util.command_exists('mdadm'):
-        if explicit_raid:
-            print(col("[!] RAID mount requires the mdadm command.", 'yellow'))
-        args.raid = False
-
     if args.reconstruct and not args.stats:  # Reconstruct implies use of fsstat
         print("[!] You explicitly disabled stats, but --reconstruct implies the use of stats. Stats are re-enabled.")
         args.stats = True
 
-    # Check if raid is available
+    # Check if disktype is available
     if args.disktype and not _util.command_exists('disktype'):
         if explicit_disktype:
             print(col("[-] The disktype command can not be used in this session, as it is not installed.", 'yellow'))
@@ -420,7 +400,6 @@ def main():
         try:
             p = ImageParser(images, **vars(args))
             num = 0
-            found_raid = False
 
             # Mount all disks. We could use .init, but where's the fun in that?
             for disk in p.disks:
@@ -434,14 +413,6 @@ def main():
                     print(col("[-] Failed mounting base image. Perhaps try another mount method than {0}?"
                               .format(disk.method), "red"))
                     return
-
-                if args.raid:
-                    try:
-                        disk.add_to_raid()
-                    except ImageMounterError:
-                        pass
-                    else:
-                        found_raid = True
 
                 if args.read_write:
                     print('[+] Created read-write cache at {0}'.format(disk.rwpath))
@@ -559,15 +530,10 @@ def main():
                     if args.vstype != 'detect':
                         print(col('[?] Could not determine volume information of {0}. Image may be empty, '
                                   'or volume system type {0} was incorrect.'.format(args.vstype.upper()), 'yellow'))
-                    elif found_raid:
+                    elif args.single is False:
                         print(col('[?] Could not determine volume information. Image may be empty, or volume system '
                                   'type could not be detected. Try explicitly providing the volume system type with '
-                                  '--vstype, or providing more volumes to complete the RAID array.', 'yellow'))
-                    elif not args.raid or args.single is False:
-                        print(col('[?] Could not determine volume information. Image may be empty, or volume system '
-                                  'type could not be detected. Try explicitly providing the volume system type with '
-                                  '--vstype, mounting as RAID with --raid and/or mounting as a single volume with '
-                                  '--single', 'yellow'))
+                                  '--vstype or mounting as a single volume with --single', 'yellow'))
                     else:
                         print(col('[?] Could not determine volume information. Image may be empty, or volume system '
                                   'type could not be detected. Try explicitly providing the volume system type with '

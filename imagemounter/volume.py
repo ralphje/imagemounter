@@ -540,7 +540,7 @@ class Volume(object):
                     self.fstype = 'dos'
                 elif "dos/mbr boot sector" in fsdesc:
                     self.fstype = 'detect'  # vsdetect, choosing between dos and gpt is hard
-                elif 'linux_raid_member' in fsdesc:
+                elif 'linux_raid_member' in fsdesc or 'linux software raid' in fsdesc:
                     self.fstype = 'raid'
                 elif fsdesc.upper() in FILE_SYSTEM_GUIDS:
                     # this is a bit of a workaround for the fill_guid method
@@ -733,7 +733,7 @@ class Volume(object):
             raise IncorrectFilesystemError()
 
         # Open the LUKS container
-        self._paths['luks'] = 'image_mounter_' + str(random.randint(10000, 99999))
+        self._paths['luks'] = 'image_mounter_luks_' + str(random.randint(10000, 99999))
 
         # noinspection PyBroadException
         try:

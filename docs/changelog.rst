@@ -34,6 +34,7 @@ Removed and modified features:
 * In :class:`Disk`, removed ``name``, ``avfs_mountpoint`` and ``md_device`` from public API.
 * In :class:`Volume`, renamed ``get_raw_base_path`` to ``get_raw_path``, renamed ``fill_stats`` to ``load_fsstat_data``, renamed ``get_size_gib`` to ``get_formatted_size``, and removed ``get_magic_type``, ``open_jffs2``, ``find_lvm_volumes`` and ``open_luks_container`` from public API.
 * Also removed the ``*_path``, ``carvepoint`` and ``bindmountpoint`` attributes from the public API. For ``carvepoint``, the ``carve`` method now returns the path to the carvepoint. All data has been moved to the private ``_paths`` attribute. The ``mountpoint`` and ``loopback`` attributes are kept by the way.
+* Removed Linux RAID Disk support. Instead, mount as a single volume, with the type of this volume being RAID. This greatly simplifies the :class:`Disk` class.
 * Moved several attributes of :class:`Volume` to a new :attr:`info` attribute, which is publicly accessible, but its contents are not part of a stable public API.
 * :attr:`index` is now always ``str``.
 * Dropped support for Python 3.2, since everyone seems to be doing that these days.

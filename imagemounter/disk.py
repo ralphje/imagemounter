@@ -11,8 +11,7 @@ import tempfile
 import time
 
 from imagemounter import _util, BLOCK_SIZE
-from imagemounter.exceptions import ImageMounterError, ArgumentError, CommandNotFoundError, NoLoopbackAvailableError, \
-    IncorrectFilesystemError, SubsystemError, MountpointEmptyError, MountFailedError
+from imagemounter.exceptions import ImageMounterError, ArgumentError, MountpointEmptyError, MountFailedError
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
@@ -68,7 +67,6 @@ class Disk(object):
         self._paths = {}
         self.rwpath = ""
         self.mountpoint = ''
-        self.loopback = ""
         self.volumes = VolumeSystem(parent=self, **args)
 
         self._disktype = defaultdict(dict)
@@ -82,20 +80,17 @@ class Disk(object):
     def __getitem__(self, item):
         return self.volumes[item]
 
-    def init(self, single=None, raid=True, disktype=True):
-        """Calls several methods required to perform a full initialisation: :func:`mount`, :func:`add_to_raid` and
+    def init(self, single=None, disktype=True):
+        """Calls several methods required to perform a full initialisation: :func:`mount`, and
         :func:`mount_volumes` and yields all detected volumes.
 
         :param bool|None single: indicates whether the disk should be mounted as a single disk, not as a single disk or
             whether it should try both (defaults to :const:`None`)
-        :param bool raid: indicates whether RAID detection is enabled
         :param bool disktype: indicates whether disktype data should be loaded and used
         :rtype: generator
         """
 
         self.mount()
-        if raid:
-            self.add_to_raid()
         if disktype:
             self.volumes.load_disktype_data()
 
@@ -262,81 +257,8 @@ class Disk(object):
 
         if self._paths.get('md'):
             return self._paths['md']
-        elif self.loopback:
-            return self.loopback
         else:
             return self.get_raw_path()
-
-    def is_raid(self):
-        """Tests whether this image (was) part of a RAID array. Requires :command:`mdadm` to be installed."""
-
-        if not _util.command_exists('mdadm'):
-            logger.info("mdadm not installed, could not detect RAID")
-            # swallowed and just returns false
-            return False
-
-        # Scan for new lvm volumes
-        # noinspection PyBroadException
-        try:
-            result = _util.check_output_(["mdadm", "--examine", self.get_raw_path()], stderr=subprocess.STDOUT)
-            for l in result.splitlines():
-                if 'Raid Level' in l:
-                    logger.debug("Detected RAID level " + l[l.index(':') + 2:])
-                    break
-            else:
-                return False
-        except Exception:
-            return False
-
-        return True
-
-    def add_to_raid(self):
-        """Adds the disk to a central RAID volume.
-
-        This function will first test whether it is actually a RAID volume by using :func:`is_raid` and, if so, will
-        add the disk to the array via a loopback device.
-
-        :return: whether the addition succeeded
-        """
-
-        if not _util.command_exists('mdadm'):
-            raise CommandNotFoundError("mdadm")
-
-        if not self.is_raid():
-            raise IncorrectFilesystemError()
-
-        # find free loopback device
-        # noinspection PyBroadException
-        try:
-            self.loopback = _util.check_output_(['losetup', '-f']).strip()
-        except Exception:
-            logger.warning("No free loopback device found for RAID", exc_info=True)
-            raise NoLoopbackAvailableError()
-
-        # mount image as loopback
-        cmd = ['losetup', '-o', str(self.offset), self.loopback, self.get_raw_path()]
-        if not self.read_write:
-            cmd.insert(1, '-r')
-
-        try:
-            _util.check_call_(cmd, stdout=subprocess.PIPE)
-        except Exception:
-            logger.exception("Failed mounting image to loopback")
-            raise NoLoopbackAvailableError()
-
-        try:
-            # use mdadm to mount the loopback to a md device
-            # incremental and run as soon as available
-            output = _util.check_output_(['mdadm', '-IR', self.loopback], stderr=subprocess.STDOUT)
-            match = re.findall(r"attached to ([^ ,]+)", output)
-            if match:
-                self._paths['md'] = os.path.realpath(match[0])
-                logger.info("Mounted RAID to {0}".format(self._paths['md']))
-        except Exception as e:
-            logger.exception("Failed mounting RAID.")
-            raise SubsystemError(e)
-
-        return True
 
     def mount_volumes(self, single=None, only_mount=None, swallow_exceptions=True):
         """Generator that detects and mounts all volumes in the disk.
@@ -447,8 +369,7 @@ class Disk(object):
         return self.rwpath and os.path.getsize(self.rwpath)
 
     def unmount(self, remove_rw=False):
-        """Removes all ties of this disk to the filesystem, so the image can be unmounted successfully. Warning: this
-        method will destruct the entire RAID array in which this disk takes part.
+        """Removes all ties of this disk to the filesystem, so the image can be unmounted successfully.
 
         :raises SubsystemError: when one of the underlying commands fails. Some are swallowed.
         :raises CleanupError: when actual cleanup fails. Some are swallowed.
@@ -459,24 +380,6 @@ class Disk(object):
                 m.unmount()
             except ImageMounterError:
                 logger.warning("Error unmounting volume {0}".format(m.mountpoint))
-
-        # TODO: remove specific device from raid array
-        if self._paths.get('md'):
-            # Removes the RAID device first. Actually, we should be able to remove the devices from the array separately,
-            # but whatever.
-            try:
-                _util.check_call_(['mdadm', '-S', self._paths['md']], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                del self._paths['md']
-            except Exception as e:
-                logger.warning("Failed unmounting MD device {0}".format(self._paths['md']), exc_info=True)
-
-        if self.loopback:
-            # noinspection PyBroadException
-            try:
-                _util.check_call_(['losetup', '-d', self.loopback])
-                self.loopback = None
-            except Exception:
-                logger.warning("Failed deleting loopback device {0}".format(self.loopback), exc_info=True)
 
         if self.mountpoint:
             _util.clean_unmount(['fusermount', '-u'], self.mountpoint)
