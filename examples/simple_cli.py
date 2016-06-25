@@ -31,6 +31,7 @@ def main():
     parser.add_argument("-o", "--out", help="directory to mount the volumes in", dest="mountdir")
     parser.add_argument("-c", "--casename", help="the name of the case (this is appended to the output dir)")
     parser.add_argument("-r", "--restore", action="store_true", help="carve unallocated space", dest="carve")
+    parser.add_argument("-s", "--shadow", action="store_true", help="mount volume shadow copies", dest="vshadow")
     parser.add_argument("-v", "--verbose", action="store_true", help="enable verbose output")
     args = parser.parse_args()
 
@@ -99,6 +100,17 @@ def main():
                 print('[+] Carved data is available at {0}.'.format(colored(path, 'green', attrs=['bold'])))
             else:
                 print(colored('[-] Carving failed.', 'red'))
+
+        if args.vshadow and volume.fstype == 'ntfs':
+            sys.stdout.write("[+] Mounting volume shadow copies...\r")
+            sys.stdout.flush()
+            path = volume.vshadowmount()
+            if path:
+                print('[+] Volume shadow copies available at {0}.'.format(colored(path, 'green', attrs=['bold'])))
+            else:
+                print(colored('[-] Volume shadow copies could not be mounted.', 'red'))
+        else:
+            continue  # we do not need the unmounting sequence
 
 if __name__ == '__main__':
     main()
