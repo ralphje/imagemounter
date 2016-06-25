@@ -10,10 +10,10 @@ The basic structure of :mod:`imagemounter` is the :class:`imagemounter.ImagePars
 
 For instance, a LUKS volume may contain a LVM system that contains a Ext volume. This would create a :class:`Disk` with a :class:`Volume` containing a :class:`Volume` which contains the actual Ext :class:`Volume`. Subvolumes are managed through :class:`imagemounter.VolumeSystem`s, which is used by both the :class:`Volume` and :class:`Disk` classes.
 
-Most operations are managed on a :class:`Volume` level, although RAIDs (and volume detection) are managed on a :class:`Disk` level and reconstruction is performed on a :class:`ImageParser` level. This means the following main parts make up the Python package:
+Most operations are managed on a :class:`Volume` level, although individual disk file mounting (and volume detection) is performed on a :class:`Disk` level and reconstruction is performed on a :class:`ImageParser` level. This means the following main parts make up the Python package:
 
 - :class:`imagemounter.ImageParser`, maintaining a list of Disks, providing several methods that are carried out on all disks (e.g. mount) and reconstruct.
-- :class:`imagemounter.Disk`, which represents a single disk iamge and can be mounted, added to RAID, and maintain volumes. It is also responsible for maintaining the write cache.
+- :class:`imagemounter.Disk`, which represents a single disk iamge and can be mounted, and maintain volumes. It is also responsible for maintaining the write cache. Although a Disk is able to detect volumes, a Volume has similar capabilities.
 - :class:`imagemounter.Volume`, which can detect its own type and fill its stats, can be mounted, and maintain subvolumes.
 - :class:`imagemounter.VolumeSystem`, which is used to manage subvolumes and can detect volumes from a volume system.
 
@@ -48,7 +48,6 @@ The best example of the use of the Python interface is the :command:`imount` com
    .. automethod:: get_volumes
 
    .. automethod:: mount_disks
-   .. automethod:: mount_raid
    .. automethod:: mount_volumes
 
    For completeness, this is a list of all attributes of :class:`ImageParser`:
@@ -79,8 +78,6 @@ The best example of the use of the Python interface is the :command:`imount` com
    .. automethod:: mount_volumes
    .. automethod:: mount_multiple_volumes
    .. automethod:: mount_single_volume
-   .. automethod:: is_raid
-   .. automethod:: add_to_raid
 
    The following attributes are also available:
 
@@ -107,10 +104,6 @@ The best example of the use of the Python interface is the :command:`imount` com
    .. attribute:: volume_source
 
       The source of the volumes of this disk, either *single* or *multi*, filled after a call to :func:`mount_volumes`.
-
-   .. attribute:: loopback
-
-      Used for RAID support.
 
    .. attribute:: method
 
