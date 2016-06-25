@@ -218,7 +218,7 @@ class Volume(object):
             elif v._paths.get('bde'):
                 return v._paths['bde'] + '/bde1'
             elif v._paths.get('luks'):
-                return '/dev/mapper/' + self._paths['luks']
+                return '/dev/mapper/' + v._paths['luks']
             elif v._paths.get('md'):
                 return v._paths['md']
 
