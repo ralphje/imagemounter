@@ -126,21 +126,14 @@ class Volume(object):
     def get_formatted_size(self):
         """Obtains the size of the volume in a human-readable format (i.e. in TiBs, GiBs or MiBs)."""
 
-        # Python 3 compatibility
-        if sys.version_info[0] == 2:
-            integer_types = (int, long)
-        else:
-            integer_types = int
-
-        # noinspection PyUnresolvedReferences
-        if self.size and (isinstance(self.size, integer_types) or self.size.isdigit()):
+        if self.size is not None:
             if self.size < 1024:
                 return "{0} B".format(self.size)
             elif self.size < 1024 ** 2:
                 return "{0} KiB".format(round(self.size / 1024, 2))
-            elif self.size < 1024**3:
+            elif self.size < 1024 ** 3:
                 return "{0} MiB".format(round(self.size / 1024.0 ** 2, 2))
-            elif self.size < 1024**4:
+            elif self.size < 1024 ** 4:
                 return "{0} GiB".format(round(self.size / 1024.0 ** 3, 2))
             else:
                 return "{0} TiB".format(round(self.size / 1024.0 ** 4, 2))

@@ -362,7 +362,7 @@ class VolumeSystem(object):
             if "LV Name" in l:
                 cur_v.info['label'] = l.replace("LV Name", "").strip()
             if "LV Size" in l:
-                cur_v.size = l.replace("LV Size", "").strip()
+                cur_v.size = int(l.replace("LV Size", "").strip())
             if "LV Path" in l:
                 cur_v._paths['lv'] = l.replace("LV Path", "").strip()
                 cur_v.offset = 0
