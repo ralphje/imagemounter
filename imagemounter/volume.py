@@ -730,11 +730,11 @@ class Volume(object):
             key = None
             if self.index in self.keys:
                 t, v = self.keys[self.index].split(':', 1)
-                if t == 'k':
+                if t == 'p':  # passphrase
                     key = v
-                elif t == 'f':
+                elif t == 'f':  # key-file
                     extra_args = ['--key-file', v]
-                elif t == 'm':
+                elif t == 'm':  # master-key-file
                     extra_args = ['--master-key-file', v]
             else:
                 logger.warning("No key material provided for %s", self)

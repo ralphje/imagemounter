@@ -170,7 +170,11 @@ While :mod:`imagemounter` will try to automatically detect as much as possible, 
         r:recovery password
         s:file to startup key (.bek)
 
-   LUKS is not yet supported by :option:`--keys`. Passphrases must be provided via stdin.
+   For LUKS, you can use a similar format::
+
+        p:passphrase
+        f:key-file
+        m:master-key-file
 
 Advanced toggles
 ^^^^^^^^^^^^^^^^
