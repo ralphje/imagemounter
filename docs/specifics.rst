@@ -27,13 +27,17 @@ No additional details.
 
 LUKS
 ----
-For mounting LUKS volumes, the :command:`cryptsetup` command is used. At this point, it is not possible to specify more options to the cryptsetup subsystem. :option:`--keys` is also not (yet) supported.
+For mounting LUKS volumes, the :command:`cryptsetup` command is used. At this point, it is not possible to specify more options to the cryptsetup subsystem. To specify keys, use :option:`--keys`. The following values are accepted::
 
-To determine whether a volume is a LUKS volume, ``cryptsetup isLuks`` is called. This method should return true; if it doesn't, imagemounter will also not be able to mount the volume. The next step is to create a loopback device that is used to call ``cryptsetup luksOpen <device> <name>``, where name is of the form ``image_mounter_<number>``. Additional details of the volume are extracted by using ``cryptsetup status``. The actual dd image of the volume is mounted in ``/dev/mapper/<name>`` by the OS.
+    k:passphrase
+    f:key-file
+    m:master-key-file
 
-The LUKS volume will get a subvolume at index 0 with the file system description ``LUKS Volume``. In most cases, this volume would be a LVM volume that may not be properly recognized by imagemounter. You could use something like the following to amend this::
+To determine whether a volume is a LUKS volume, ``cryptsetup isLuks`` is called. This method should return true; if it doesn't, imagemounter will also not be able to mount the volume. The next step is to create a loopback device that is used to call ``cryptsetup luksOpen <device> <name>``, where name is of the form ``image_mounter_luks_<number>``. Additional details of the volume are extracted by using ``cryptsetup status``. The actual dd image of the volume is mounted in ``/dev/mapper/<name>`` by the OS.
 
-    imount image.E01 --fstypes=1=luks,1.0=lvm,1.0.0=ext
+The LUKS volume will get a subvolume at index 0 with the file system description ``LUKS Volume``. When this volume is a LVM volume that is not be properly recognized by imagemounter, you could use something like the following to amend this::
+
+    imount image.E01 --fstypes=1=luks,1.0=lvm,1.0.0=ext --keys=1=passphrase
 
 LUKS volumes are automatically unmounted by ending the script normally, but can't be unmounted by :option:`--unmount`.
 
