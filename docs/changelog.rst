@@ -14,7 +14,7 @@ New features:
 
 * Add volume shadow copy support for NTFS
 * Add BDE (Bitlocker) support
-* Addition of :option:`--keys` CLI argument and corresponding argument to Volume class, allowing to specify key material for crypto mounts. LUKS is not yet supported.
+* Addition of :option:`--keys` CLI argument and corresponding argument to Volume class, allowing to specify key material for crypto mounts.
 * Experimental: support for volume systems inside a volume. This is useful when e.g. a LVM volume contains in itself a MBR. Methods for mounting this have been moved from :class:`Disk` to :class:`VolumeSystem` and both :class:`Volume` and :class:`Disk` now use this (iterable) base class in their :attr:`volumes` attribute. If you relied on :attr:`volumes` being a ``list``, you should now use ``list(volumes)``. If you relied on indexing of the attribute, you could now also use ``disk[0]`` or ``volume[0]`` for finding the correct volume index. :attr:`volume_source` was moved to this class.
 * Added a :func:`VolumeSystem.detect_volumes` iterable, which is used by :func:`Disk.mount_multiple_volumes`. Underlying methods do not automatically :func:`init` the volume anymore, just detection and populating the :class:`Volume` objects.
 * Support ``blkid`` to retrieve FS type info

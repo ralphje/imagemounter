@@ -17,7 +17,7 @@ import time
 from imagemounter import _util, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
 from imagemounter.exceptions import CommandNotFoundError, NoMountpointAvailableError, SubsystemError, \
     NoLoopbackAvailableError, UnsupportedFilesystemError, NotMountedError, IncorrectFilesystemError, ArgumentError, \
-    ImageMounterError
+    ImageMounterError, KeyInvalidError
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
@@ -725,15 +725,48 @@ class Volume(object):
                 pass
             raise IncorrectFilesystemError()
 
+        try:
+            extra_args = []
+            key = None
+            if self.index in self.keys:
+                t, v = self.keys[self.index].split(':', 1)
+                if t == 'k':
+                    key = v
+                elif t == 'f':
+                    extra_args = ['--key-file', v]
+                elif t == 'm':
+                    extra_args = ['--master-key-file', v]
+            else:
+                logger.warning("No key material provided for %s", self)
+        except ValueError:
+            logger.exception("Invalid key material provided (%s) for %s. Expecting [arg]:[value]",
+                             self.keys.get(self.index), self)
+            raise ArgumentError()
+
         # Open the LUKS container
         self._paths['luks'] = 'image_mounter_luks_' + str(random.randint(10000, 99999))
 
         # noinspection PyBroadException
         try:
             cmd = ["cryptsetup", "luksOpen", self.loopback, self._paths['luks']]
+            cmd.extend(extra_args)
             if not self.disk.read_write:
                 cmd.insert(1, '-r')
-            _util.check_call_(cmd)
+
+            if key is not None:
+                logger.debug('$ {0}'.format(' '.join(cmd)))
+                # for py 3.2+, we could have used input=, but that doesn't exist in py2.7.
+                p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                p.communicate(key)
+                p.wait()
+                retcode = p.poll()
+                if retcode:
+                    raise KeyInvalidError()
+            else:
+                _util.check_call_(cmd)
+        except ImageMounterError:
+            del self._paths['luks']
+            raise
         except Exception as e:
             del self._paths['luks']
             raise SubsystemError(e)

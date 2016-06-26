@@ -42,6 +42,11 @@ class MountpointEmptyError(MountFailedError):
     pass
 
 
+class KeyInvalidError(MountFailedError):
+    """Raised when a key is invalid."""
+    pass
+
+
 class SubsystemError(ImageMounterError):
     """Generic exception raised by methods when an unknown error occurs in one of the subsystems."""
     def __init__(self, base_exception):
