@@ -6,16 +6,16 @@ We try to reduce backwards compatibility breakage only to major version releases
 Release history
 ~~~~~~~~~~~~~~~
 
-Future major release
---------------------
+3.0.0 (future release)
+----------------------
 This new release includes several backwards-incompatible changes, mostly because features were removed from the public API or have been renamed to obtain a more consistent API.
 
 New features:
 
 * Add volume shadow copy support for NTFS
 * Add BDE (Bitlocker) support
-* Addition of :option:`--keys` CLI argument and corresponding argument to Volume class, allowing to specify key material for crypto mounts.
-* Experimental: support for volume systems inside a volume. This is useful when e.g. a LVM volume contains in itself a MBR. Methods for mounting this have been moved from :class:`Disk` to :class:`VolumeSystem` and both :class:`Volume` and :class:`Disk` now use this (iterable) base class in their :attr:`volumes` attribute. If you relied on :attr:`volumes` being a ``list``, you should now use ``list(volumes)``. If you relied on indexing of the attribute, you could now also use ``disk[0]`` or ``volume[0]`` for finding the correct volume index. :attr:`volume_source` was moved to this class.
+* Addition of :option:`--keys` CLI argument and corresponding argument to Volume class, allowing to specify key material for crypto mounts, supporting both BDE and LUKS.
+* (Experimental) support for volume systems inside a volume. This is useful when e.g. a LVM volume contains in itself a MBR. Methods for mounting this have been moved from :class:`Disk` to :class:`VolumeSystem` and both :class:`Volume` and :class:`Disk` now use this (iterable) base class in their :attr:`volumes` attribute. If you relied on :attr:`volumes` being a ``list``, you should now use ``list(volumes)``. If you relied on indexing of the attribute, you could now also use ``disk[0]`` or ``volume[0]`` for finding the correct volume index. :attr:`volume_source` was moved to this class.
 * Added a :func:`VolumeSystem.detect_volumes` iterable, which is used by :func:`Disk.mount_multiple_volumes`. Underlying methods do not automatically :func:`init` the volume anymore, just detection and populating the :class:`Volume` objects.
 * Support ``blkid`` to retrieve FS type info
 * Support for Linux RAID volumes
@@ -25,6 +25,8 @@ Bugfixes:
 * Calling :func:`init` will not automatically mount the volume when it is not ``alloc``.
 * Fix a bug where ``.e01`` files (lowercase) would not be recognized as Encase
 * Fixed support for newer versions of ``mmls``
+* :attr:`index` is now always ``str``
+* :attr:`Volume.size` is now always ``int``
 
 Removed and modified features:
 
@@ -36,7 +38,6 @@ Removed and modified features:
 * Also removed the ``*_path``, ``carvepoint`` and ``bindmountpoint`` attributes from the public API. For ``carvepoint``, the ``carve`` method now returns the path to the carvepoint. All data has been moved to the private ``_paths`` attribute. The ``mountpoint`` and ``loopback`` attributes are kept by the way.
 * Removed Linux RAID Disk support. Instead, mount as a single volume, with the type of this volume being RAID. This greatly simplifies the :class:`Disk` class.
 * Moved several attributes of :class:`Volume` to a new :attr:`info` attribute, which is publicly accessible, but its contents are not part of a stable public API.
-* :attr:`index` is now always ``str``.
 * Dropped support for Python 3.2, since everyone seems to be doing that these days.
 
 2.0.4 (2016-03-15)
