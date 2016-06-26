@@ -29,7 +29,7 @@ LUKS
 ----
 For mounting LUKS volumes, the :command:`cryptsetup` command is used. At this point, it is not possible to specify more options to the cryptsetup subsystem. To specify keys, use :option:`--keys`. The following values are accepted::
 
-    k:passphrase
+    p:passphrase
     f:key-file
     m:master-key-file
 
