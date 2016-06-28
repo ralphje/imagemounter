@@ -442,7 +442,6 @@ def main():
                                 input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
                         elif volume.exception:
-                            print(type(volume.exception), volume.fstype)
                             print(col('[-] Exception while mounting {0}'.format(volume.get_description()), 'red'))
                             if not args.no_interaction:
                                 input(col('>>> Press [enter] to continue... ', attrs=['dark']))
