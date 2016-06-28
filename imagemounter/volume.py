@@ -658,7 +658,7 @@ class Volume(object):
 
                 logger.warning("Unsupported filesystem {0} (type: {1}, block offset: {2}, length: {3})"
                                .format(self, self.fstype, self.offset / self.disk.block_size, size))
-                raise UnsupportedFilesystemError()
+                raise UnsupportedFilesystemError(self.fstype)
 
             self.was_mounted = True
         except Exception as e:
@@ -672,7 +672,10 @@ class Volume(object):
             except Exception as e2:
                 logger.exception("Clean-up failed", exc_info=True)
 
-            raise SubsystemError(e)
+            if not isinstance(e, ImageMounterError):
+                raise SubsystemError(e)
+            else:
+                raise
 
     def bindmount(self, mountpoint):
         """Bind mounts the volume to another mountpoint. Only works if the volume is already mounted.
