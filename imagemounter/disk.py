@@ -11,7 +11,7 @@ import tempfile
 import time
 
 from imagemounter import _util, BLOCK_SIZE
-from imagemounter.exceptions import ImageMounterError, ArgumentError, MountpointEmptyError, MountFailedError
+from imagemounter.exceptions import ImageMounterError, ArgumentError, MountpointEmptyError, MountError
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
@@ -217,7 +217,7 @@ class Disk(object):
         logger.error('Unable to mount {0}'.format(self.paths[0]))
         os.rmdir(self.mountpoint)
         self.mountpoint = ""
-        raise MountFailedError()
+        raise MountError()
 
     def get_raw_path(self):
         """Returns the raw path to the mounted disk image, i.e. the raw :file:`.dd`, :file:`.raw` or :file:`ewf1`

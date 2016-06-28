@@ -12,7 +12,7 @@ import os
 from imagemounter import _util, ImageParser, Unmounter, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
 
 # Python 2 compatibility
-from imagemounter.exceptions import NoRootFoundError, ImageMounterError
+from imagemounter.exceptions import NoRootFoundError, ImageMounterError, UnsupportedFilesystemError
 
 try:
     input = raw_input
@@ -435,7 +435,14 @@ def main():
                             if args.wait:
                                 input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
+                        elif isinstance(volume.exception, UnsupportedFilesystemError) and volume.fstype == 'swap':
+                            print(col('[-] Exception while mounting swap volume {0}'.format(volume.get_description()),
+                                      'yellow'))
+                            if args.wait:
+                                input(col('>>> Press [enter] to continue... ', attrs=['dark']))
+
                         elif volume.exception:
+                            print(type(volume.exception), volume.fstype)
                             print(col('[-] Exception while mounting {0}'.format(volume.get_description()), 'red'))
                             if not args.no_interaction:
                                 input(col('>>> Press [enter] to continue... ', attrs=['dark']))
