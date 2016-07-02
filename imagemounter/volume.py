@@ -85,7 +85,6 @@ class Volume(object):
         self.was_mounted = False
         self.was_unmounted = False
 
-
     def __unicode__(self):
         return '{0}:{1}'.format(self.index, self.info.get('fsdescription') or '-')
 
@@ -112,7 +111,7 @@ class Volume(object):
             self.volumes.vstype = self.fstype
             self.fstype = 'volumesystem'
 
-    def get_description(self, with_size=True):
+    def get_description(self, with_size=True, with_index=True):
         """Obtains a generic description of the volume, containing the file system type, index, label and NTFS version.
         If *with_size* is provided, the volume size is also included.
         """
@@ -122,7 +121,11 @@ class Volume(object):
         if with_size and self.size:
             desc += '{0} '.format(self.get_formatted_size())
 
-        desc += '{1}:{0}'.format(self.info.get('statfstype') or self.info.get('fsdescription') or '-', self.index)
+        s = self.info.get('statfstype') or self.info.get('fsdescription') or '-'
+        if with_index:
+            desc += '{1}:{0}'.format(s, self.index)
+        else:
+            desc += s
 
         if self.info.get('label'):
             desc += ' {0}'.format(self.info.get('label'))
@@ -350,7 +353,7 @@ class Volume(object):
                 yield self
                 return
 
-            if not self.init_volume(no_stats=no_stats):
+            if not self.init_volume():
                 yield self
                 return
 
@@ -367,7 +370,7 @@ class Volume(object):
                 for s in v.init(only_mount, swallow_exceptions):
                     yield s
 
-    def init_volume(self, no_stats=False):
+    def init_volume(self):
         """Initializes a single volume. You should use this method instead of :func:`mount` if you want some sane checks
         before mounting.
         """
