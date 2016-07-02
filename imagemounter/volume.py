@@ -331,7 +331,7 @@ class Volume(object):
             self.info.get('lastmountpoint') in only_mount or \
             self.info.get('label') in only_mount
 
-    def init(self, no_stats=False, only_mount=None, swallow_exceptions=True):
+    def init(self, only_mount=None, swallow_exceptions=True):
         """Generator that mounts this volume and either yields itself or recursively generates its subvolumes.
 
         More specifically, this function will call :func:`load_fsstat_data` (iff *no_stats* is False), followed by
@@ -346,32 +346,13 @@ class Volume(object):
             self.exception = None
 
         try:
-            logger.debug("Initializing volume {0}".format(self))
-            if not no_stats:
-                self._load_fsstat_data()
-
             if not self._should_mount(only_mount):
                 yield self
                 return
 
-            if self.flag != 'alloc':
-                return
-
-            if self.info.get('raid_status') == 'waiting':
-                logger.info("RAID array %s not ready for mounting", self)
+            if not self.init_volume(no_stats=no_stats):
                 yield self
                 return
-
-            if self.was_mounted and not self.was_unmounted:
-                logger.info("%s is currently mounted, not mounting it again", self)
-                yield self
-                return
-
-            logger.info("Mounting volume {0}".format(self))
-            self.mount()
-
-            if not no_stats:
-                self.detect_mountpoint()
 
         except ImageMounterError as e:
             if swallow_exceptions:
@@ -383,8 +364,35 @@ class Volume(object):
             yield self
         else:
             for v in self.volumes:
-                for s in v.init(no_stats, only_mount, swallow_exceptions):
+                for s in v.init(only_mount, swallow_exceptions):
                     yield s
+
+    def init_volume(self, no_stats=False):
+        """Initializes a single volume. You should use this method instead of :func:`mount` if you want some sane checks
+        before mounting.
+        """
+
+        logger.debug("Initializing volume {0}".format(self))
+
+        if not self._should_mount():
+            return False
+
+        if self.flag != 'alloc':
+            return False
+
+        if self.info.get('raid_status') == 'waiting':
+            logger.info("RAID array %s not ready for mounting", self)
+            return False
+
+        if self.was_mounted and not self.was_unmounted:
+            logger.info("%s is currently mounted, not mounting it again", self)
+            return False
+
+        logger.info("Mounting volume {0}".format(self))
+        self.mount()
+        self.detect_mountpoint()
+
+        return True
 
     def _make_mountpoint(self, casename=None, var_name='mountpoint', suffix='', in_paths=False):
         """Creates a directory that can be used as a mountpoint. The directory is stored in :attr:`mountpoint`,
@@ -597,6 +605,7 @@ class Volume(object):
 
         raw_path = self.get_raw_path()
         self.determine_fs_type()
+        self._load_fsstat_data()
 
         # we need a mountpoint if it is not a lvm or luks volume
         if self.fstype not in ('luks', 'lvm', 'bde', 'raid', 'volumesystem') and \

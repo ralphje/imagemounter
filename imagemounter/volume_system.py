@@ -2,6 +2,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import logging
+import os
 import subprocess
 from collections import defaultdict
 
@@ -37,7 +38,7 @@ class VolumeSystem(object):
             self.vstype = self.disk.parser.vstypes['*']
         else:
             self.vstype = "detect"
-        if volume_detector == 'auto':
+        if volume_detector == 'auto' or not volume_detector:
             self.volume_detector = VolumeSystem._determine_auto_detection_method()
         else:
             self.volume_detector = volume_detector
@@ -99,6 +100,9 @@ class VolumeSystem(object):
         if vstype == 'lvm':
             for v in self._detect_lvm_volumes(self.parent.info.get('volume_group')):
                 yield v
+        elif method == 'single':  # dummy method for Disk
+            for v in self._detect_single_volume():
+                yield v
         elif method == 'mmls':
             for v in self._detect_mmls_volumes(vstype):
                 yield v
@@ -130,6 +134,31 @@ class VolumeSystem(object):
             return '{0}.{1}'.format(self.parent.index, idx)
         else:
             return str(idx)
+
+    def _detect_single_volume(self):
+        """'Detects' a single volume. It should not be called other than from a :class:`Disk`."""
+        volume = self._make_single_subvolume(offset=0)
+        is_directory = os.path.isdir(self.parent.get_raw_path())
+
+        if is_directory:
+            filesize = _util.check_output_(['du', '-scDb', self.parent.get_raw_path()]).strip()
+            if filesize:
+                volume.size = int(filesize.splitlines()[-1].split()[0])
+
+        else:
+            description = _util.check_output_(['file', '-sL', self.parent.get_raw_path()]).strip()
+            if description:
+                # description is the part after the :, until the first comma
+                volume.info['fsdescription'] = description.split(': ', 1)[1].split(',', 1)[0].strip()
+                if 'size' in description:
+                    volume.size = int(re.findall(r'size:? (\d+)', description)[0])
+                else:
+                    volume.size = os.path.getsize(self.parent.get_raw_path())
+
+        volume.flag = 'alloc'
+        self.volume_source = 'single'
+        self._assign_disktype_data(volume)
+        yield volume
 
     def _find_pytsk3_volumes(self, vstype='detect'):
         """Finds all volumes based on the pytsk3 library."""
@@ -370,6 +399,7 @@ class VolumeSystem(object):
                 cur_v.offset = 0
 
         logger.info("{0} volumes found".format(len(self)))
+        self.volume_source = 'multi'
         return self.volumes
 
     def load_disktype_data(self):

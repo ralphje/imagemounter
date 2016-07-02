@@ -37,19 +37,20 @@ Removed and modified features:
 * Renamed ``--vstype`` and corresponding argument to ``--vstypes``, now accepting a dict, similar to ``--fstypes``
 * Moved several arguments and attributes of ``Disk``, ``Volume`` and ``VolumeSystem`` to the ``ImageParser`` instance, so it does not need to get passed down every time. For instance, ``fstypes`` has been moved; the dict will be inspected upon Volume instantiation and stored in the ``fstype`` attribute.
 * Changes specific to :class:`ImageParser`:
-   * Removed ``mount_single_volume`` and ``mount_multiple_volumes``. Use ``mount_volumes`` instead, or use a custom loop for more control.
+   * Removed ``mount_single_volume`` and ``mount_multiple_volumes``. Use ``init_volumes`` instead, or use a custom loop for more control.
    * Dropped support for a single string argument for ``paths`` in ``__init__``. Additionally, dropped the ``paths`` attribute entirely.
 * Changes specific to :class:`Disk`:
    * Removed ``name``, ``avfs_mountpoint`` and ``md_device`` from public API.
    * Removed Linux RAID Disk support. Instead, mount as a single volume, with the type of this volume being RAID. This greatly simplifies the :class:`Disk` class. (This means that :attr:`loopback` has been dropped)
-   * Renamed ``mount_*`` to ``init_*`` and fixed method signatures to accommodate for all arguments of ``Volume.init``
+   * Changed structure of ``mount_*`` methods. Now only ``init_volumes`` and ``detect_volumes`` remain.
    * Removed the need for the rather obsure ``multifile`` attribute. Only ``xmount`` actually requires this.
 * Changes specific to :class:`Volume`:
    * Renamed ``get_raw_base_path`` to ``get_raw_path``
-   * Renamed ``fill_stats`` to ``load_fsstat_data``
    * Renamed ``get_size_gib`` to ``get_formatted_size``
-   * Removed ``get_magic_type``, ``load_fsstat_data``, ``open_jffs2``, ``find_lvm_volumes`` and ``open_luks_container`` from public API.
+   * Removed ``get_magic_type``, ``fill_stats``, ``open_jffs2``, ``find_lvm_volumes`` and ``open_luks_container`` from public API.
    * Removed the ``*_path``, ``carvepoint`` and ``bindmountpoint`` attributes from the public API. For ``carvepoint``, the ``carve`` method now returns the path to the carvepoint. All data has been moved to the private ``_paths`` attribute. The ``mountpoint`` and ``loopback`` attributes are kept.
+   * Removed ``no_stats`` from ``init``, it only complicates things. It is known to work properly.
+   * Added ``init_volume``, which only mounts the single volume. It is used by ``init``.
    * Moved several attributes of :class:`Volume` to a new :attr:`info` attribute, which is publicly accessible, but its contents are not part of a stable public API.
    * Removed :attr:`stats` attribute. The same can be accomplished by specifying ``no_stats=True``
 * Dropped support for Python 3.2, since everyone seems to be doing that these days.

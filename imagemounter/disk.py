@@ -49,7 +49,7 @@ class Disk(object):
         self.offset = offset
         self.block_size = block_size
         self.read_write = read_write
-        self.disk_mounter = disk_mounter
+        self.disk_mounter = disk_mounter or 'auto'
         self.index = index
 
         self._name = os.path.split(path)[1]
@@ -246,7 +246,38 @@ class Disk(object):
         else:
             return self.get_raw_path()
 
-    def init(self, single=None, disktype=True, no_stats=False, only_mount=None, swallow_exceptions=True):
+    def detect_volumes(self, single=None):
+        """Generator that detects the volumes from the Disk, using one of two methods:
+
+        * Single volume: the entire Disk is a single volume
+        * Multiple volumes: the Disk is a volume system
+
+        :param single: If *single* is :const:`True`, this method will call :Func:`init_single_volumes`.
+                       If *single* is False, only :func:`init_multiple_volumes` is called. If *single* is None,
+                       :func:`init_multiple_volumes` is always called, being followed by :func:`init_single_volume`
+                       if no volumes were detected.
+        """
+        if single:
+            for v in self.volumes.detect_volumes(method='single'):
+                yield v
+
+        else:
+            # if single == False or single == None, loop over all volumes
+            amount = 0
+            try:
+                for v in self.volumes.detect_volumes():
+                    amount += 1
+                    yield v
+            except ImageMounterError:
+                pass  # ignore and continue to single mount
+
+            # if single == None and no volumes were mounted, use single_volume
+            if single is None and amount == 0:
+                logger.info("Detecting as single volume instead")
+                for v in self.volumes.detect_volumes(method='single'):
+                    yield v
+
+    def init(self, single=None, disktype=True, only_mount=None, swallow_exceptions=True):
         """Calls several methods required to perform a full initialisation: :func:`mount`, and
         :func:`mount_volumes` and yields all detected volumes.
 
@@ -260,108 +291,23 @@ class Disk(object):
         if disktype:
             self.volumes.load_disktype_data()
 
-        for v in self.init_volumes(single, no_stats=no_stats,
-                                   only_mount=only_mount, swallow_exceptions=swallow_exceptions):
+        for v in self.init_volumes(single, only_mount=only_mount, swallow_exceptions=swallow_exceptions):
             yield v
 
-    def init_volumes(self, single=None, no_stats=False, only_mount=None, swallow_exceptions=True,
-                     mount_directories=True):
+    def init_volumes(self, single=None, only_mount=None, swallow_exceptions=True):
         """Generator that detects and mounts all volumes in the disk.
 
         :param single: If *single* is :const:`True`, this method will call :Func:`init_single_volumes`.
                        If *single* is False, only :func:`init_multiple_volumes` is called. If *single* is None,
                        :func:`init_multiple_volumes` is always called, being followed by :func:`init_single_volume`
                        if no volumes were detected.
-        :param bool no_stats: If True, will not use fsstat to determine more information
         :param list only_mount: If set, must be a list of volume indexes that are only mounted.
         :param bool swallow_exceptions: If True, Exceptions are not raised but rather set on the instance.
-        :param bool mount_directories: indicates whether directories should also be 'mounted'
         """
 
-        if os.path.isdir(self.get_raw_path()) and mount_directories:
-            logger.info("Raw path is a directory: using directory mount method")
-            for v in self.init_directory(only_mount, swallow_exceptions=swallow_exceptions):
-                yield v
-
-        elif single:
-            # if single, then only use single_Volume
-            for v in self.init_single_volume(only_mount, swallow_exceptions=swallow_exceptions):
-                yield v
-        else:
-            # if single == False or single == None, loop over all volumes
-            amount = 0
-            try:
-                for v in self.init_multiple_volumes(no_stats=no_stats, only_mount=only_mount,
-                                                    swallow_exceptions=swallow_exceptions):
-                    amount += 1
-                    yield v
-            except ImageMounterError:
-                pass  # ignore and continue to single mount
-
-            # if single == None and no volumes were mounted, use single_volume
-            if single is None and amount == 0:
-                logger.info("Mounting as single volume instead")
-                for v in self.init_single_volume(only_mount, swallow_exceptions=swallow_exceptions):
-                    yield v
-
-    def init_directory(self, only_mount=None, swallow_exceptions=True):
-        """Method that 'mounts' a directory. It actually just symlinks it. It is useful for AVFS mounts, that
-        are not otherwise detected. This is a last resort method.
-        """
-
-        volume = self.volumes._make_single_subvolume()
-        volume.offset = 0
-        volume.flag = 'alloc'
-        volume.info['fsdescription'] = 'Directory'
-
-        filesize = _util.check_output_(['du', '-scDb', self.get_fs_path()]).strip()
-        if filesize:
-            volume.size = int(filesize.splitlines()[-1].split()[0])
-
-        self.volumes.volume_source = 'directory'
-
-        for v in volume.init(no_stats=True, only_mount=only_mount, swallow_exceptions=swallow_exceptions):
-            # stats can't be retrieved from directory
-            yield v
-
-    def init_single_volume(self, only_mount=None, swallow_exceptions=True):
-        """Mounts a volume assuming that the mounted image does not contain a full disk image, but only a
-        single volume.
-
-        A new :class:`Volume` object is created based on the disk file and :func:`init` is called on this object.
-
-        This function will typically yield one volume, although if the volume contains other volumes, multiple volumes
-        may be returned.
-        """
-
-        volume = self.volumes._make_single_subvolume()
-        volume.offset = 0
-
-        description = _util.check_output_(['file', '-sL', self.get_fs_path()]).strip()
-        if description:
-            # description is the part after the :, until the first comma
-            volume.info['fsdescription'] = description.split(': ', 1)[1].split(',', 1)[0].strip()
-            if 'size' in description:
-                volume.size = int(re.findall(r'size:? (\d+)', description)[0])
-            else:
-                volume.size = os.path.getsize(self.get_fs_path())
-
-        volume.flag = 'alloc'
-        self.volumes.volume_source = 'single'
-        self.volumes._assign_disktype_data(volume)
-
-        for v in volume.init(no_stats=True, only_mount=only_mount, swallow_exceptions=swallow_exceptions):
-            # stats can't  be retrieved from single volumes
-            yield v
-
-    def init_multiple_volumes(self, no_stats=False, only_mount=None, swallow_exceptions=True):
-        """Generator that will detect volumes in the disk file, generate :class:`Volume` objects based on this
-        information and call :func:`init` on these.
-        """
-
-        for v in self.volumes.detect_volumes():
-            for w in v.init(no_stats=no_stats, only_mount=only_mount, swallow_exceptions=swallow_exceptions):
-                yield w
+        for volume in self.detect_volumes(single=single):
+            for vol in volume.init(only_mount=only_mount, swallow_exceptions=swallow_exceptions):
+                yield vol
 
     def get_volumes(self):
         """Gets a list of all volumes in this disk, including volumes that are contained in other volumes."""
