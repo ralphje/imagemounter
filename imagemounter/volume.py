@@ -39,7 +39,7 @@ class Volume(object):
     :attr:`exception` attribute is set with an exception.
     """
 
-    def __init__(self, disk=None, parent=None, index="0", fstype=None, key=None,
+    def __init__(self, disk, parent=None, index="0", size=0, offset=0, flag='alloc', slot=0, fstype="", key="",
                  vstype='detect', volume_detector='auto', **args):
         """Creates a Volume object that is not mounted yet.
 
@@ -59,13 +59,12 @@ class Volume(object):
         self.disk = disk
 
         # Should be filled somewhere
-        self.size = 0
-        self.offset = 0
+        self.size = size
+        self.offset = offset
         self.index = index
-        self.slot = 0
-        self.flag = 'alloc'
-
-        self.fstype = ""
+        self.slot = slot
+        self.flag = flag
+        self.fstype = fstype
         self._get_fstype_from_parser(fstype)
 
         if key:
@@ -796,11 +795,8 @@ class Volume(object):
         except Exception:
             pass
 
-        container = self.volumes._make_single_subvolume()
+        container = self.volumes._make_single_subvolume(flag='alloc', offset=0, size=size)
         container.info['fsdescription'] = 'LUKS Volume'
-        container.flag = 'alloc'
-        container.offset = 0
-        container.size = size
 
         return container
 
@@ -841,11 +837,8 @@ class Volume(object):
             logger.exception("Failed mounting BDE volume %s.", self)
             raise SubsystemError(e)
 
-        container = self.volumes._make_single_subvolume()
+        container = self.volumes._make_single_subvolume(flag='alloc', offset=0, size=self.size)
         container.info['fsdescription'] = 'BDE Volume'
-        container.flag = 'alloc'
-        container.offset = 0
-        container.size = self.size
 
         return container
 
@@ -932,12 +925,9 @@ class Volume(object):
                 return v.volumes[0]
         else:
             logger.debug("Creating RAID volume for %s", self)
-            container = self.volumes._make_single_subvolume()
+            container = self.volumes._make_single_subvolume(flag='alloc', offset=0, size=self.size)
             container.info['fsdescription'] = 'RAID Volume'
             container.info['raid_status'] = raid_status
-            container.flag = 'alloc'
-            container.offset = 0
-            container.size = self.size
             return container
 
     def get_volumes(self):

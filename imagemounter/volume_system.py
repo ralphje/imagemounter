@@ -55,23 +55,24 @@ class VolumeSystem(object):
                 return v
         raise KeyError
 
-    def _make_subvolume(self, index="0"):
+    def _make_subvolume(self, **args):
         """Creates a subvolume, adds it to this class and returns it."""
 
         from imagemounter.volume import Volume
-        v = Volume(disk=self.disk, parent=self.parent, index=index,
-                   volume_detector=self.volume_detector, vstype=self.vstype)
+        v = Volume(disk=self.disk, parent=self.parent,
+                   volume_detector=self.volume_detector, vstype=self.vstype,
+                   **args)
         self.volumes.append(v)
         return v
 
-    def _make_single_subvolume(self):
+    def _make_single_subvolume(self, **args):
         """Creates a subvolume, adds it to this class, sets the volume index to 0 and returns it."""
 
         if self.parent.index is None:
             index = '0'
         else:
             index = '{0}.0'.format(self.parent.index)
-        volume = self._make_subvolume(index)
+        volume = self._make_subvolume(index=index, **args)
         return volume
 
     def detect_volumes(self, vstype=None, method=None):
@@ -180,11 +181,11 @@ class VolumeSystem(object):
         for p in self._find_pytsk3_volumes(vstype):
             import pytsk3
 
-            volume = self._make_subvolume(self._format_index(p.addr))
+            volume = self._make_subvolume(index=self._format_index(p.addr),
+                                          offset=p.start * self.disk.block_size,
+                                          size=p.len * self.disk.block_size)
             # Fill volume with more information
-            volume.offset = p.start * self.disk.block_size
             volume.info['fsdescription'] = p.desc.strip()
-            volume.size = p.len * self.disk.block_size
 
             if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
                 volume.flag = 'alloc'
@@ -245,10 +246,10 @@ class VolumeSystem(object):
                 if len(values) > 5:
                     description = values[5]
 
-                volume = self._make_subvolume(self._format_index(int(index[:-1])))
-                volume.offset = int(start) * self.disk.block_size
+                volume = self._make_subvolume(index=self._format_index(int(index[:-1])),
+                                              offset=int(start) * self.disk.block_size,
+                                              size=int(length) * self.disk.block_size)
                 volume.info['fsdescription'] = description
-                volume.size = int(length) * self.disk.block_size
             except Exception:
                 logger.exception("Error while parsing mmls output")
                 continue
@@ -314,9 +315,9 @@ class VolumeSystem(object):
                 except ValueError:
                     continue
 
-                volume = self._make_subvolume(self._format_index(num))
-                volume.offset = int(start[:-1]) * self.disk.block_size  # remove last s
-                volume.size = int(length[:-1]) * self.disk.block_size
+                volume = self._make_subvolume(index=self._format_index(num),
+                                              offset=int(start[:-1]) * self.disk.block_size,  # remove last s
+                                              size=int(length[:-1]) * self.disk.block_size)
                 volume.info['fsdescription'] = description
 
                 # TODO: detection of meta volumes
@@ -350,9 +351,8 @@ class VolumeSystem(object):
         cur_v = None
         for l in result.splitlines():
             if "--- Logical volume ---" in l:
-                cur_v = self._make_subvolume(self._format_index(len(self)))
+                cur_v = self._make_subvolume(index=self._format_index(len(self)), flag='alloc')
                 cur_v.info['fsdescription'] = 'Logical Volume'
-                cur_v.flag = 'alloc'
             if "LV Name" in l:
                 cur_v.info['label'] = l.replace("LV Name", "").strip()
             if "LV Size" in l:
