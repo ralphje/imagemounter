@@ -18,19 +18,25 @@ class VolumeSystem(object):
     system contains several :class:`Volumes`, which, in turn, may contain additional volume systems.
     """
 
-    def __init__(self, parent, vstype='detect', volume_detector='auto', **args):
+    def __init__(self, parent, vstype='detect', volume_detector='auto'):
         """Creates a VolumeSystem.
 
         :param parent: the parent may either be a :class:`Disk` or a :class:`Volume` that contains this  VolumeSystem.
         :param str vstype: the volume system type to use.
         :param str volume_detector: the volume system detection method to use
-        :param args: additional arguments, ignored
         """
 
         self.parent = parent
         self.disk = parent.disk if hasattr(parent, 'disk') else parent
 
-        self.vstype = vstype
+        if vstype:
+            self.vstype = vstype
+        elif self.parent.index in self.disk.parser.vstypes:
+            self.vstype = self.disk.parser.vstypes[self.parent.index]
+        elif '*' in self.disk.parser.vstypes:
+            self.vstype = self.disk.parser.vstypes['*']
+        else:
+            self.vstype = "detect"
         if volume_detector == 'auto':
             self.volume_detector = VolumeSystem._determine_auto_detection_method()
         else:

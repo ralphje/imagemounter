@@ -31,20 +31,23 @@ Bugfixes:
 Removed and modified features:
 
 * Stopped providing :const:`None` and :const:`False` results when things go wrong for most methods. Instead, numerous exceptions have been added. These exceptions should be catched instead, or when using ``mount_volumes`` or ``init``, you can specify ``swallow_exceptions`` (default) to restore previous behaviour. This is useful, since iteration will continue regardless of exceptions.
-* Removal of fsforce and fsfallback arguments and attributes to Volume, and the removal of :option:`--fsforce` and :option:`--fsfallback` from CLI. Use ``*`` and ``?`` as fstypes instead for the same effect. This should make the CLI more sensible, especially regarding the :option:`--fsforce` argument. The default FS fallback is still ``unknown``, which can only be overridden by specifying ``--fstypes=?=none``.
-* Moved several arguments and attributes of ``Disk``, ``Volume`` and ``VolumeSystem`` to the ``ImageParser`` instance, so it does not need to get passed down every time. For instance, ``fstypes`` has been moved; the dict will be inspected upon Volume instantiation and stored in the ``fstype`` attribute.
+* Removal of fsforce and fsfallback arguments and attributes from Volume, and the removal of :option:`--fsforce` and :option:`--fsfallback` from CLI. Use ``*`` and ``?`` as fstypes instead for the same effect. This should make the CLI more sensible, especially regarding the :option:`--fsforce` argument. The default FS fallback is still ``unknown``, which can only be overridden by specifying ``--fstypes=?=none``. (You can now specify ``--fstypes=TYPE``, which equals to ``--fstypes=*=TYPE``)
 * Renamed ``--method`` and corresponding argument to ``--disk-mounter``.
 * Renamed ``--detection`` and corresponding argument to ``--volume-detector``.
-* Changes to :class:`ImageParser`:
-  * Removed ``mount_single_volume`` and ``mount_multiple_volumes``. Use ``mount_volumes`` instead, or use a custom loop for more control.
-  * Dropped support for a single string argument for ``paths`` in ``__init__``. Additionally, dropped the ``paths`` attribute entirely.
-* Changes to :class:`Disk`:
-  * Removed ``name``, ``avfs_mountpoint`` and ``md_device`` from public API.
-  * Removed Linux RAID Disk support. Instead, mount as a single volume, with the type of this volume being RAID. This greatly simplifies the :class:`Disk` class. (This means that :attr:`loopback` has been dropped)
-  * Renamed ``mount_*`` to ``init_*`` and fixed method signatures to accommodate for all arguments of ``Volume.init``
-  * Removed the need for the rather obsure ``multifile`` attribute. Only ``xmount`` actually requires this.
-* Changes to :class:`Volume`:
-   * Renamed ``get_raw_base_path`` to ``get_raw_path``, renamed ``fill_stats`` to ``load_fsstat_data``, renamed ``get_size_gib`` to ``get_formatted_size``
+* Renamed ``--vstype`` and corresponding argument to ``--vstypes``, now accepting a dict, similar to ``--fstypes``
+* Moved several arguments and attributes of ``Disk``, ``Volume`` and ``VolumeSystem`` to the ``ImageParser`` instance, so it does not need to get passed down every time. For instance, ``fstypes`` has been moved; the dict will be inspected upon Volume instantiation and stored in the ``fstype`` attribute.
+* Changes specific to :class:`ImageParser`:
+   * Removed ``mount_single_volume`` and ``mount_multiple_volumes``. Use ``mount_volumes`` instead, or use a custom loop for more control.
+   * Dropped support for a single string argument for ``paths`` in ``__init__``. Additionally, dropped the ``paths`` attribute entirely.
+* Changes specific to :class:`Disk`:
+   * Removed ``name``, ``avfs_mountpoint`` and ``md_device`` from public API.
+   * Removed Linux RAID Disk support. Instead, mount as a single volume, with the type of this volume being RAID. This greatly simplifies the :class:`Disk` class. (This means that :attr:`loopback` has been dropped)
+   * Renamed ``mount_*`` to ``init_*`` and fixed method signatures to accommodate for all arguments of ``Volume.init``
+   * Removed the need for the rather obsure ``multifile`` attribute. Only ``xmount`` actually requires this.
+* Changes specific to :class:`Volume`:
+   * Renamed ``get_raw_base_path`` to ``get_raw_path``
+   * Renamed ``fill_stats`` to ``load_fsstat_data``
+   * Renamed ``get_size_gib`` to ``get_formatted_size``
    * Removed ``get_magic_type``, ``load_fsstat_data``, ``open_jffs2``, ``find_lvm_volumes`` and ``open_luks_container`` from public API.
    * Removed the ``*_path``, ``carvepoint`` and ``bindmountpoint`` attributes from the public API. For ``carvepoint``, the ``carve`` method now returns the path to the carvepoint. All data has been moved to the private ``_paths`` attribute. The ``mountpoint`` and ``loopback`` attributes are kept.
    * Moved several attributes of :class:`Volume` to a new :attr:`info` attribute, which is publicly accessible, but its contents are not part of a stable public API.

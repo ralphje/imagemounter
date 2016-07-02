@@ -40,7 +40,7 @@ class Volume(object):
     """
 
     def __init__(self, disk, parent=None, index="0", size=0, offset=0, flag='alloc', slot=0, fstype="", key="",
-                 vstype='detect', volume_detector='auto', **args):
+                 vstype='detect', volume_detector='auto'):
         """Creates a Volume object that is not mounted yet.
 
         Only use arguments as keyword arguments.
@@ -52,7 +52,6 @@ class Volume(object):
         :param str key: the key to use for this Volume.
         :param str vstype: the volume system type to use.
         :param str volume_detector: the volume system detection method to use
-        :param args: additional arguments, ignored
         """
 
         self.parent = parent
