@@ -18,6 +18,7 @@ class ImageMounterError(Exception):
           |- NoLoopbackAvailableError
     |- CleanupError
     |- NoRootFoundError
+    |- DiskIndexError
     |- SubsystemError
 
     """
@@ -27,6 +28,11 @@ class ImageMounterError(Exception):
 
 class NoRootFoundError(ImageMounterError):
     """Used by reconstruct when no root could be found."""
+    pass
+
+
+class DiskIndexError(ImageMounterError):
+    """Used by add_disk if a disk is being added when the previous disk had no index."""
     pass
 
 

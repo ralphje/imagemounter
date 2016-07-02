@@ -22,8 +22,7 @@ class Disk(object):
 
     # noinspection PyUnusedLocal
     def __init__(self, parser, path, index=None, offset=0, block_size=BLOCK_SIZE, read_write=False, vstype='detect',
-                 disk_mounter='auto', volume_detector='auto',
-                 **args):
+                 disk_mounter='auto', volume_detector='auto'):
         """Instantiation of this class does not automatically mount, detect or analyse the disk. You will need the
         :func:`init` method for this.
 
@@ -39,7 +38,6 @@ class Disk(object):
         :param str vstype: the volume system type to use.
         :param str disk_mounter: the method to mount the base image with
         :param str volume_detector: the volume system detection method to use
-        :param args: ignored
         """
 
         self.parser = parser
@@ -57,7 +55,7 @@ class Disk(object):
         self._name = os.path.split(path)[1]
         self._paths = {}
         self.rwpath = ""
-        self.mountpoint = ''
+        self.mountpoint = ""
         self.volumes = VolumeSystem(parent=self, volume_detector=volume_detector, vstype=vstype)
 
         self._disktype = defaultdict(dict)

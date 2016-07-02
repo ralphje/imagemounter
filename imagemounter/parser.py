@@ -7,7 +7,7 @@ import os
 import tempfile
 
 from imagemounter.disk import Disk
-from imagemounter.exceptions import NoRootFoundError, ImageMounterError
+from imagemounter.exceptions import NoRootFoundError, ImageMounterError, DiskIndexError
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +19,17 @@ class ImageParser(object):
 
     """
 
-    def __init__(self, paths=(), casename=None, read_write=False, disk_mounter='auto',
-                 volume_detector='auto', vstype='detect',
+    def __init__(self, paths=(), force_disk_indexes=False,
+                 casename=None, read_write=False, disk_mounter='auto',
+                 volume_detector='auto', vstypes=None,
                  fstypes=None, keys=None, mountdir=None, pretty=False, **args):
         """Instantiation of this class does not automatically mount, detect or analyse :class:`Disk` s, though it
         initialises each provided path as a new :class:`Disk` object.
 
         :param paths: list of paths to base images that should be mounted
         :type paths: iterable
+        :param force_disk_indexes: if True, a Disk index is always included. If False, will only use Disk indexes if
+                                   more than 1 Disk is provided to the paths
         :param casename: the name of the case, used when prettifying names
         :param bool read_write: indicates whether disks should be mounted with a read-write cache enabled
         :param str disk_mounter: the method to mount the base images with
@@ -43,12 +46,13 @@ class ImageParser(object):
 
         # Store other arguments
         self.casename = casename
-        self.read_write = read_write
-        self.disk_mounter = disk_mounter
+
         self.fstypes = {str(k): v for k, v in fstypes.items()} or {'?': 'unknown'}
         if '?' in self.fstypes and (not self.fstypes['?'] or self.fstypes['?'] == 'none'):
             self.fstypes['?'] = None
         self.keys = {str(k): v for k, v in keys.items()} or {}
+        self.vstypes = {str(k): v for k, v in vstypes.items()} or {}
+
         self.mountdir = mountdir
         if self.casename:
             self.mountdir = os.path.join(mountdir or tempfile.gettempdir(), self.casename)
@@ -56,18 +60,28 @@ class ImageParser(object):
 
         # Add disks
         self.disks = []
-        index = 0
         for path in paths:
-            if len(paths) == 1:
-                index = None
-            else:
-                index += 1
-            self.disks.append(Disk(self, path,
-                                   index=str(index) if index else None,
-                                   read_write=read_write,
-                                   disk_mounter=disk_mounter,
-                                   volume_detector=volume_detector,
-                                   vstype=vstype))
+            self.add_disk(path, len(paths) > 1 or force_disk_indexes,
+                          read_write=read_write, disk_mounter=disk_mounter, volume_detector=volume_detector)
+
+    def add_disk(self, path, force_disk_indexes=True, **args):
+        """Adds a disk specified by the path to the ImageParser.
+
+        :param path: The path to the disk volume
+        :param force_disk_indexes: If true, always uses disk indexes. If False, only uses disk indexes if this is the
+                                   second volume you add. If you plan on using this method, always leave this True.
+                                   If you add a second disk when the previous disk has no index, an error is raised.
+        :param args: Arguments to pass to the constructor of the Disk.
+        """
+        if self.disks and self.disks[0].index is None:
+            raise DiskIndexError("First disk has no index.")
+
+        if force_disk_indexes or self.disks:
+            index = len(self.disks) + 1
+        else:
+            index = None
+        self.disks.append(Disk(self, path,
+                               index=str(index) if index else None, **args))
 
     def init(self, single=None, swallow_exceptions=True):
         """Handles all important disk-mounting tasks, i.e. calls the :func:`Disk.init` function on all underlying
@@ -104,7 +118,7 @@ class ImageParser(object):
             result = disk.rw_active() or result
         return result
 
-    def mount_volumes(self, single=None, only=None, swallow_exceptions=True):
+    def init_volumes(self, single=None, only=None, swallow_exceptions=True):
         """Detects volumes (as volume system or as single volume) in all disks and yields the volumes. This calls
         :func:`Disk.mount_multiple_volumes` on all disks and should be called after :func:`mount_disks`.
 

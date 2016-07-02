@@ -30,13 +30,16 @@ def main():
     class AppendDictAction(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
             items = getattr(namespace, self.dest, {})
-            try:
-                vals = values.split(',')
-                for t in vals:
-                    k, v = t.split('=', 1)
-                    items[k] = v
-            except ValueError:
-                parser.error("invalid argument {}".format(self.dest))
+            if ',' not in values and '=' not in values:
+                items['*'] = values
+            else:
+                try:
+                    vals = values.split(',')
+                    for t in vals:
+                        k, v = t.split('=', 1)
+                        items[k] = v
+                except ValueError:
+                    parser.error("invalid argument {}".format(self.dest))
             setattr(namespace, self.dest, items)
 
     class CheckAction(argparse.Action):
@@ -161,9 +164,9 @@ def main():
                              'though pytsk3 is using the direct C API of mmls, but requires pytsk3 to be installed; '
                              'auto distinguishes between pytsk3 and mmls only '
                              '(default: auto)')
-    parser.add_argument('--vstype', choices=VOLUME_SYSTEM_TYPES,
-                        default="detect", help='specify type of volume system (partition table); if you don\'t know, '
-                                               'use "detect" to try to detect (default: detect)')
+    parser.add_argument('--vstypes', action=AppendDictAction, default={'*': 'detect'},
+                        help='specify type of volume system (partition table); if you don\'t know, '
+                             'use "detect" to try to detect (default: detect)')
     parser.add_argument('--fstypes', action=AppendDictAction, default={'?': 'unknown'},
                         help="allows the specification of the file system type per volume number; format: 0.1=lvm,...; "
                              "use volume number ? for all undetected file system types and * for all file systems; "
@@ -317,8 +320,11 @@ def main():
     if args.only_mount:
         args.only_mount = args.only_mount.split(',')
 
-    if args.vstype != 'detect' and args.single:
-        print("[!] There's no point in using --single in combination with --vstype.")
+    if args.vstypes:
+        for k, v in args.vstypes.items():
+            if v.strip() not in VOLUME_SYSTEM_TYPES:
+                print("[!] Error while parsing --vstypes: {} is invalid".format(v))
+                sys.exit(1)
 
     if args.carve and not _util.command_exists('photorec'):
         print(col("[-] The photorec command (part of testdisk package) is required to carve, but is not "
@@ -401,7 +407,7 @@ def main():
             sys.stdout.flush()
             has_left_mounted = False
 
-            for volume in p.mount_volumes(args.single, args.only_mount, swallow_exceptions=True):
+            for volume in p.init_volumes(args.single, args.only_mount, swallow_exceptions=True):
                 try:
                     # something failed?
                     if not volume.mountpoint and not volume.loopback:
@@ -509,17 +515,17 @@ def main():
 
             for disk in p.disks:
                 if [x for x in disk.volumes if x.was_mounted] == 0:
-                    if args.vstype != 'detect':
+                    if disk.vstype != 'detect':
                         print(col('[?] Could not determine volume information of {0}. Image may be empty, '
-                                  'or volume system type {0} was incorrect.'.format(args.vstype.upper()), 'yellow'))
+                                  'or volume system type {0} was incorrect.'.format(disk.vstype.upper()), 'yellow'))
                     elif args.single is False:
                         print(col('[?] Could not determine volume information. Image may be empty, or volume system '
                                   'type could not be detected. Try explicitly providing the volume system type with '
-                                  '--vstype or mounting as a single volume with --single', 'yellow'))
+                                  '--vstypes or mounting as a single volume with --single', 'yellow'))
                     else:
                         print(col('[?] Could not determine volume information. Image may be empty, or volume system '
                                   'type could not be detected. Try explicitly providing the volume system type with '
-                                  '--vstype.', 'yellow'))
+                                  '--vstypes.', 'yellow'))
                     if args.wait:
                         input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
