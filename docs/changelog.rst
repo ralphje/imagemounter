@@ -10,13 +10,13 @@ Release history
 ----------------------
 This new release includes several backwards-incompatible changes, mostly because features were removed from the public API or have been renamed to obtain a more consistent API.
 
-New features:
+New major features:
 
 * Add volume shadow copy support for NTFS
 * Add BDE (Bitlocker) support
 * Addition of :option:`--keys` CLI argument and corresponding argument to Volume class, allowing to specify key material for crypto mounts, supporting both BDE and LUKS.
-* (Experimental) support for volume systems inside a volume. This is useful when e.g. a LVM volume contains in itself a MBR. Methods for mounting this have been moved from :class:`Disk` to :class:`VolumeSystem` and both :class:`Volume` and :class:`Disk` now use this (iterable) base class in their :attr:`volumes` attribute. If you relied on :attr:`volumes` being a ``list``, you should now use ``list(volumes)``. If you relied on indexing of the attribute, you could now also use ``disk[0]`` or ``volume[0]`` for finding the correct volume index. :attr:`volume_source` was moved to this class.
-* Added a :func:`VolumeSystem.detect_volumes` iterable, which is used by :func:`Disk.mount_multiple_volumes`. Underlying methods do not automatically :func:`init` the volume anymore, just detection and populating the :class:`Volume` objects.
+* (Experimental) support for volume systems inside a volume. This is useful when e.g. a LVM volume contains in itself a MBR.
+* A split between detection and initialization of volumes has been made. The basic way to access volumes as calling :func:`init`, but that mounted all volumes immediately. Now, ``detect_*`` methods have been added.
 * Support ``blkid`` to retrieve FS type info
 * Support for Linux RAID volumes
 
@@ -31,28 +31,47 @@ Bugfixes:
 Removed and modified features:
 
 * Stopped providing :const:`None` and :const:`False` results when things go wrong for most methods. Instead, numerous exceptions have been added. These exceptions should be catched instead, or when using ``mount_volumes`` or ``init``, you can specify ``swallow_exceptions`` (default) to restore previous behaviour. This is useful, since iteration will continue regardless of exceptions.
-* Removal of fsforce and fsfallback arguments and attributes from Volume, and the removal of :option:`--fsforce` and :option:`--fsfallback` from CLI. Use ``*`` and ``?`` as fstypes instead for the same effect. This should make the CLI more sensible, especially regarding the :option:`--fsforce` argument. The default FS fallback is still ``unknown``, which can only be overridden by specifying ``--fstypes=?=none``. (You can now specify ``--fstypes=TYPE``, which equals to ``--fstypes=*=TYPE``)
-* Renamed ``--method`` and corresponding argument to ``--disk-mounter``.
-* Renamed ``--detection`` and corresponding argument to ``--volume-detector``.
-* Renamed ``--vstype`` and corresponding argument to ``--vstypes``, now accepting a dict, similar to ``--fstypes``
-* Moved several arguments and attributes of ``Disk``, ``Volume`` and ``VolumeSystem`` to the ``ImageParser`` instance, so it does not need to get passed down every time. For instance, ``fstypes`` has been moved; the dict will be inspected upon Volume instantiation and stored in the ``fstype`` attribute.
+* Moved the attributes ``fstypes``, ``vstypes``, ``keys``, ``mountdir`` and ``pretty`` to the ``ImageParser`` instance, so it does not need to get passed down through the ``*args`` hack anymore. For instance, ``fstypes`` has been moved; the dict will be inspected upon Volume instantiation and stored in the ``fstype`` attribute. Other arguments and attributes have been eliminated completely, or have been replaced by arguments to specific methods.
+* Added an intermediary class :class:`VolumeSystem`. Both :class:`Volume` and :class:`Disk` now use this (iterable) base class in their :attr:`volumes` attribute. If you relied on :attr:`volumes` being a ``list``, you should now use ``list(volumes)``. If you relied on indexing of the attribute, you could now also use ``disk[0]`` or ``volume[0]`` for finding the correct volume index. :attr:`volume_source` was moved to this class, as have :attr:`vstype` and :attr:`volume_detector`.
+
+* Changes to the CLI:
+   * Removed :option:`--fsforce` and :option:`--fsfallback`. Use ``*`` and ``?`` as fstypes instead for the same effect. This should make the CLI more sensible, especially regarding the :option:`--fsforce` argument. The default FS fallback is still ``unknown``, which can only be overridden by specifying ``--fstypes=?=none``. (You can now specify ``--fstypes=TYPE``, which equals to ``--fstypes=*=TYPE``)
+   * Removed ``--stats`` and ``--no-stats``. These only complicated things and ``fsstat`` has been working fine for years now.
+   * Removed ``--raid`` and ``--no-raid`` (due to Volume RAID support)
+   * Renamed ``--method`` to ``--disk-mounter``.
+   * Renamed ``--detection`` to ``--volume-detector``.
+   * Renamed ``--vstype`` to ``--vstypes``, now accepting a dict, similar to ``--fstypes``
+   * Moved the ``imount.py`` file into a new ``cli`` module, where also a new experimental shell-style CLI is under development.
+
 * Changes specific to :class:`ImageParser`:
+   * Added ``add_disk`` and made ``paths`` optional in constructor.
+   * Added indexing of the `ImageParser` and added ``get_volume_by_index`` method.
    * Removed ``mount_single_volume`` and ``mount_multiple_volumes``. Use ``init_volumes`` instead, or use a custom loop for more control.
    * Dropped support for a single string argument for ``paths`` in ``__init__``. Additionally, dropped the ``paths`` attribute entirely.
+
 * Changes specific to :class:`Disk`:
+   * Renamed ``method`` to ``disk_mounter`` (see also CLI)
    * Removed ``name``, ``avfs_mountpoint`` and ``md_device`` from public API.
-   * Removed Linux RAID Disk support. Instead, mount as a single volume, with the type of this volume being RAID. This greatly simplifies the :class:`Disk` class. (This means that :attr:`loopback` has been dropped)
-   * Changed structure of ``mount_*`` methods. Now only ``init_volumes`` and ``detect_volumes`` remain.
-   * Removed the need for the rather obsure ``multifile`` attribute. Only ``xmount`` actually requires this.
+   * Removed Linux RAID Disk support. Instead, mount as a single volume, with the type of this volume being RAID. This greatly simplifies the :class:`Disk` class. (This means that :attr:`loopback` has also been dropped from Disk)
+   * Added ``detect_volumes`` method, which can be used to detect volumes.
+   * Removed most ``mount_*`` methods. Moved ``mount_volumes`` to ``init_volumes``. Functionality from the other methods can be restored with only a few lines of code.
+   * Removed the need for the rather obsure ``multifile`` attribute of ``mount``. Only ``xmount`` actually required this, so we just implicitly use it there.
+   * Moved the ``type`` attribute to a method ``get_disk_type``.
+
 * Changes specific to :class:`Volume`:
    * Renamed ``get_raw_base_path`` to ``get_raw_path``
    * Renamed ``get_size_gib`` to ``get_formatted_size``
    * Removed ``get_magic_type``, ``fill_stats``, ``open_jffs2``, ``find_lvm_volumes`` and ``open_luks_container`` from public API.
    * Removed the ``*_path``, ``carvepoint`` and ``bindmountpoint`` attributes from the public API. For ``carvepoint``, the ``carve`` method now returns the path to the carvepoint. All data has been moved to the private ``_paths`` attribute. The ``mountpoint`` and ``loopback`` attributes are kept.
-   * Removed ``no_stats`` from ``init``, it only complicates things. It is known to work properly.
-   * Added ``init_volume``, which only mounts the single volume. It is used by ``init``.
+   * Removed ``fsforce`` and ``fsfallback`` arguments and attributes from Volume (see also CLI)
+   * Added ``init_volume``, which only mounts the single volume. It is used by ``init`` and the preferred way of mounting a single volume (instead of using ``mount``)
    * Moved several attributes of :class:`Volume` to a new :attr:`info` attribute, which is publicly accessible, but its contents are not part of a stable public API.
-   * Removed :attr:`stats` attribute. The same can be accomplished by specifying ``no_stats=True``
+
+* Changes specific to :class:`VolumeSystem`:
+   * Renamed ``detection`` to ``volume_detector`` (see also CLI)
+   * Added a :func:`VolumeSystem.detect_volumes` iterable, which is the basic functionality of this class.
+   * Moved ``mount_single_volume`` code from :class:`Disk` to this class, adding the ``single`` volume detection method. The directory detection method has been incorporated in this new method.
+
 * Dropped support for Python 3.2, since everyone seems to be doing that these days.
 
 2.0.4 (2016-03-15)
