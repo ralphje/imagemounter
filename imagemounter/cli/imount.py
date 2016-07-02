@@ -12,7 +12,9 @@ import logging
 import sys
 import os
 
-from imagemounter import _util, ImageParser, Unmounter, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
+from imagemounter import _util, ImageParser, Unmounter, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES, \
+    DISK_MOUNTERS
+from imagemounter.cli import CheckAction, ImageMounterFormatter, get_coloring_func, AppendDictAction
 from imagemounter.exceptions import NoRootFoundError, ImageMounterError, UnsupportedFilesystemError
 
 # Python 2 compatibility
@@ -28,86 +30,6 @@ def main():
             sys.stderr.write('error: {0}\n'.format(message))
             self.print_help()
             sys.exit(2)
-
-    class AppendDictAction(argparse.Action):
-        def __call__(self, parser, namespace, values, option_string=None):
-            items = getattr(namespace, self.dest, {})
-            if ',' not in values and '=' not in values:
-                items['*'] = values
-            else:
-                try:
-                    vals = values.split(',')
-                    for t in vals:
-                        k, v = t.split('=', 1)
-                        items[k] = v
-                except ValueError:
-                    parser.error("invalid argument {}".format(self.dest))
-            setattr(namespace, self.dest, items)
-
-    class CheckAction(argparse.Action):
-        def _check_command(self, command, package="", why=""):
-            if _util.command_exists(command):
-                print(" INSTALLED {}".format(command))
-            elif why and package:
-                print(" MISSING   {:<20}needed for {}, part of the {} package".format(command, why, package))
-            elif why:
-                print(" MISSING   {:<20}needed for {}".format(command, why))
-            elif package:
-                print(" MISSING   {:<20}part of the {} package".format(command, package))
-            else:
-                print(" MISSING   {}".format(command))
-
-        def _check_module(self, module, pip_name="", why=""):
-            if not pip_name:
-                pip_name = module
-
-            if module == "magic" and _util.module_exists(module):
-                import magic
-                if hasattr(magic, 'from_file'):
-                    print(" INSTALLED {:<20}(Python package)".format(pip_name))
-                elif hasattr(magic, 'open'):
-                    print(" INSTALLED {:<20}(system package)".format(pip_name))
-                else:
-                    print(" ERROR     {:<20}expecting {}, found other module named magic".format(pip_name, pip_name))
-            elif module != "magic" and _util.module_exists(module):
-                print(" INSTALLED {}".format(pip_name))
-            elif why:
-                print(" MISSING   {:<20}needed for {}, install using pip".format(pip_name, why))
-            else:
-                print(" MISSING   {:<20}install using pip".format(pip_name, why))
-
-        # noinspection PyShadowingNames
-        def __call__(self, parser, namespace, values, option_string=None):
-            print("The following commands are used by imagemounter internally. Without most commands, imagemounter "
-                  "works perfectly fine, but may lack some detection or mounting capabilities.")
-            print("-- Mounting base disk images (at least one required, first three recommended) --")
-            self._check_command("xmount", "xmount", "several types of disk images")
-            self._check_command("ewfmount", "ewf-tools", "EWF images (partially covered by xmount)")
-            self._check_command("affuse", "afflib-tools", "AFF images (partially covered by xmount)")
-            self._check_command("vmware-mount", why="VMWare disks")
-            self._check_command("mountavfs", "avfs", "compressed disk images")
-            print("-- Detecting volumes and volume types (at least one required) --")
-            self._check_command("mmls", "sleuthkit")
-            self._check_module("pytsk3")
-            self._check_command("parted", "parted")
-            print("-- Detecting volume types (all recommended, first two highly recommended) --")
-            self._check_command("fsstat", "sleuthkit")
-            self._check_command("file", "libmagic1")
-            self._check_command("blkid")
-            self._check_module("magic", "python-magic")
-            self._check_command("disktype", "disktype")
-            print("-- Mounting volumes (install when needed) --")
-            self._check_command("mount.xfs", "xfsprogs", "XFS volumes")
-            self._check_command("mount.ntfs", "ntfs-3g", "NTFS volumes")
-            self._check_command("lvm", "lvm2", "LVM volumes")
-            self._check_command("vmfs-fuse", "vmfs-tools", "VMFS volumes")
-            self._check_command("mount.jffs2", "mtd-tools", "JFFS2 volumes")
-            self._check_command("mount.squashfs", "squashfs-tools", "SquashFS volumes")
-            self._check_command("mdadm", "mdadm", "RAID volumes")
-            self._check_command("cryptsetup", "cryptsetup", "LUKS containers")
-            self._check_command("bdemount", "libbde-utils", "Bitlocker Drive Encryption volumes")
-            self._check_command("vshadowmount", "libvshadow-utils", "NTFS volume shadow copies")
-            parser.exit()
 
     parser = MyParser(description='Utility to mount volumes in Encase and dd images locally.')
     parser.add_argument('images', nargs='*',
@@ -155,8 +77,7 @@ def main():
     parser.add_argument('-rw', '--read-write', action='store_true', default=False,
                         help='mount image read-write by creating a local write-cache file in a temp directory; '
                              'implies --disk-mounter=xmount')
-    parser.add_argument('-m', '--disk-mounter', choices=['xmount', 'affuse', 'ewfmount', 'vmware-mount', 'avfs',
-                                                         'auto', 'dummy'],
+    parser.add_argument('-m', '--disk-mounter', choices=DISK_MOUNTERS,
                         default='auto',
                         help='use other tool to mount the initial images; results may vary between methods and if '
                              'something doesn\'t work, try another method; dummy can be used when base should not be '
@@ -191,47 +112,11 @@ def main():
                           help="prevent trying to mount the image as a single volume if no volume system was found")
 
     args = parser.parse_args()
-
-    # Colorize the output by default if the terminal supports it
-    if not args.color and args.no_color:
-        args.color = False
-    elif args.color:
-        args.color = True
-    else:
-        args.color = _util.terminal_supports_color()
-
-    if not args.color:
-        # noinspection PyUnusedLocal,PyShadowingNames
-        def col(s, *args, **kwargs):
-            return s
-    else:
-        from termcolor import colored
-        col = colored
-
-    class ImageMounterFormatter(logging.Formatter):
-        def format(self, record):
-            msg = record.getMessage()
-            if args.verbose >= 4 and record.exc_info:
-                if not record.exc_text:
-                    record.exc_text = self.formatException(record.exc_info)
-                if msg[-1:] != "\n":
-                    msg += "\n"
-                msg += record.exc_text
-            if record.levelno >= logging.WARNING:
-                return col("[-] " + msg, 'cyan')
-            elif record.levelno == logging.INFO:
-                return col("[+] " + msg, 'cyan')
-            elif msg.startswith('$'):
-                return col("  " + msg, 'cyan')
-            elif msg.startswith('<'):
-                if args.verbose >= 4:
-                    return col("  " + "\n  < ".join(msg.splitlines()), 'cyan')
-            else:
-                return col("    " + msg, 'cyan')
+    col = get_coloring_func(color=args.color, no_color=args.color)
 
     # Set logging level for internal Python
     handler = logging.StreamHandler()
-    handler.setFormatter(ImageMounterFormatter())
+    handler.setFormatter(ImageMounterFormatter(col, verbosity=args.verbose))
     logger = logging.getLogger("imagemounter")
     logger.setLevel({0: logging.CRITICAL, 1: logging.WARNING, 2: logging.INFO}.get(args.verbose, logging.DEBUG))
     logger.addHandler(handler)

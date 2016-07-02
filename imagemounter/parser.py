@@ -47,11 +47,11 @@ class ImageParser(object):
         # Store other arguments
         self.casename = casename
 
-        self.fstypes = {str(k): v for k, v in fstypes.items()} or {'?': 'unknown'}
+        self.fstypes = {str(k): v for k, v in fstypes.items()} if fstypes else {'?': 'unknown'}
         if '?' in self.fstypes and (not self.fstypes['?'] or self.fstypes['?'] == 'none'):
             self.fstypes['?'] = None
-        self.keys = {str(k): v for k, v in keys.items()} or {}
-        self.vstypes = {str(k): v for k, v in vstypes.items()} or {}
+        self.keys = {str(k): v for k, v in keys.items()} if keys else {}
+        self.vstypes = {str(k): v for k, v in vstypes.items()} if vstypes else {}
 
         self.mountdir = mountdir
         if self.casename:
@@ -63,6 +63,13 @@ class ImageParser(object):
         for path in paths:
             self.add_disk(path, len(paths) > 1 or force_disk_indexes,
                           read_write=read_write, disk_mounter=disk_mounter, volume_detector=volume_detector)
+
+    def __getitem__(self, item):
+        item = str(item)
+        for d in self.disks:
+            if d.index == item:
+                return d
+        raise KeyError(item)
 
     def add_disk(self, path, force_disk_indexes=True, **args):
         """Adds a disk specified by the path to the ImageParser.
@@ -80,8 +87,9 @@ class ImageParser(object):
             index = len(self.disks) + 1
         else:
             index = None
-        self.disks.append(Disk(self, path,
-                               index=str(index) if index else None, **args))
+        disk = Disk(self, path, index=str(index) if index else None, **args)
+        self.disks.append(disk)
+        return disk
 
     def init(self, single=None, swallow_exceptions=True):
         """Handles all important disk-mounting tasks, i.e. calls the :func:`Disk.init` function on all underlying
@@ -118,16 +126,26 @@ class ImageParser(object):
             result = disk.rw_active() or result
         return result
 
-    def init_volumes(self, single=None, only=None, swallow_exceptions=True):
+    def init_volumes(self, single=None, only_mount=None, swallow_exceptions=True):
         """Detects volumes (as volume system or as single volume) in all disks and yields the volumes. This calls
-        :func:`Disk.mount_multiple_volumes` on all disks and should be called after :func:`mount_disks`.
+        :func:`Disk.init_volumes` on all disks and should be called after :func:`mount_disks`.
 
         :rtype: generator"""
 
         for disk in self.disks:
             logger.info("Mounting volumes in {0}".format(disk))
-            for volume in disk.init_volumes(single, only, swallow_exceptions=swallow_exceptions):
+            for volume in disk.init_volumes(single, only_mount, swallow_exceptions=swallow_exceptions):
                 yield volume
+
+    def get_by_index(self, index):
+        """Returns a Volume or Disk by its index."""
+
+        try:
+            return self[index]
+        except KeyError:
+            for v in self.get_volumes():
+                if v.index == str(index):
+                    return v
 
     def get_volumes(self):
         """Gets a list of all volumes of all disks, concatenating :func:`Disk.get_volumes` of all disks.
