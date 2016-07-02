@@ -4,6 +4,8 @@ from __future__ import unicode_literals
 import logging
 import sys
 import os
+import tempfile
+
 from imagemounter.disk import Disk
 from imagemounter.exceptions import NoRootFoundError, ImageMounterError
 
@@ -17,40 +19,55 @@ class ImageParser(object):
 
     """
 
-    def __init__(self, paths, casename=None, **args):
+    def __init__(self, paths=(), casename=None, read_write=False, disk_mounter='auto',
+                 volume_detector='auto', vstype='detect',
+                 fstypes=None, keys=None, mountdir=None, pretty=False, **args):
         """Instantiation of this class does not automatically mount, detect or analyse :class:`Disk` s, though it
         initialises each provided path as a new :class:`Disk` object.
 
         :param paths: list of paths to base images that should be mounted
         :type paths: iterable
         :param casename: the name of the case, used when prettifying names
-        :param args: arguments that should be passed down to :class:`Disk` and :class:`Volume` objects
+        :param bool read_write: indicates whether disks should be mounted with a read-write cache enabled
+        :param str disk_mounter: the method to mount the base images with
+        :param dict fstypes: dict mapping volume indices to file system types to use; use * and ? as volume indexes for
+                             additional control. Only when ?=none, unknown will not be used as fallback.
+        :param dict keys: dict mapping volume indices to key material
+        :param str mountdir: location where mountpoints are created, defaulting to a temporary location
+        :param bool pretty: indicates whether pretty names should be used for the mountpoints
+        :param args: ignored
         """
 
         from imagemounter import __version__
         logger.debug("imagemounter version %s", __version__)
 
-        # Python 3 compatibility
-        if sys.version_info[0] == 2:
-            string_types = basestring
-        else:
-            string_types = str
-
-        if isinstance(paths, string_types):
-            self.paths = [paths]
-        else:
-            self.paths = paths
+        # Store other arguments
         self.casename = casename
-        self.args = args
+        self.read_write = read_write
+        self.disk_mounter = disk_mounter
+        self.fstypes = {str(k): v for k, v in fstypes.items()} or {'?': 'unknown'}
+        if '?' in self.fstypes and (not self.fstypes['?'] or self.fstypes['?'] == 'none'):
+            self.fstypes['?'] = None
+        self.keys = {str(k): v for k, v in keys.items()} or {}
+        self.mountdir = mountdir
+        if self.casename:
+            self.mountdir = os.path.join(mountdir or tempfile.gettempdir(), self.casename)
+        self.pretty = pretty
 
+        # Add disks
         self.disks = []
         index = 0
-        for path in self.paths:
-            if len(self.paths) == 1:
+        for path in paths:
+            if len(paths) == 1:
                 index = None
             else:
                 index += 1
-            self.disks.append(Disk(self, path, index=str(index) if index else None, **self.args))
+            self.disks.append(Disk(self, path,
+                                   index=str(index) if index else None,
+                                   read_write=read_write,
+                                   disk_mounter=disk_mounter,
+                                   volume_detector=volume_detector,
+                                   vstype=vstype))
 
     def init(self, single=None, swallow_exceptions=True):
         """Handles all important disk-mounting tasks, i.e. calls the :func:`Disk.init` function on all underlying
@@ -95,7 +112,7 @@ class ImageParser(object):
 
         for disk in self.disks:
             logger.info("Mounting volumes in {0}".format(disk))
-            for volume in disk.mount_volumes(single, only, swallow_exceptions=swallow_exceptions):
+            for volume in disk.init_volumes(single, only, swallow_exceptions=swallow_exceptions):
                 yield volume
 
     def get_volumes(self):

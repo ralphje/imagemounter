@@ -149,14 +149,14 @@ def main():
                         help='name to add to the --mountdir, often used in conjunction with --pretty')
     parser.add_argument('-rw', '--read-write', action='store_true', default=False,
                         help='mount image read-write by creating a local write-cache file in a temp directory; '
-                             'implies --method=xmount')
-    parser.add_argument('-m', '--method', choices=['xmount', 'affuse', 'ewfmount', 'vmware-mount', 'avfs',
-                                                   'auto', 'dummy'],
+                             'implies --disk-mounter=xmount')
+    parser.add_argument('-m', '--disk-mounter', choices=['xmount', 'affuse', 'ewfmount', 'vmware-mount', 'avfs',
+                                                         'auto', 'dummy'],
                         default='auto',
                         help='use other tool to mount the initial images; results may vary between methods and if '
                              'something doesn\'t work, try another method; dummy can be used when base should not be '
                              'mounted (default: auto)')
-    parser.add_argument('-d', '--detection', choices=['pytsk3', 'mmls', 'parted', 'auto'], default='auto',
+    parser.add_argument('-d', '--volume-detector', choices=['pytsk3', 'mmls', 'parted', 'auto'], default='auto',
                         help='use other volume detection method; pytsk3 and mmls should provide identical results, '
                              'though pytsk3 is using the direct C API of mmls, but requires pytsk3 to be installed; '
                              'auto distinguishes between pytsk3 and mmls only '
@@ -176,11 +176,6 @@ def main():
     # Toggles for default settings you may perhaps want to override
 
     toggroup = parser.add_argument_group('toggles')
-    toggroup.add_argument('--stats', action='store_true', default=False,
-                          help='show limited information from fsstat, which will slow down mounting and may cause '
-                               'random issues such as partitions being unreadable (default)')
-    toggroup.add_argument('--no-stats', action='store_true', default=False,
-                          help='do not show limited information from fsstat')
     toggroup.add_argument('--disktype', action='store_true', default=False,
                           help='use the disktype command to get even more information about the volumes (default)')
     toggroup.add_argument('--no-disktype', action='store_true', default=False,
@@ -247,12 +242,6 @@ def main():
                   attrs=['dark']))
         print(col("Critical bug? Use git tag to list all versions and use git checkout <version>", attrs=['dark']))
 
-    # Always assume stats, except when --no-stats is present, and --stats is not.
-    if not args.stats and args.no_stats:
-        args.stats = False
-    else:
-        args.stats = True
-
     # Make args.disktype default to True
     explicit_disktype = False
     if not args.disktype and args.no_disktype:
@@ -278,52 +267,39 @@ def main():
             args.wait = False
 
     # Check if mount method supports rw
-    if args.method not in ('xmount', 'auto') and args.read_write:
-        print(col("[!] {0} does not support mounting read-write! Will mount read-only.".format(args.method), 'yellow'))
+    if args.disk_mounter not in ('xmount', 'auto') and args.read_write:
+        print(col("[!] {0} does not support mounting read-write! Will mount read-only.".format(args.disk_mounter), 'yellow'))
         args.read_write = False
 
     # Check if mount method is available
-    mount_command = 'avfsd' if args.method == 'avfs' else args.method
-    if args.method not in ('auto', 'dummy') and not _util.command_exists(mount_command):
-        print(col("[-] {0} is not installed!".format(args.method), 'red'))
+    mount_command = 'avfsd' if args.disk_mounter == 'avfs' else args.disk_mounter
+    if args.disk_mounter not in ('auto', 'dummy') and not _util.command_exists(mount_command):
+        print(col("[-] {0} is not installed!".format(args.disk_mounter), 'red'))
         sys.exit(1)
-    elif args.method == 'auto' and not any(map(_util.command_exists, ('xmount', 'affuse', 'ewfmount', 'vmware-mount',
-                                                                      'avfsd'))):
+    elif args.disk_mounter == 'auto' and not any(map(_util.command_exists, ('xmount', 'affuse', 'ewfmount', 'vmware-mount',
+                                                                            'avfsd'))):
         print(col("[-] No tools installed to mount the image base! Please install xmount, affuse (afflib-tools), "
                   "ewfmount (ewf-tools), vmware-mount or avfs first.", 'red'))
         sys.exit(1)
 
     # Check if detection method is available
-    if args.detection == 'pytsk3' and not _util.module_exists('pytsk3'):
+    if args.volume_detector == 'pytsk3' and not _util.module_exists('pytsk3'):
         print(col("[-] pytsk3 module does not exist!", 'red'))
         sys.exit(1)
-    elif args.detection in ('mmls', 'parted') and not _util.command_exists(args.detection):
-        print(col("[-] {0} is not installed!".format(args.detection), 'red'))
+    elif args.volume_detector in ('mmls', 'parted') and not _util.command_exists(args.volume_detector):
+        print(col("[-] {0} is not installed!".format(args.volume_detector), 'red'))
         sys.exit(1)
-    elif args.detection == 'auto' and not any((_util.module_exists('pytsk3'), _util.command_exists('mmls'),
-                                               _util.command_exists('parted'))):
+    elif args.volume_detector == 'auto' and not any((_util.module_exists('pytsk3'), _util.command_exists('mmls'),
+                                                     _util.command_exists('parted'))):
         print(col("[-] No tools installed to detect volumes! Please install mmls (sleuthkit), pytsk3 or parted first.",
                   'red'))
         sys.exit(1)
-
-    if args.reconstruct and not args.stats:  # Reconstruct implies use of fsstat
-        print("[!] You explicitly disabled stats, but --reconstruct implies the use of stats. Stats are re-enabled.")
-        args.stats = True
 
     # Check if disktype is available
     if args.disktype and not _util.command_exists('disktype'):
         if explicit_disktype:
             print(col("[-] The disktype command can not be used in this session, as it is not installed.", 'yellow'))
         args.disktype = False
-
-    if args.stats and not _util.command_exists('fsstat'):
-        print(col("[-] The fsstat command (part of sleuthkit package) is required to obtain stats, but is not "
-                  "installed. Stats can not be obtained during this session.", 'yellow'))
-        args.stats = False
-
-        if args.reconstruct:
-            print(col("[-] Reconstruction requires stats to be obtained, but stats can not be enabled.", 'red'))
-            sys.exit(1)
 
     if args.fstypes:
         for k, v in args.fstypes.items():
@@ -404,14 +380,14 @@ def main():
             # Mount all disks. We could use .init, but where's the fun in that?
             for disk in p.disks:
                 num += 1
-                print('[+] Mounting image {0} using {1}...'.format(p.paths[0], disk.method))
+                print('[+] Mounting image {0} using {1}...'.format(disk.paths[0], disk.disk_mounter))
 
                 # Mount the base image using the preferred method
                 try:
                     disk.mount()
                 except ImageMounterError:
                     print(col("[-] Failed mounting base image. Perhaps try another mount method than {0}?"
-                              .format(disk.method), "red"))
+                              .format(disk.disk_mounter), "red"))
                     return
 
                 if args.read_write:

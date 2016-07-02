@@ -21,8 +21,9 @@ class Disk(object):
     """Representation of a disk, image file or anything else that can be considered a disk. """
 
     # noinspection PyUnusedLocal
-    def __init__(self, parser, path, offset=0, block_size=BLOCK_SIZE, read_write=False, method='auto',
-                 multifile=True, index=None, mount_directories=True, **args):
+    def __init__(self, parser, path, index=None, offset=0, block_size=BLOCK_SIZE, read_write=False, vstype='detect',
+                 disk_mounter='auto', volume_detector='auto',
+                 **args):
         """Instantiation of this class does not automatically mount, detect or analyse the disk. You will need the
         :func:`init` method for this.
 
@@ -30,44 +31,34 @@ class Disk(object):
 
         :param parser: the parent parser
         :type parser: :class:`ImageParser`
-        :param int offset: offset of the disk where the volume (system) resides
-        :param bool read_write: indicates whether the disk should be mounted with a read-write cache enabled
-        :param str method: the method to mount the base image with
-        :param bool multifile: indicates whether :func:`mount` should attempt to call the underlying mount method with
-                all files of a split file when passing a single file does not work
+        :param str path: the path of the Disk
         :param str index: the base index of this Disk
-        :param bool mount_directories: indicates whether directories should also be 'mounted'
-        :param args: arguments that should be passed down to :class:`Volume` objects
+        :param int offset: offset of the disk where the volume (system) resides
+        :param int block_size:
+        :param bool read_write: indicates whether the disk should be mounted with a read-write cache enabled
+        :param str vstype: the volume system type to use.
+        :param str disk_mounter: the method to mount the base image with
+        :param str volume_detector: the volume system detection method to use
+        :param args: ignored
         """
 
         self.parser = parser
 
         # Find the type and the paths
         path = os.path.expandvars(os.path.expanduser(path))
-        if _util.is_encase(path):
-            self.type = 'encase'
-        elif _util.is_vmware(path):
-            self.type = 'vmdk'
-        elif _util.is_compressed(path):
-            self.type = 'compressed'
-        else:
-            self.type = 'dd'
         self.paths = sorted(_util.expand_path(path))
 
         self.offset = offset
         self.block_size = block_size
         self.read_write = read_write
-        self.method = method
-        self.multifile = multifile
+        self.disk_mounter = disk_mounter
         self.index = index
-        self.mount_directories = mount_directories
-        self.args = args
 
         self._name = os.path.split(path)[1]
         self._paths = {}
         self.rwpath = ""
         self.mountpoint = ''
-        self.volumes = VolumeSystem(parent=self, **args)
+        self.volumes = VolumeSystem(parent=self, volume_detector=volume_detector, vstype=vstype)
 
         self._disktype = defaultdict(dict)
 
@@ -80,22 +71,62 @@ class Disk(object):
     def __getitem__(self, item):
         return self.volumes[item]
 
-    def init(self, single=None, disktype=True):
-        """Calls several methods required to perform a full initialisation: :func:`mount`, and
-        :func:`mount_volumes` and yields all detected volumes.
+    def get_disk_type(self):
+        if _util.is_encase(self.paths[0]):
+            return 'encase'
+        elif _util.is_vmware(self.paths[0]):
+            return 'vmdk'
+        elif _util.is_compressed(self.paths[0]):
+            return 'compressed'
+        else:
+            return 'dd'
 
-        :param bool|None single: indicates whether the disk should be mounted as a single disk, not as a single disk or
-            whether it should try both (defaults to :const:`None`)
-        :param bool disktype: indicates whether disktype data should be loaded and used
-        :rtype: generator
+    def _get_mount_methods(self, disk_type):
+        """Finds which mount methods are suitable for the specified disk type. Returns a list of all suitable mount
+        methods.
         """
+        if self.disk_mounter == 'auto':
+            methods = []
 
-        self.mount()
-        if disktype:
-            self.volumes.load_disktype_data()
+            def add_method_if_exists(method):
+                if (method == 'avfs' and _util.command_exists('avfsd')) or _util.command_exists(method):
+                    methods.append(method)
 
-        for v in self.mount_volumes(single):
-            yield v
+            if self.read_write:
+                add_method_if_exists('xmount')
+            else:
+                if disk_type == 'encase':
+                    add_method_if_exists('ewfmount')
+                elif disk_type == 'vmdk':
+                    add_method_if_exists('vmware-mount')
+                    add_method_if_exists('affuse')
+                elif disk_type == 'dd':
+                    add_method_if_exists('affuse')
+                elif disk_type == 'compressed':
+                    add_method_if_exists('avfs')
+                add_method_if_exists('xmount')
+        else:
+            methods = [self.disk_mounter]
+        return methods
+
+    def _mount_avfs(self):
+        """Mounts the AVFS filesystem."""
+
+        self._paths['avfs'] = tempfile.mkdtemp(prefix='image_mounter_avfs_')
+
+        # start by calling the mountavfs command to initialize avfs
+        _util.check_call_(['avfsd', self._paths['avfs'], '-o', 'allow_other'], stdout=subprocess.PIPE)
+
+        # no multifile support for avfs
+        avfspath = self._paths['avfs'] + '/' + os.path.abspath(self.paths[0]) + '#'
+        targetraw = os.path.join(self.mountpoint, 'avfs')
+
+        os.symlink(avfspath, targetraw)
+        logger.debug("Symlinked {} with {}".format(avfspath, targetraw))
+        raw_path = self.get_raw_path()
+        logger.debug("Raw path to avfs is {}".format(raw_path))
+        if raw_path is None:
+            raise MountpointEmptyError()
 
     def mount(self):
         """Mounts the base image on a temporary location using the mount method stored in :attr:`method`. If mounting
@@ -115,85 +146,43 @@ class Disk(object):
         if self.read_write:
             self.rwpath = tempfile.mkstemp(prefix="image_mounter_rw_cache_")[1]
 
-        # Find the mount methods
-        if self.method == 'auto':
-            methods = []
-
-            def add_method_if_exists(method):
-                if (method == 'avfs' and _util.command_exists('avfsd')) or _util.command_exists(method):
-                    methods.append(method)
-
-            if self.read_write:
-                add_method_if_exists('xmount')
-            else:
-                if self.type == 'encase':
-                    add_method_if_exists('ewfmount')
-                elif self.type == 'vmdk':
-                    add_method_if_exists('vmware-mount')
-                    add_method_if_exists('affuse')
-                elif self.type == 'dd':
-                    add_method_if_exists('affuse')
-                elif self.type == 'compressed':
-                    add_method_if_exists('avfs')
-                add_method_if_exists('xmount')
-        else:
-            methods = [self.method]
+        disk_type = self.get_disk_type()
+        methods = self._get_mount_methods(disk_type)
 
         cmds = []
         for method in methods:
             if method == 'avfs':  # avfs does not participate in the fallback stuff, unfortunately
-                self._paths['avfs'] = tempfile.mkdtemp(prefix='image_mounter_avfs_')
-
-                # start by calling the mountavfs command to initialize avfs
-                _util.check_call_(['avfsd', self._paths['avfs'], '-o', 'allow_other'], stdout=subprocess.PIPE)
-
-                # no multifile support for avfs
-                avfspath = self._paths['avfs'] + '/' + os.path.abspath(self.paths[0]) + '#'
-                targetraw = os.path.join(self.mountpoint, 'avfs')
-
-                os.symlink(avfspath, targetraw)
-                logger.debug("Symlinked {} with {}".format(avfspath, targetraw))
-                raw_path = self.get_raw_path()
-                logger.debug("Raw path to avfs is {}".format(raw_path))
-                if self.method == 'auto':
-                    self.method = 'avfs'
-
-                if raw_path is None:
-                    raise MountpointEmptyError()
+                self._mount_avfs()
+                self.disk_mounter = method
                 return
-
-            elif method == 'xmount':
-                cmds.append(['xmount', '--in', 'ewf' if self.type == 'encase' else 'dd'])
-                if self.read_write:
-                    cmds[-1].extend(['--rw', self.rwpath])
-
-            elif method == 'affuse':
-                cmds.extend([['affuse', '-o', 'allow_other'], ['affuse']])
-
-            elif method == 'ewfmount':
-                cmds.extend([['ewfmount', '-X', 'allow_other'], ['ewfmount']])
-
-            elif method == 'vmware-mount':
-                cmds.append(['vmware-mount', '-r', '-f'])
 
             elif method == 'dummy':
                 os.rmdir(self.mountpoint)
                 self.mountpoint = ""
                 logger.debug("Raw path to dummy is {}".format(self.get_raw_path()))
+                self.disk_mounter = method
                 return
 
-            else:
-                raise ArgumentError("Unknown mount method {0}".format(self.method))
-
-        # add path and mountpoint to the cmds
-        # if multifile is enabled, add additional mount methods to the end of it
-        for cmd in cmds[:]:
-            if self.multifile and len(self.paths) > 1:
-                cmds.append(cmd[:])
-                cmds[-1].extend(self.paths)
+            elif method == 'xmount':
+                cmds.append(['xmount', '--in', 'ewf' if disk_type == 'encase' else 'dd'])
+                if self.read_write:
+                    cmds[-1].extend(['--rw', self.rwpath])
+                cmds[-1].extend(self.paths)  # specify all paths, xmount needs this :(
                 cmds[-1].append(self.mountpoint)
-            cmd.append(self.paths[0])
-            cmd.append(self.mountpoint)
+
+            elif method == 'affuse':
+                cmds.extend([['affuse', '-o', 'allow_other', self.paths[0], self.mountpoint],
+                             ['affuse', self.paths[0], self.mountpoint]])
+
+            elif method == 'ewfmount':
+                cmds.extend([['ewfmount', '-X', 'allow_other', self.paths[0], self.mountpoint],
+                             ['ewfmount', self.paths[0], self.mountpoint]])
+
+            elif method == 'vmware-mount':
+                cmds.append(['vmware-mount', '-r', '-f', self.paths[0], self.mountpoint])
+
+            else:
+                raise ArgumentError("Unknown mount method {0}".format(self.disk_mounter))
 
         for cmd in cmds:
             # noinspection PyBroadException
@@ -207,8 +196,7 @@ class Disk(object):
             else:
                 raw_path = self.get_raw_path()
                 logger.debug("Raw path to disk is {}".format(raw_path))
-                if self.method == 'auto':
-                    self.method = cmd[0]
+                self.disk_mounter = cmd[0]
 
                 if raw_path is None:
                     raise MountpointEmptyError()
@@ -226,10 +214,10 @@ class Disk(object):
         :rtype: str
         """
 
-        if self.method == 'dummy':
+        if self.disk_mounter == 'dummy':
             return self.paths[0]
         else:
-            if self.method == 'avfs' and os.path.isdir(os.path.join(self.mountpoint, 'avfs')):
+            if self.disk_mounter == 'avfs' and os.path.isdir(os.path.join(self.mountpoint, 'avfs')):
                 logger.debug("AVFS mounted as a directory, will look in directory for (random) file.")
                 # there is no support for disks inside disks, so this will fail to work for zips containing
                 # E01 files or so.
@@ -260,28 +248,53 @@ class Disk(object):
         else:
             return self.get_raw_path()
 
-    def mount_volumes(self, single=None, only_mount=None, swallow_exceptions=True):
-        """Generator that detects and mounts all volumes in the disk.
+    def init(self, single=None, disktype=True, no_stats=False, only_mount=None, swallow_exceptions=True):
+        """Calls several methods required to perform a full initialisation: :func:`mount`, and
+        :func:`mount_volumes` and yields all detected volumes.
 
-        If *single* is :const:`True`, this method will call :Func:`mount_single_volumes`. If *single* is False, only
-        :func:`mount_multiple_volumes` is called. If *single* is None, :func:`mount_multiple_volumes` is always called,
-        being followed by :func:`mount_single_volume` if no volumes were detected.
+        :param bool|None single: indicates whether the disk should be mounted as a single disk, not as a single disk or
+            whether it should try both (defaults to :const:`None`)
+        :param bool disktype: indicates whether disktype data should be loaded and used
+        :rtype: generator
         """
 
-        if os.path.isdir(self.get_raw_path()) and self.mount_directories:
+        self.mount()
+        if disktype:
+            self.volumes.load_disktype_data()
+
+        for v in self.init_volumes(single, no_stats=no_stats,
+                                   only_mount=only_mount, swallow_exceptions=swallow_exceptions):
+            yield v
+
+    def init_volumes(self, single=None, no_stats=False, only_mount=None, swallow_exceptions=True,
+                     mount_directories=True):
+        """Generator that detects and mounts all volumes in the disk.
+
+        :param single: If *single* is :const:`True`, this method will call :Func:`init_single_volumes`.
+                       If *single* is False, only :func:`init_multiple_volumes` is called. If *single* is None,
+                       :func:`init_multiple_volumes` is always called, being followed by :func:`init_single_volume`
+                       if no volumes were detected.
+        :param bool no_stats: If True, will not use fsstat to determine more information
+        :param list only_mount: If set, must be a list of volume indexes that are only mounted.
+        :param bool swallow_exceptions: If True, Exceptions are not raised but rather set on the instance.
+        :param bool mount_directories: indicates whether directories should also be 'mounted'
+        """
+
+        if os.path.isdir(self.get_raw_path()) and mount_directories:
             logger.info("Raw path is a directory: using directory mount method")
-            for v in self.mount_directory(only_mount, swallow_exceptions=swallow_exceptions):
+            for v in self.init_directory(only_mount, swallow_exceptions=swallow_exceptions):
                 yield v
 
         elif single:
             # if single, then only use single_Volume
-            for v in self.mount_single_volume(only_mount, swallow_exceptions=swallow_exceptions):
+            for v in self.init_single_volume(only_mount, swallow_exceptions=swallow_exceptions):
                 yield v
         else:
             # if single == False or single == None, loop over all volumes
             amount = 0
             try:
-                for v in self.mount_multiple_volumes(only_mount, swallow_exceptions=swallow_exceptions):
+                for v in self.init_multiple_volumes(no_stats=no_stats, only_mount=only_mount,
+                                                    swallow_exceptions=swallow_exceptions):
                     amount += 1
                     yield v
             except ImageMounterError:
@@ -290,16 +303,13 @@ class Disk(object):
             # if single == None and no volumes were mounted, use single_volume
             if single is None and amount == 0:
                 logger.info("Mounting as single volume instead")
-                for v in self.mount_single_volume(only_mount, swallow_exceptions=swallow_exceptions):
+                for v in self.init_single_volume(only_mount, swallow_exceptions=swallow_exceptions):
                     yield v
 
-    def mount_directory(self, only_mount=None, swallow_exceptions=True):
+    def init_directory(self, only_mount=None, swallow_exceptions=True):
         """Method that 'mounts' a directory. It actually just symlinks it. It is useful for AVFS mounts, that
         are not otherwise detected. This is a last resort method.
         """
-
-        if not self.mount_directories:
-            return
 
         volume = self.volumes._make_single_subvolume()
         volume.offset = 0
@@ -316,7 +326,7 @@ class Disk(object):
             # stats can't be retrieved from directory
             yield v
 
-    def mount_single_volume(self, only_mount=None, swallow_exceptions=True):
+    def init_single_volume(self, only_mount=None, swallow_exceptions=True):
         """Mounts a volume assuming that the mounted image does not contain a full disk image, but only a
         single volume.
 
@@ -346,13 +356,13 @@ class Disk(object):
             # stats can't  be retrieved from single volumes
             yield v
 
-    def mount_multiple_volumes(self, only_mount=None, swallow_exceptions=True):
+    def init_multiple_volumes(self, no_stats=False, only_mount=None, swallow_exceptions=True):
         """Generator that will detect volumes in the disk file, generate :class:`Volume` objects based on this
         information and call :func:`init` on these.
         """
 
         for v in self.volumes.detect_volumes():
-            for w in v.init(only_mount=only_mount, swallow_exceptions=swallow_exceptions):
+            for w in v.init(no_stats=no_stats, only_mount=only_mount, swallow_exceptions=swallow_exceptions):
                 yield w
 
     def get_volumes(self):

@@ -18,29 +18,28 @@ class VolumeSystem(object):
     system contains several :class:`Volumes`, which, in turn, may contain additional volume systems.
     """
 
-    def __init__(self, parent, vstype='detect', detection='auto', **args):
+    def __init__(self, parent, vstype='detect', volume_detector='auto', **args):
         """Creates a VolumeSystem.
 
         :param parent: the parent may either be a :class:`Disk` or a :class:`Volume` that contains this  VolumeSystem.
         :param str vstype: the volume system type to use.
-        :param str detection: the volume system detection method to use
-        :param args: additional arguments to pass to :class:`Volume`s created
+        :param str volume_detector: the volume system detection method to use
+        :param args: additional arguments, ignored
         """
 
         self.parent = parent
         self.disk = parent.disk if hasattr(parent, 'disk') else parent
 
         self.vstype = vstype
-        if detection == 'auto':
-            self.detection = VolumeSystem._determine_auto_detection_method()
+        if volume_detector == 'auto':
+            self.volume_detector = VolumeSystem._determine_auto_detection_method()
         else:
-            self.detection = detection
+            self.volume_detector = volume_detector
 
         self.volume_source = ""
         self.volumes = []
 
         self._disktype = defaultdict(dict)
-        self.args = args
 
     def __iter__(self):
         for v in self.volumes:
@@ -56,24 +55,23 @@ class VolumeSystem(object):
                 return v
         raise KeyError
 
-    def _make_subvolume(self):
+    def _make_subvolume(self, index="0"):
         """Creates a subvolume, adds it to this class and returns it."""
 
         from imagemounter.volume import Volume
-        # we also pass in the detection and vstype, so it gets to Volume.args, which gets passed back when the Volume
-        # creates a new VolumeType
-        v = Volume(disk=self.disk, parent=self.parent, detection=self.detection, vstype=self.vstype, **self.args)
+        v = Volume(disk=self.disk, parent=self.parent, index=index,
+                   volume_detector=self.volume_detector, vstype=self.vstype)
         self.volumes.append(v)
         return v
 
     def _make_single_subvolume(self):
         """Creates a subvolume, adds it to this class, sets the volume index to 0 and returns it."""
 
-        volume = self._make_subvolume()
         if self.parent.index is None:
-            volume.index = '0'
+            index = '0'
         else:
-            volume.index = '{0}.0'.format(self.parent.index)
+            index = '{0}.0'.format(self.parent.index)
+        volume = self._make_subvolume(index)
         return volume
 
     def detect_volumes(self, vstype=None, method=None):
@@ -86,7 +84,7 @@ class VolumeSystem(object):
         if vstype is None:
             vstype = self.vstype
         if method is None:
-            method = self.detection
+            method = self.volume_detector
 
         if method == 'auto':
             method = VolumeSystem._determine_auto_detection_method()
@@ -182,11 +180,10 @@ class VolumeSystem(object):
         for p in self._find_pytsk3_volumes(vstype):
             import pytsk3
 
-            volume = self._make_subvolume()
+            volume = self._make_subvolume(self._format_index(p.addr))
             # Fill volume with more information
             volume.offset = p.start * self.disk.block_size
             volume.info['fsdescription'] = p.desc.strip()
-            volume.index = self._format_index(p.addr)
             volume.size = p.len * self.disk.block_size
 
             if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
@@ -248,10 +245,9 @@ class VolumeSystem(object):
                 if len(values) > 5:
                     description = values[5]
 
-                volume = self._make_subvolume()
+                volume = self._make_subvolume(self._format_index(int(index[:-1])))
                 volume.offset = int(start) * self.disk.block_size
                 volume.info['fsdescription'] = description
-                volume.index = self._format_index(int(index[:-1]))
                 volume.size = int(length) * self.disk.block_size
             except Exception:
                 logger.exception("Error while parsing mmls output")
@@ -318,11 +314,10 @@ class VolumeSystem(object):
                 except ValueError:
                     continue
 
-                volume = self._make_subvolume()
+                volume = self._make_subvolume(self._format_index(num))
                 volume.offset = int(start[:-1]) * self.disk.block_size  # remove last s
                 volume.size = int(length[:-1]) * self.disk.block_size
                 volume.info['fsdescription'] = description
-                volume.index = self._format_index(num)
 
                 # TODO: detection of meta volumes
 
@@ -355,8 +350,7 @@ class VolumeSystem(object):
         cur_v = None
         for l in result.splitlines():
             if "--- Logical volume ---" in l:
-                cur_v = self._make_subvolume()
-                cur_v.index = self._format_index(len(self) - 1)
+                cur_v = self._make_subvolume(self._format_index(len(self)))
                 cur_v.info['fsdescription'] = 'Logical Volume'
                 cur_v.flag = 'alloc'
             if "LV Name" in l:
