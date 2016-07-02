@@ -9,9 +9,7 @@ import subprocess
 import re
 import tempfile
 import threading
-import sys
 import shutil
-
 import time
 
 from imagemounter import _util, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
@@ -41,42 +39,41 @@ class Volume(object):
     :attr:`exception` attribute is set with an exception.
     """
 
-    def __init__(self, disk=None, parent=None, stats=True, fstypes=None, keys=None,
-                 pretty=False, mountdir=None, **args):
+    def __init__(self, disk=None, parent=None, index="0", fstype=None, key=None,
+                 vstype='detect', volume_detector='auto', **args):
         """Creates a Volume object that is not mounted yet.
 
-        Only use arguments stats and further as keyword arguments.
+        Only use arguments as keyword arguments.
 
         :param disk: the parent disk
         :type disk: :class:`Disk`
-        :param bool stats: indicates whether :func:`init` should try to fill statistics
-        :param dict fstypes: dict mapping volume indices to file system types to use; use * and ? as volume indexes for
-                             additional control. Only when ?=none, unknown will not be used as fallback.
-        :param dict keys: dict mapping volume indices to key material
-        :param bool pretty: indicates whether pretty names should be used for the mountpoints
-        :param str mountdir: location where mountpoints are created, defaulting to a temporary location
-        :param args: additional arguments
+        :param str fstype: the fstype you wish to use for this Volume. May be ?<fstype> as a fallback value. If not
+                           specified, will be retrieved from the ImageParser instance instead.
+        :param str key: the key to use for this Volume.
+        :param str vstype: the volume system type to use.
+        :param str volume_detector: the volume system detection method to use
+        :param args: additional arguments, ignored
         """
 
         self.parent = parent
         self.disk = disk
-        self.stats = stats
-        self.fstypes = {str(k): v for k, v in fstypes.items()} or {'?': 'unknown'}
-        if '?' in self.fstypes and (not self.fstypes['?'] or self.fstypes['?'] == 'none'):
-            self.fstypes['?'] = None
-        self.keys = {str(k): v for k, v in keys.items()} or {}
-        self.pretty = pretty
-        self.mountdir = mountdir
-        if self.disk.parser.casename:
-            self.mountdir = os.path.join(mountdir or tempfile.gettempdir(), self.disk.parser.casename)
 
         # Should be filled somewhere
         self.size = 0
         self.offset = 0
-        self.index = "0"
+        self.index = index
         self.slot = 0
         self.flag = 'alloc'
+
         self.fstype = ""
+        self._get_fstype_from_parser(fstype)
+
+        if key:
+            self.key = key
+        elif self.index in self.disk.parser.keys:
+            self.key = self.disk.parser.keys[self.index]
+        else:
+            self.key = ""
 
         self.info = {}
         self._paths = {}
@@ -87,12 +84,9 @@ class Volume(object):
         self.was_unmounted = False
 
         # Used by functions that create subvolumes
-        self.volumes = VolumeSystem(parent=self, stats=self.stats, fstypes=self.fstypes, keys=self.keys,
-                                    pretty=self.pretty, mountdir=self.mountdir, **args)
+        self.volumes = VolumeSystem(parent=self, vstype=vstype, volume_detector=volume_detector)
 
         self.block_size = self.disk.block_size
-
-        self.args = args
 
     def __unicode__(self):
         return '{0}:{1}'.format(self.index, self.info.get('fsdescription') or '-')
@@ -102,6 +96,19 @@ class Volume(object):
 
     def __getitem__(self, item):
         return self.volumes[item]
+
+    def _get_fstype_from_parser(self, fstype=None):
+        """Load fstype information from the parser instance."""
+        if fstype:
+            self.fstype = fstype
+        elif self.index in self.disk.parser.fstypes:
+            self.fstype = self.disk.parser.fstypes[self.index]
+        elif '*' in self.disk.parser.fstypes:
+            self.fstype = self.disk.parser.fstypes['*']
+        elif '?' in self.disk.parser.fstypes and self.disk.parser.fstypes['?'] is not None:
+            self.fstype = "?" + self.disk.parser.fstypes['?']
+        else:
+            self.fstype = ""
 
     def get_description(self, with_size=True):
         """Obtains a generic description of the volume, containing the file system type, index, label and NTFS version.
@@ -338,8 +345,8 @@ class Volume(object):
 
         try:
             logger.debug("Initializing volume {0}".format(self))
-            if self.stats and not no_stats:
-                self.load_fsstat_data()
+            if not no_stats:
+                self._load_fsstat_data()
 
             if not self._should_mount(only_mount):
                 yield self
@@ -361,7 +368,7 @@ class Volume(object):
             logger.info("Mounting volume {0}".format(self))
             self.mount()
 
-            if self.stats and not no_stats:
+            if not no_stats:
                 self.detect_mountpoint()
 
         except ImageMounterError as e:
@@ -385,12 +392,13 @@ class Volume(object):
         :returns: the mountpoint path
         :raises NoMountpointAvailableError: if no mountpoint could be made
         """
+        parser = self.disk.parser
 
-        if self.mountdir and not os.path.exists(self.mountdir):
-            os.makedirs(self.mountdir)
+        if parser.mountdir and not os.path.exists(parser.mountdir):
+            os.makedirs(parser.mountdir)
 
-        if self.pretty:
-            md = self.mountdir or tempfile.gettempdir()
+        if parser.pretty:
+            md = parser.mountdir or tempfile.gettempdir()
             case_name = casename or self.disk.parser.casename or \
                         ".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]) or \
                         os.path.basename(self.disk.paths[0])
@@ -427,7 +435,7 @@ class Volume(object):
         else:
             t = tempfile.mkdtemp(prefix='im_' + self.index + '_',
                                  suffix='_' + self.get_safe_label() + ("_" + suffix if suffix else ""),
-                                 dir=self.mountdir)
+                                 dir=parser.mountdir)
             if in_paths:
                 self._paths[var_name] = t
             else:
@@ -463,6 +471,11 @@ class Volume(object):
                 raise NoLoopbackAvailableError()
         return loopback
 
+    def _free_loopback(self, var_name='loopback'):
+        if getattr(self, var_name):
+            _util.check_call_(['losetup', '-d', getattr(self, var_name)], wrap_error=True)
+            setattr(self, var_name, "")
+
     def determine_fs_type(self):
         """Determines the FS type for this partition. This function is used internally to determine which mount system
         to use, based on the file system description. Return values include *ext*, *ufs*, *ntfs*, *lvm* and *luks*.
@@ -470,12 +483,10 @@ class Volume(object):
         Note: does not do anything if fstype is already set to something sensible.
         """
 
+        fstype_fallback = self.fstype[1:] if self.fstype and self.fstype.startswith("?") else ""
+
         # Determine fs type. If forced, always use provided type.
-        if self.index in self.fstypes:
-            self.fstype = self.fstypes[self.index]
-        elif '*' in self.fstypes:
-            self.fstype = self.fstypes['*']
-        elif self.fstype in FILE_SYSTEM_TYPES:
+        if self.fstype in FILE_SYSTEM_TYPES:
             pass  # already correctly set
         else:
             last_resort = None  # use this if we can't determine the FS type more reliably
@@ -556,9 +567,9 @@ class Volume(object):
                 # if last_resort is unknown or the fallback is not None, we use unknown
                 if last_resort and last_resort != 'unknown':
                     self.fstype = last_resort
-                elif '?' in self.fstypes and self.fstypes['?'] is not None:
-                    self.fstype = self.fstypes['?']
-                elif last_resort == 'unknown' or '?' not in self.fstypes:
+                elif fstype_fallback:
+                    self.fstype = fstype_fallback
+                elif last_resort == 'unknown' or not fstype_fallback:
                     self.fstype = 'unknown'
 
         return self.fstype
@@ -722,8 +733,7 @@ class Volume(object):
             # clean the loopback device, we want this method to be clean as possible
             # noinspection PyBroadException
             try:
-                _util.check_call_(['losetup', '-d', self.loopback])
-                self.loopback = ""
+                self._free_loopback()
             except Exception:
                 pass
             raise IncorrectFilesystemError()
@@ -731,8 +741,8 @@ class Volume(object):
         try:
             extra_args = []
             key = None
-            if self.index in self.keys:
-                t, v = self.keys[self.index].split(':', 1)
+            if self.key:
+                t, v = self.key.split(':', 1)
                 if t == 'p':  # passphrase
                     key = v
                 elif t == 'f':  # key-file
@@ -742,8 +752,8 @@ class Volume(object):
             else:
                 logger.warning("No key material provided for %s", self)
         except ValueError:
-            logger.exception("Invalid key material provided (%s) for %s. Expecting [arg]:[value]",
-                             self.keys.get(self.index), self)
+            logger.exception("Invalid key material provided (%s) for %s. Expecting [arg]:[value]", self.key, self)
+            self._free_loopback()
             raise ArgumentError()
 
         # Open the LUKS container
@@ -769,9 +779,11 @@ class Volume(object):
                 _util.check_call_(cmd)
         except ImageMounterError:
             del self._paths['luks']
+            self._free_loopback()
             raise
         except Exception as e:
             del self._paths['luks']
+            self._free_loopback()
             raise SubsystemError(e)
 
         size = None
@@ -784,8 +796,7 @@ class Volume(object):
         except Exception:
             pass
 
-        container = self.volumes._make_subvolume()
-        container.index = "{0}.0".format(self.index)
+        container = self.volumes._make_single_subvolume()
         container.info['fsdescription'] = 'LUKS Volume'
         container.flag = 'alloc'
         container.offset = 0
@@ -810,15 +821,14 @@ class Volume(object):
         self._paths['bde'] = tempfile.mkdtemp(prefix='image_mounter_bde_')
 
         try:
-            if self.index in self.keys:
-                t, v = self.keys[self.index].split(':', 1)
+            if self.key:
+                t, v = self.key.split(':', 1)
                 key = ['-' + t, v]
             else:
                 logger.warning("No key material provided for %s", self)
                 key = []
         except ValueError:
-            logger.exception("Invalid key material provided (%s) for %s. Expecting [arg]:[value]",
-                             self.keys.get(self.index), self)
+            logger.exception("Invalid key material provided (%s) for %s. Expecting [arg]:[value]", self.key, self)
             raise ArgumentError()
 
         # noinspection PyBroadException
@@ -831,8 +841,7 @@ class Volume(object):
             logger.exception("Failed mounting BDE volume %s.", self)
             raise SubsystemError(e)
 
-        container = self.volumes._make_subvolume()
-        container.index = "{0}.0".format(self.index)
+        container = self.volumes._make_single_subvolume()
         container.info['fsdescription'] = 'BDE Volume'
         container.flag = 'alloc'
         container.offset = 0
@@ -923,8 +932,7 @@ class Volume(object):
                 return v.volumes[0]
         else:
             logger.debug("Creating RAID volume for %s", self)
-            container = self.volumes._make_subvolume()
-            container.index = "{0}.0".format(self.index)
+            container = self.volumes._make_single_subvolume()
             container.info['fsdescription'] = 'RAID Volume'
             container.info['raid_status'] = raid_status
             container.flag = 'alloc'
@@ -944,8 +952,12 @@ class Volume(object):
         else:
             return [self]
 
-    def load_fsstat_data(self):
+    def _load_fsstat_data(self):
         """Using :command:`fsstat`, adds some additional information of the volume to the Volume."""
+
+        if not _util.command_exists('fsstat'):
+            logger.warning("fsstat is not installed, could not mount volume shadow copies")
+            return
 
         process = None
 
