@@ -18,7 +18,7 @@ class VolumeSystem(object):
     system contains several :class:`Volumes`, which, in turn, may contain additional volume systems.
     """
 
-    def __init__(self, parent, vstype='detect', volume_detector='auto'):
+    def __init__(self, parent, vstype='', volume_detector=''):
         """Creates a VolumeSystem.
 
         :param parent: the parent may either be a :class:`Disk` or a :class:`Volume` that contains this  VolumeSystem.
@@ -66,8 +66,8 @@ class VolumeSystem(object):
 
         from imagemounter.volume import Volume
         v = Volume(disk=self.disk, parent=self.parent,
-                   volume_detector=self.volume_detector, vstype=self.vstype,
-                   **args)
+                   volume_detector=self.volume_detector,
+                   **args)  # vstype is not passed down, let it decide for itself.
         self.volumes.append(v)
         return v
 
