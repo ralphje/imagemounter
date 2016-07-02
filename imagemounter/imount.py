@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+#
+# This CLI is a total mess. If you want a simple example, please refer to simple_cli.py
+#
 
 from __future__ import print_function
 from __future__ import unicode_literals
@@ -10,10 +13,9 @@ import sys
 import os
 
 from imagemounter import _util, ImageParser, Unmounter, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
-
-# Python 2 compatibility
 from imagemounter.exceptions import NoRootFoundError, ImageMounterError, UnsupportedFilesystemError
 
+# Python 2 compatibility
 try:
     input = raw_input
 except NameError:
@@ -306,7 +308,8 @@ def main():
 
     if args.fstypes:
         for k, v in args.fstypes.items():
-            if v.strip() not in FILE_SYSTEM_TYPES and not (k == '?' and v.strip().lower() == 'none'):
+            if v.strip() not in FILE_SYSTEM_TYPES and v.strip() not in VOLUME_SYSTEM_TYPES \
+                    and not (k == '?' and v.strip().lower() == 'none'):
                 print("[!] Error while parsing --fstypes: {} is invalid".format(v))
                 sys.exit(1)
 

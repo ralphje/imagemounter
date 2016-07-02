@@ -40,7 +40,7 @@ class Volume(object):
     """
 
     def __init__(self, disk, parent=None, index="0", size=0, offset=0, flag='alloc', slot=0, fstype="", key="",
-                 vstype='detect', volume_detector='auto'):
+                 vstype='', volume_detector='auto'):
         """Creates a Volume object that is not mounted yet.
 
         Only use arguments as keyword arguments.
@@ -63,6 +63,10 @@ class Volume(object):
         self.index = index
         self.slot = slot
         self.flag = flag
+        self.block_size = self.disk.block_size
+
+        self.volumes = VolumeSystem(parent=self, vstype=vstype, volume_detector=volume_detector)
+
         self.fstype = fstype
         self._get_fstype_from_parser(fstype)
 
@@ -81,10 +85,6 @@ class Volume(object):
         self.was_mounted = False
         self.was_unmounted = False
 
-        # Used by functions that create subvolumes
-        self.volumes = VolumeSystem(parent=self, vstype=vstype, volume_detector=volume_detector)
-
-        self.block_size = self.disk.block_size
 
     def __unicode__(self):
         return '{0}:{1}'.format(self.index, self.info.get('fsdescription') or '-')
@@ -107,6 +107,10 @@ class Volume(object):
             self.fstype = "?" + self.disk.parser.fstypes['?']
         else:
             self.fstype = ""
+
+        if self.fstype in VOLUME_SYSTEM_TYPES:
+            self.volumes.vstype = self.fstype
+            self.fstype = 'volumesystem'
 
     def get_description(self, with_size=True):
         """Obtains a generic description of the volume, containing the file system type, index, label and NTFS version.
@@ -486,6 +490,9 @@ class Volume(object):
         # Determine fs type. If forced, always use provided type.
         if self.fstype in FILE_SYSTEM_TYPES:
             pass  # already correctly set
+        elif self.fstype in VOLUME_SYSTEM_TYPES:
+            self.volumes.vstype = self.fstype
+            self.fstype = 'volumesystem'
         else:
             last_resort = None  # use this if we can't determine the FS type more reliably
             # we have two possible sources for determining the FS type: the description given to us by the detection
@@ -539,9 +546,11 @@ class Volume(object):
                 elif "minix filesystem" in fsdesc:
                     self.fstype = 'minix'
                 elif fsdesc == 'dos':
-                    self.fstype = 'dos'
+                    self.fstype = 'volumesystem'
+                    self.volumes.vstype = 'dos'
                 elif "dos/mbr boot sector" in fsdesc:
-                    self.fstype = 'detect'  # vsdetect, choosing between dos and gpt is hard
+                    self.fstype = 'volumesystem'
+                    self.volumes.vstype = 'detect'
                 elif 'linux_raid_member' in fsdesc or 'linux software raid' in fsdesc:
                     self.fstype = 'raid'
                 elif fsdesc.upper() in FILE_SYSTEM_GUIDS:
@@ -590,7 +599,7 @@ class Volume(object):
         self.determine_fs_type()
 
         # we need a mountpoint if it is not a lvm or luks volume
-        if self.fstype not in ('luks', 'lvm', 'bde', 'raid') and self.fstype not in VOLUME_SYSTEM_TYPES and \
+        if self.fstype not in ('luks', 'lvm', 'bde', 'raid', 'volumesystem') and \
                 self.fstype in FILE_SYSTEM_TYPES:
             self._make_mountpoint()
 
@@ -644,7 +653,7 @@ class Volume(object):
 
             elif self.fstype == 'lvm':
                 self._open_lvm()
-
+                self.volumes.vstype = 'lvm'
                 for _ in self.volumes.detect_volumes('lvm'):
                     pass
 
@@ -655,8 +664,8 @@ class Volume(object):
                 os.rmdir(self.mountpoint)
                 os.symlink(raw_path, self.mountpoint)
 
-            elif self.fstype in VOLUME_SYSTEM_TYPES:
-                for _ in self.volumes.detect_volumes(self.fstype):
+            elif self.fstype == 'volumesystem':
+                for _ in self.volumes.detect_volumes():
                     pass
 
             else:

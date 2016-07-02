@@ -21,7 +21,7 @@ class Disk(object):
     """Representation of a disk, image file or anything else that can be considered a disk. """
 
     # noinspection PyUnusedLocal
-    def __init__(self, parser, path, index=None, offset=0, block_size=BLOCK_SIZE, read_write=False, vstype='detect',
+    def __init__(self, parser, path, index=None, offset=0, block_size=BLOCK_SIZE, read_write=False, vstype='',
                  disk_mounter='auto', volume_detector='auto'):
         """Instantiation of this class does not automatically mount, detect or analyse the disk. You will need the
         :func:`init` method for this.
