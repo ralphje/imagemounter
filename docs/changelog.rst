@@ -67,7 +67,7 @@ Removed and modified features:
    * Added ``init_volume``, which only mounts the single volume. It is used by ``init`` and the preferred way of mounting a single volume (instead of using ``mount``)
    * Moved several attributes of :class:`Volume` to a new :attr:`info` attribute, which is publicly accessible, but its contents are not part of a stable public API.
 
-* Changes specific to :class:`VolumeSystem`:
+* Changes specific to :class:`VolumeSystem` (if you consider it on par with the functionality moved from Disk):
    * Renamed ``detection`` to ``volume_detector`` (see also CLI)
    * Added a :func:`VolumeSystem.detect_volumes` iterable, which is the basic functionality of this class.
    * Moved ``mount_single_volume`` code from :class:`Disk` to this class, adding the ``single`` volume detection method. The directory detection method has been incorporated in this new method.

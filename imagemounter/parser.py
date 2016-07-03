@@ -146,6 +146,7 @@ class ImageParser(object):
             for v in self.get_volumes():
                 if v.index == str(index):
                     return v
+        raise KeyError(index)
 
     def get_volumes(self):
         """Gets a list of all volumes of all disks, concatenating :func:`Disk.get_volumes` of all disks.

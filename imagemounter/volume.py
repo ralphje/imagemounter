@@ -83,7 +83,7 @@ class Volume(object):
         self.mountpoint = ""
         self.loopback = ""
         self.was_mounted = False
-        self.was_unmounted = False
+        self.is_mounted = False
 
     def __unicode__(self):
         return '{0}:{1}'.format(self.index, self.info.get('fsdescription') or '-')
@@ -387,7 +387,7 @@ class Volume(object):
             logger.info("RAID array %s not ready for mounting", self)
             return False
 
-        if self.was_mounted and not self.was_unmounted:
+        if self.is_mounted:
             logger.info("%s is currently mounted, not mounting it again", self)
             return False
 
@@ -691,6 +691,7 @@ class Volume(object):
                 raise UnsupportedFilesystemError(self.fstype)
 
             self.was_mounted = True
+            self.is_mounted = True
         except Exception as e:
             logger.exception("Execution failed due to {} {}".format(type(e), e), exc_info=True)
             try:
@@ -1077,7 +1078,7 @@ class Volume(object):
             except ImageMounterError:
                 pass
 
-        if self.was_mounted and not self.was_unmounted:
+        if self.is_mounted:
             logger.info("Unmounting volume %s", self)
 
         if self.loopback and self.info.get('volume_group'):
@@ -1135,4 +1136,5 @@ class Volume(object):
             else:
                 del self._paths['carve']
 
-        self.was_unmounted = True
+        self.is_mounted = False
+
