@@ -45,6 +45,7 @@ class VolumeSystem(object):
 
         self.volume_source = ""
         self.volumes = []
+        self.has_detected = False
 
         self._disktype = defaultdict(dict)
 
@@ -82,12 +83,15 @@ class VolumeSystem(object):
         volume = self._make_subvolume(index=index, **args)
         return volume
 
-    def detect_volumes(self, vstype=None, method=None):
+    def detect_volumes(self, vstype=None, method=None, force=False):
         """Iterator for detecting volumes within this volume system.
 
         :param str vstype: The volume system type to use. If None, uses :attr:`vstype`
         :param str method: The detection method to use. If None, uses :attr:`detection`
         """
+        if self.has_detected and not force:
+            logger.warning("Detection already ran.")
+            return
 
         if vstype is None:
             vstype = self.vstype
@@ -115,6 +119,8 @@ class VolumeSystem(object):
         else:
             logger.error("No viable detection method found")
             raise ArgumentError("No viable detection method found")
+
+        self.has_detected = True
 
     @staticmethod
     def _determine_auto_detection_method():

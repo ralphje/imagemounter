@@ -58,6 +58,9 @@ class Disk(object):
         self.mountpoint = ""
         self.volumes = VolumeSystem(parent=self, volume_detector=volume_detector, vstype=vstype)
 
+        self.was_mounted = False
+        self.is_mounted = False
+
         self._disktype = defaultdict(dict)
 
     def __unicode__(self):
@@ -152,6 +155,8 @@ class Disk(object):
             if method == 'avfs':  # avfs does not participate in the fallback stuff, unfortunately
                 self._mount_avfs()
                 self.disk_mounter = method
+                self.was_mounted = True
+                self.is_mounted = True
                 return
 
             elif method == 'dummy':
@@ -159,6 +164,8 @@ class Disk(object):
                 self.mountpoint = ""
                 logger.debug("Raw path to dummy is {}".format(self.get_raw_path()))
                 self.disk_mounter = method
+                self.was_mounted = True
+                self.is_mounted = True
                 return
 
             elif method == 'xmount':
@@ -198,6 +205,8 @@ class Disk(object):
 
                 if raw_path is None:
                     raise MountpointEmptyError()
+                self.was_mounted = True
+                self.is_mounted = True
                 return
 
         logger.error('Unable to mount {0}'.format(self.paths[0]))
@@ -257,7 +266,12 @@ class Disk(object):
                        :func:`init_multiple_volumes` is always called, being followed by :func:`init_single_volume`
                        if no volumes were detected.
         """
-        if single:
+        # prevent adding the same volumes twice
+        if self.volumes.has_detected:
+            for v in self.volumes:
+                yield v
+
+        elif single:
             for v in self.volumes.detect_volumes(method='single'):
                 yield v
 
@@ -274,7 +288,7 @@ class Disk(object):
             # if single == None and no volumes were mounted, use single_volume
             if single is None and amount == 0:
                 logger.info("Detecting as single volume instead")
-                for v in self.volumes.detect_volumes(method='single'):
+                for v in self.volumes.detect_volumes(method='single', force=True):
                     yield v
 
     def init(self, single=None, disktype=True, only_mount=None, swallow_exceptions=True):
@@ -344,4 +358,4 @@ class Disk(object):
         if self.rw_active() and remove_rw:
             os.remove(self.rwpath)
 
-
+        self.is_mounted = False

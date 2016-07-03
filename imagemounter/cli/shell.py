@@ -7,6 +7,7 @@ import shlex
 
 from imagemounter import __version__, DISK_MOUNTERS
 from imagemounter.cli import CheckAction, ImageMounterFormatter, get_coloring_func
+from imagemounter.disk import Disk
 from imagemounter.parser import ImageParser
 
 
@@ -134,46 +135,78 @@ class ImageMounterShell(ArgumentParsedShell):
             pass
         print("Added {path} to the image mounter as index {index}".format(path=args.path, index=disk.index))
 
+    def _get_all_indexes(self):
+        if self.parser:
+            return [v.index for v in self.parser.get_volumes()] + [d.index for d in self.parser.disks]
+        else:
+            return None
+
     def parser_mount(self, parser):
         parser.description = "Mount a volume by its index"
-        parser.add_argument('index', help='volume index',
-                            choices=[v.index for v in self.parser.get_volumes()] if self.parser else None)
+        parser.add_argument('index', help='volume index', choices=self._get_all_indexes())
         parser.add_argument('-r', '--recursive', action='store_true')
 
     def arg_mount(self, args):
-        volume = self.parser.get_by_index(args.index)
-        try:
-            if not args.recursive:
-                volume.init_volume()
-                if volume.mountpoint:
-                    print("Mounted {index} to {path}".format(path=volume.mountpoint, index=volume.index))
-                else:
-                    print("Meh.")
+        col = get_coloring_func()
+        volume_or_disk = self.parser.get_by_index(args.index)
+        volume, disk = (volume_or_disk, None) if not isinstance(volume_or_disk, Disk) else (None, volume_or_disk)
+
+        if not args.recursive:
+            if disk and not disk.is_mounted:
+                try:
+                    disk.mount()
+                except Exception as e:
+                    pass
             else:
-                for v in volume.init():
-                    if v.mountpoint:
-                        print("Mounted {index} to {path}".format(path=volume.mountpoint, index=volume.index))
-        except Exception:
-            print("Error occurred!")
+                try:
+                    volume.init_volume()
+                    if volume.mountpoint:
+                        print("Mounted volume {index} at {path}"
+                              .format(path=col(volume.mountpoint, "green", attrs=['bold']),
+                                      index=volume.index))
+                    else:
+                        print("Mounted volume {index} (no mountpoint available)".format(index=volume.index))
+                except Exception as e:
+                    import traceback ; traceback.print_exc()
+                    print(col("An error occurred while mounting volume {index}: {type}: {args}"
+                              .format(type=type(e).__name__,
+                                      args=" ".join(map(str, e.args)),
+                                      index=volume.index), "red"))
+        else:
+            if disk:
+                it = disk.init_volumes
+            else:
+                it = volume.init
+            for v in it():
+                if v.mountpoint:
+                    print("Mounted volume {index} at {path}"
+                          .format(path=col(v.mountpoint, "green", attrs=['bold']),
+                                  index=v.index))
+                elif v.exception:
+                    e = v.exception
+                    print(col("An error occurred while mounting volume {index}: {type}: {args}"
+                              .format(type=type(e).__name__,
+                                      args=" ".join(map(str, e.args)),
+                                      index=v.index), "red"))
 
     def parser_unmount(self, parser):
         parser.description = "Unmount a volume by its index"
-        parser.add_argument('index', help='volume index', nargs='?',
-                            choices=[v.index for v in self.parser.get_volumes()] if self.parser else None)
+        parser.add_argument('index', help='volume index', nargs='?', choices=self._get_all_indexes())
 
     def arg_unmount(self, args):
         if args.index:
-            volume = self.parser.get_by_index(args.index[0])
+            volume = self.parser.get_by_index(args.index)
             volume.unmount()
             print("Unmounted {index}".format(index=volume.index))
         else:
             self.parser.clean()
+            print("Unmounted everything")
 
     def do_show(self, args):
         col = get_coloring_func()
         for disk in self.parser.disks:
             print("- {index:<5}  {type} {filename}"
-                  .format(index=col("{:<5}".format(disk.index), attrs=['bold']),
+                  .format(index=col("{:<5}".format(disk.index), 'green' if disk.is_mounted else None, attrs=['bold']),
                           type=col("{:<10}".format(disk.volumes.vstype), attrs=['dark']),
                           filename=disk.paths[0]))
 
@@ -181,10 +214,12 @@ class ImageMounterShell(ArgumentParsedShell):
                 level += 1
                 for i, v in enumerate(volumes):
                     level_str = "  "*level + ("└ " if i == len(volumes)-1 else "├ ")
+                    tp = v.volumes.vstype if v.fstype == 'volumesystem' else v.fstype if v.flag == 'alloc' else v.flag
+
                     print("{level_str}{index}  {type} {size:<10}  {description}"
                           .format(level_str=level_str,
-                                  index=col("{:<5}".format(v.index), attrs=['bold']),
-                                  type=col("{:<10}".format(v.volumes.vstype if v.fstype == 'volumesystem' else v.fstype), attrs=['dark']),
+                                  index=col("{:<5}".format(v.index), 'green' if v.is_mounted else None, attrs=['bold']),
+                                  type=col("{:<10}".format(tp), attrs=['dark']),
                                   description=v.get_description(with_index=False, with_size=False)[:30],
                                   size=v.get_formatted_size()))
                     _show_volume_system(v.volumes, level)
