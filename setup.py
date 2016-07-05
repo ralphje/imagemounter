@@ -19,7 +19,7 @@ setup(
     name='imagemounter',
     version=metadata['version'],
     license='MIT',
-    packages=['imagemounter'],
+    packages=['imagemounter', 'imagemounter.cli'],
     author='Peter Wagenaar, Ralph Broenink',
     author_email='ralph@ralphbroenink.net',
     url='https://github.com/ralphje/imagemounter',
