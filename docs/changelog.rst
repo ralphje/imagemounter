@@ -25,6 +25,7 @@ Bugfixes:
 * Calling :func:`init` will not automatically mount the volume when it is not ``alloc``.
 * Fix a bug where ``.e01`` files (lowercase) would not be recognized as Encase
 * Fixed support for newer versions of ``mmls``
+* Fixed support for pytsk3 under Python 3 (contributed by insomniacslk)
 * :attr:`index` is now always ``str``
 * :attr:`Volume.size` is now always ``int``
 
