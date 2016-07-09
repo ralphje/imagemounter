@@ -190,7 +190,7 @@ class VolumeSystem(object):
 
             try:
                 volumes = pytsk3.Volume_Info(baseimage, getattr(pytsk3, 'TSK_VS_TYPE_' + vstype.upper()),
-                                             int(self.parent.offset) / self.disk.block_size)
+                                             self.parent.offset // self.disk.block_size)
                 self.volume_source = 'multi'
                 return volumes
             except Exception as e:
