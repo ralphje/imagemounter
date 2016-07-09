@@ -516,7 +516,7 @@ class Volume(object):
                 logger.debug("Trying to determine fs type from '{}'".format(fsdesc))
                 if not fsdesc:
                     continue
-                fsdesc = str(fsdesc.lower())
+                fsdesc = fsdesc.lower()
 
                 # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info
                 if fsdesc in ('logical volume', 'luks volume', 'bde volume', 'raid volume',
