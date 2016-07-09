@@ -226,7 +226,7 @@ class VolumeSystem(object):
                                           offset=p.start * self.disk.block_size,
                                           size=p.len * self.disk.block_size)
             # Fill volume with more information
-            volume.info['fsdescription'] = p.desc.strip()
+            volume.info['fsdescription'] = p.desc.strip().decode('utf-8')
 
             if p.flags == pytsk3.TSK_VS_PART_FLAG_ALLOC:
                 volume.flag = 'alloc'
