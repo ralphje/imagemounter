@@ -249,7 +249,7 @@ class VolumeSystem(object):
         try:
             cmd = ['mmls']
             if self.parent.offset:
-                cmd.extend(['-o', str(int(self.parent.offset) / self.disk.block_size)])
+                cmd.extend(['-o', str(self.parent.offset // self.disk.block_size)])
             if vstype != 'detect':
                 cmd.extend(['-t', vstype])
             cmd.append(self.parent.get_raw_path())

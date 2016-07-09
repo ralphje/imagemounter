@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import unicode_literals
+from __future__ import division
 
 import io
 import logging
@@ -144,11 +145,11 @@ class Volume(object):
             elif self.size < 1024 ** 2:
                 return "{0} KiB".format(round(self.size / 1024, 2))
             elif self.size < 1024 ** 3:
-                return "{0} MiB".format(round(self.size / 1024.0 ** 2, 2))
+                return "{0} MiB".format(round(self.size / 1024 ** 2, 2))
             elif self.size < 1024 ** 4:
-                return "{0} GiB".format(round(self.size / 1024.0 ** 3, 2))
+                return "{0} GiB".format(round(self.size / 1024 ** 3, 2))
             else:
-                return "{0} TiB".format(round(self.size / 1024.0 ** 4, 2))
+                return "{0} TiB".format(round(self.size / 1024 ** 4, 2))
         else:
             return self.size
 
@@ -682,12 +683,12 @@ class Volume(object):
 
             else:
                 try:
-                    size = self.size / self.disk.block_size
+                    size = self.size // self.disk.block_size
                 except TypeError:
                     size = self.size
 
                 logger.warning("Unsupported filesystem {0} (type: {1}, block offset: {2}, length: {3})"
-                               .format(self, self.fstype, self.offset / self.disk.block_size, size))
+                               .format(self, self.fstype, self.offset // self.disk.block_size, size))
                 raise UnsupportedFilesystemError(self.fstype)
 
             self.was_mounted = True
