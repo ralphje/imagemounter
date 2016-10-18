@@ -26,6 +26,7 @@ Bugfixes:
 * Fix a bug where ``.e01`` files (lowercase) would not be recognized as Encase
 * Fixed support for newer versions of ``mmls``
 * Fixed support for pytsk3 under Python 3 (contributed by insomniacslk)
+* Fixed support for EnCase v7 (EX01) image files (contributed by pix)
 * :attr:`index` is now always ``str``
 * :attr:`Volume.size` is now always ``int``
 
