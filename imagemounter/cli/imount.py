@@ -41,6 +41,8 @@ def main():
     parser.add_argument('--version', action='version', version=__version__, help='display version and exit')
     parser.add_argument('--check', action=CheckAction, nargs=0,
                         help='do a system check and list which tools are installed')
+    parser.add_argument('-i', '--interactive', action='store_true', default=False,
+                        help='enter the interactive shell')
 
     # Utility specific
     parser.add_argument('-u', '--unmount', action='store_true', default=False,
@@ -224,9 +226,10 @@ def main():
                   "installed. Mounting volume shadow copies will be disabled.", 'yellow'))
         args.vshadow = False
 
-    if not args.images and not args.unmount:
-        print(col("[-] You must specify at least one path to a disk image", 'red'))
-        sys.exit(1)
+    if (args.interactive or not args.images) and not args.unmount:
+        from imagemounter.cli.shell import main
+        main()
+        return
 
     if args.unmount:
         unmounter = Unmounter(**vars(args))

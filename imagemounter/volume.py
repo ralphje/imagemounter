@@ -601,11 +601,15 @@ class Volume(object):
         If the file system type is a LUKS container or LVM, additional methods may be called, adding subvolumes to
         :attr:`volumes`
 
+        :raises NotMountedError: if the parent volume/disk is not mounted
         :raises NoMountpointAvailableError: if no mountpoint was found
         :raises NoLoopbackAvailableError: if no loopback device was found
         :raises UnsupportedFilesystemError: if the fstype is not supported for mounting
         :raises SubsystemError: if one of the underlying commands failed
         """
+
+        if not self.parent.is_mounted:
+            raise NotMountedError(self.parent)
 
         raw_path = self.get_raw_path()
         self.determine_fs_type()
@@ -717,7 +721,7 @@ class Volume(object):
         """
 
         if not self.mountpoint:
-            raise NotMountedError()
+            raise NotMountedError(self)
         try:
             _util.check_call_(['mount', '--bind', self.mountpoint, mountpoint], stdout=subprocess.PIPE)
             if 'bindmounts' in self._paths:

@@ -44,7 +44,7 @@ class PrerequisiteFailedError(ImageMounterError):
 
 
 class NotMountedError(PrerequisiteFailedError):
-    """Used by methods that require the volume to be mounted."""
+    """Used by methods that require a volume or disk to be mounted."""
     pass
 
 
