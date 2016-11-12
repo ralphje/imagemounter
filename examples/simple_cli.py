@@ -108,11 +108,17 @@ def main():
             sys.stdout.write("[+] Mounting volume shadow copies...\r")
             sys.stdout.flush()
             try:
-                path = volume.vshadowmount()
+                volumes = volume.detect_volume_shadow_copies()
             except ImageMounterError:
                 print(colored('[-] Volume shadow copies could not be mounted.', 'red'))
             else:
-                print('[+] Volume shadow copies available at {0}.'.format(colored(path, 'green', attrs=['bold'])))
+                for v in volumes:
+                    try:
+                        v.init_volume()
+                    except ImageMounterError:
+                        print(colored('[-] Volume shadow copy {} not mounted'.format(v), 'red'))
+                    else:
+                        print('[+] Volume shadow copy available at {0}.'.format(colored(v.mountpoint, 'green', attrs=['bold'])))
         else:
             continue  # we do not need the unmounting sequence
 
