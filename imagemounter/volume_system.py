@@ -104,6 +104,9 @@ class VolumeSystem(object):
         if vstype == 'lvm':
             for v in self._detect_lvm_volumes(self.parent.info.get('volume_group')):
                 yield v
+        elif vstype == 'vss':
+            for v in self._detect_vss_volumes(self.parent._paths['vss']):
+                yield v
         elif method == 'single':  # dummy method for Disk
             for v in self._detect_single_volume():
                 yield v
@@ -406,6 +409,30 @@ class VolumeSystem(object):
 
         logger.info("{0} volumes found".format(len(self)))
         self.volume_source = 'multi'
+        return self.volumes
+
+    def _detect_vss_volumes(self, path):
+        """Detect volume shadow copy volumes in the specified path."""
+
+        try:
+            volume_info = _util.check_output_(["vshadowinfo", "-o", str(self.parent.offset), self.parent.get_raw_path()])
+        except Exception as e:
+            logger.exception("Failed obtaining info from the volume shadow copies.")
+            raise SubsystemError(e)
+
+        current_store = None
+        for line in volume_info.splitlines():
+            line = line.strip()
+            if line.startswith("Store:"):
+                idx = line.split(":")[-1].strip()
+                current_store = self._make_subvolume(index=self._format_index(idx), flag='alloc', offset=0)
+                current_store._paths['vss_store'] = os.path.join(path, 'vss'+idx)
+                current_store.info['fsdescription'] = 'VSS Store'
+            elif line.startswith("Volume size"):
+                current_store.size = int(line.split(":")[-1].strip().split()[0])
+            elif line.startswith("Creation time"):
+                current_store.info['creation_time'] = line.split(":")[-1].strip()
+
         return self.volumes
 
     def load_disktype_data(self):

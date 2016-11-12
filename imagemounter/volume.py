@@ -2,6 +2,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
 
+import glob
 import io
 import logging
 import os
@@ -227,6 +228,8 @@ class Volume(object):
                 return '/dev/mapper/' + v._paths['luks']
             elif v._paths.get('md'):
                 return v._paths['md']
+            elif v._paths.get('vss_store'):
+                return v._paths['vss_store']
 
             # Only if the volume has a parent that is not a disk, we try to check the parent for a location.
             if v.parent and v.parent != self.disk:
@@ -305,10 +308,10 @@ class Volume(object):
                 logger.exception("Failed carving the volume.")
                 raise SubsystemError(e)
 
-    def vshadowmount(self):
+    def detect_volume_shadow_copies(self):
         """Method to call vshadowmount and mount NTFS volume shadow copies.
 
-        :return: string representing the path to the volume shadow copies
+        :return: iterable with the :class:`Volume` objects of the VSS
         :raises CommandNotFoundError: if the underlying command does not exist
         :raises SubSystemError: if the underlying command fails
         :raises NoMountpointAvailableError: if there is no mountpoint available
@@ -322,10 +325,11 @@ class Volume(object):
 
         try:
             _util.check_call_(["vshadowmount", "-o", str(self.offset), self.get_raw_path(), self._paths['vss']])
-            return self._paths['vss']
         except Exception as e:
             logger.exception("Failed mounting the volume shadow copies.")
             raise SubsystemError(e)
+        else:
+            return self.volumes.detect_volumes(vstype='vss')
 
     def _should_mount(self, only_mount=None):
         """Indicates whether this volume should be mounted. Internal method, used by imount.py"""
@@ -521,7 +525,7 @@ class Volume(object):
 
                 # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info
                 if fsdesc in ('logical volume', 'luks volume', 'bde volume', 'raid volume',
-                              'primary', 'basic data partition'):
+                              'primary', 'basic data partition', 'vss store'):
                     continue
 
                 if fsdesc == 'directory':
