@@ -15,6 +15,8 @@ UFS
 ---
 Supported are UFS and UFS2. Similar to ext, we use the UFS2 driver to mount both types.
 
+Depending on your OS, you may need to run ``modprobe ufs`` to enable UFS support in your kernel.
+
 NTFS
 ----
 For mounting NTFS, you may need the *ntfs-3g* package. The ``show_sys_files`` option is enabled by default.
