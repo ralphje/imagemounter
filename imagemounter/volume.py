@@ -532,7 +532,7 @@ class Volume(object):
                     self.fstype = 'dir'  # dummy fs type
                 elif re.search(r'\bext[0-9]*\b', fsdesc):
                     self.fstype = 'ext'
-                elif 'bsd' in fsdesc:
+                elif 'bsd' in fsdesc or 'ufs 2' in fsdesc:
                     self.fstype = 'ufs'
                 elif '0x07' in fsdesc or 'ntfs' in fsdesc:
                     self.fstype = 'ntfs'
@@ -569,6 +569,9 @@ class Volume(object):
                     self.volumes.vstype = 'detect'
                 elif 'linux_raid_member' in fsdesc or 'linux software raid' in fsdesc:
                     self.fstype = 'raid'
+                elif fsdesc in VOLUME_SYSTEM_TYPES:
+                    # fallback for stupid cases where we can not determine 'ufs' from the fsdesc 'ufs'
+                    self.fstype = fsdesc
                 elif fsdesc.upper() in FILE_SYSTEM_GUIDS:
                     # this is a bit of a workaround for the fill_guid method
                     self.fstype = FILE_SYSTEM_GUIDS[fsdesc.upper()]
