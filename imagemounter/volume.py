@@ -580,17 +580,17 @@ class Volume(object):
                     self.fstype = 'minix'
                 elif 'vmfs_volume_member' in fsdesc:
                     self.fstype = 'vmfs'
-                elif fsdesc == 'dos':
-                    self.fstype = 'volumesystem'
-                    self.volumes.vstype = 'dos'
+                elif 'linux_raid_member' in fsdesc or 'linux software raid' in fsdesc:
+                    self.fstype = 'raid'
                 elif "dos/mbr boot sector" in fsdesc:
                     self.fstype = 'volumesystem'
                     self.volumes.vstype = 'detect'
-                elif 'linux_raid_member' in fsdesc or 'linux software raid' in fsdesc:
-                    self.fstype = 'raid'
-                elif fsdesc in VOLUME_SYSTEM_TYPES:
+                elif fsdesc in FILE_SYSTEM_TYPES:
                     # fallback for stupid cases where we can not determine 'ufs' from the fsdesc 'ufs'
                     self.fstype = fsdesc
+                elif fsdesc in VOLUME_SYSTEM_TYPES:
+                    self.fstype = 'volumesystem'
+                    self.volumes.vstype = fsdesc
                 elif fsdesc.upper() in FILE_SYSTEM_GUIDS:
                     # this is a bit of a workaround for the fill_guid method
                     self.fstype = FILE_SYSTEM_GUIDS[fsdesc.upper()]
