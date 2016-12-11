@@ -9,7 +9,7 @@ import shlex
 
 import pickle
 
-from imagemounter import __version__, DISK_MOUNTERS
+from imagemounter import __version__, DISK_MOUNTERS, FILE_SYSTEM_TYPES
 from imagemounter.cli import CheckAction, ImageMounterFormatter, get_coloring_func
 from imagemounter.disk import Disk
 from imagemounter.parser import ImageParser
@@ -175,6 +175,7 @@ class ImageMounterShell(ArgumentParsedShell):
         parser.add_argument("--mounter", choices=DISK_MOUNTERS, help="the method to mount with")
 
     def arg_disk(self, args):
+        args.path = os.path.expanduser(args.path)
         if not os.path.exists(args.path):
             return self.error("The path {path} does not exist".format(path=args.path))
         disk = self.parser.add_disk(args.path, disk_mounter=args.mounter)
@@ -188,9 +189,14 @@ class ImageMounterShell(ArgumentParsedShell):
     ######################################################################
 
     def parser_mount(self, parser):
-        parser.description = "Mount a volume by its index"
-        parser.add_argument('index', help='volume index', choices=self._get_all_indexes())
-        parser.add_argument('-r', '--recursive', action='store_true')
+        parser.description = "Mount a volume or disk by its index"
+        parser.add_argument('index', help='volume or disk index', choices=self._get_all_indexes())
+        parser.add_argument('-r', '--recursive', action='store_true',
+                            help='recursively mount all volumes under this index')
+        parser.add_argument('-f', '--fstype', default=None, choices=FILE_SYSTEM_TYPES,
+                            help='specify the file system type for the volume')
+        parser.add_argument('-k', '--key', default=None,
+                            help='specify the key for the volume')
 
     def arg_mount(self, args):
         col = get_coloring_func()
@@ -208,7 +214,9 @@ class ImageMounterShell(ArgumentParsedShell):
             else:
                 if not volume.is_mounted:
                     try:
-                        volume.init_volume()
+                        if args.key is not None:
+                            volume.key = args.key
+                        volume.init_volume(fstype=args.fstype)
                         if volume.is_mounted:
                             if volume.mountpoint:
                                 print("Mounted volume {index} at {path}"
@@ -230,6 +238,11 @@ class ImageMounterShell(ArgumentParsedShell):
                         print(col("Volume {} is already mounted.".format(volume.index), 'red'))
         else:
             if disk:
+                if not disk.is_mounted:
+                    try:
+                        disk.mount()
+                    except Exception as e:
+                        pass
                 it = disk.init_volumes
             else:
                 it = volume.init
@@ -349,6 +362,49 @@ class ImageMounterShell(ArgumentParsedShell):
             _show_volume_system(disk.volumes)
 
     ######################################################################
+    # set command
+    ######################################################################
+
+    def parser_set(self, parser):
+        parser.description = "Modifies a property of a volume or disk. This is for advanced usage only."
+        parser.add_argument('index', help='volume index', choices=self._get_all_indexes())
+        parser.add_argument('name', help='property name', choices=['size', 'offset', 'slot', 'flag', 'block_size',
+                                                                   'fstype', 'key', 'disk_mounter'])
+        parser.add_argument('value', help='property value')
+
+    def arg_set(self, args):
+        col = get_coloring_func()
+        volume, disk = self._get_by_index(args.index)
+
+        if volume:
+            if args.name in ['size', 'offset', 'block_size']:
+                try:
+                    setattr(volume, args.name, int(args.value))
+                except ValueError:
+                    print(col("Invalid value provided for {}".format(args.name), 'red'))
+                else:
+                    print(col("Updated value for {}".format(args.name), 'green'))
+            elif args.name in ['slot', 'flag', 'fstype', 'key']:
+                setattr(volume, args.name, args.value)
+                print(col("Updated value for {}".format(args.name), 'green'))
+            else:
+                print(col("Property {} can't be set for a volume".format(args.name), 'red'))
+
+        else:
+            if args.name in ['offset', 'block_size']:
+                try:
+                    setattr(disk, args.name, int(args.value))
+                except ValueError:
+                    print(col("Invalid value provided for {}".format(args.name), 'red'))
+                else:
+                    print(col("Updated value for {}".format(args.name), 'green'))
+            elif args.name in ['disk_mounter']:
+                setattr(disk, args.name, args.value)
+                print(col("Updated value for {}".format(args.name), 'green'))
+            else:
+                print(col("Property {} can't be set for a disk".format(args.name), 'red'))
+
+    ######################################################################
     # quit command
     ######################################################################
 
@@ -380,10 +436,13 @@ def main():
     args = parser.parse_args()
     col = get_coloring_func()
 
+    print(col("WARNING: the interactive console is still in active development.", attrs=['dark']))
+
     handler = logging.StreamHandler()
     handler.setFormatter(ImageMounterFormatter(col, verbosity=args.verbose))
     logger = logging.getLogger("imagemounter")
     logger.setLevel({0: logging.CRITICAL, 1: logging.WARNING, 2: logging.INFO}.get(args.verbose, logging.DEBUG))
+    logger.handlers = []
     logger.addHandler(handler)
 
     shell = ImageMounterShell()

@@ -40,6 +40,7 @@ Removed and modified features:
    * Removed :option:`--fsforce` and :option:`--fsfallback`. Use ``*`` and ``?`` as fstypes instead for the same effect. This should make the CLI more sensible, especially regarding the :option:`--fsforce` argument. The default FS fallback is still ``unknown``, which can only be overridden by specifying ``--fstypes=?=none``. (You can now specify ``--fstypes=TYPE``, which equals to ``--fstypes=*=TYPE``)
    * Removed ``--stats`` and ``--no-stats``. These only complicated things and ``fsstat`` has been working fine for years now.
    * Removed ``--raid`` and ``--no-raid`` (due to Volume RAID support)
+   * Removed ``--disktype`` and ``--no-disktype``.
    * Renamed ``--method`` to ``--disk-mounter``.
    * Renamed ``--detection`` to ``--volume-detector``.
    * Renamed ``--vstype`` to ``--vstypes``, now accepting a dict, similar to ``--fstypes``
