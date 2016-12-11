@@ -6,9 +6,11 @@ We try to reduce backwards compatibility breakage only to major version releases
 Release history
 ~~~~~~~~~~~~~~~
 
-3.0.0 (future release)
-----------------------
+3.0.0 (2016-12-11)
+------------------
 This new release includes several backwards-incompatible changes, mostly because features were removed from the public API or have been renamed to obtain a more consistent API.
+
+It was released after a long time of development, and does not even contain all features that were intended to go into this release, but it contains some important bugfixes that warranted a release.
 
 New major features:
 
@@ -29,6 +31,7 @@ Bugfixes:
 * Fixed support for EnCase v7 (EX01) image files (contributed by pix)
 * :attr:`index` is now always ``str``
 * :attr:`Volume.size` is now always ``int``
+* Improved the unmounter with generic loopback support
 
 Removed and modified features:
 
