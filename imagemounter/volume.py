@@ -561,6 +561,8 @@ class Volume(object):
                     self.fstype = 'jffs2'
                 elif "minix filesystem" in fsdesc:
                     self.fstype = 'minix'
+                elif 'vmfs_volume_member' in fsdesc:
+                    self.fstype = 'vmfs'
                 elif fsdesc == 'dos':
                     self.fstype = 'volumesystem'
                     self.volumes.vstype = 'dos'
