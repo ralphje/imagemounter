@@ -64,6 +64,8 @@ class Unmounter(object):
         for vgname, pvname in self.find_volume_groups():
             commands.append('lvchange -a n {0}'.format(vgname))
             commands.append('losetup -d {0}'.format(pvname))
+        for device in self.find_loopbacks():
+            commands.append('losetup -d {0}'.format(device))
         for mountpoint in self.find_base_images():
             commands.append('fusermount -u {0}'.format(mountpoint))
             commands.append('rm -Rf {0}'.format(mountpoint))
@@ -79,6 +81,7 @@ class Unmounter(object):
         self.unmount_bindmounts()
         self.unmount_mounts()
         self.unmount_volume_groups()
+        self.unmount_loopbacks()
         self.unmount_base_images()
         self.clean_dirs()
 
@@ -166,6 +169,16 @@ class Unmounter(object):
         except Exception:
             pass
 
+    def find_loopbacks(self):
+        """Finds all loopbacks originating from :attr:`orig_re_pattern`.
+
+        Generator yields device names
+        """
+
+        for dev, source in self.loopbacks.items():
+            if re.match(self.orig_re_pattern, source):
+                yield dev
+
     def unmount_bindmounts(self):
         """Unmounts all bind mounts identified by :func:`find_bindmounts`"""
 
@@ -190,6 +203,12 @@ class Unmounter(object):
         for vgname, pvname in self.find_volume_groups():
             _util.check_output_(['lvchange', '-a', 'n', vgname])
             _util.check_output_(['losetup', '-d', pvname])
+
+    def unmount_loopbacks(self):
+        """Unmounts all loopback devices as identified by :func:`find_loopbacks`"""
+
+        for dev in self.find_loopbacks():
+            _util.check_output_(['losetup', '-d', dev])
 
     def find_clean_dirs(self):
         """Finds all (temporary) directories according to the glob and re patterns that should be cleaned."""
