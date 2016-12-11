@@ -193,9 +193,3 @@ Advanced toggles
    :command:`imount` will, by default, try to detect whether the disk that is being mounted, contains an entire volume system, or only a single volume. If you know your volumes are not single volumes, or you know they are, use :option:`--no-single` and :option:`--single` respectively.
 
    Where :option:`--single` forces the mounting of the disk as a single volume, :option:`--no-single` will prevent the identification of the disk as a single volume if no volume system is found.
-
-
-.. cmdoption:: --disktype
-               --no-disktype
-
-   Forcibly enable or disable the use of :command:`disktype` for additional disk information.

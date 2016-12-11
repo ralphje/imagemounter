@@ -36,16 +36,17 @@ The best example of the use of the Python interface is the :command:`imount` com
 
 .. autoclass:: ImageParser
 
+   .. automethod:: add_disk
    .. automethod:: init
+   .. automethod:: init_volumes
    .. automethod:: reconstruct
    .. automethod:: clean
-   .. automethod:: force_clean
-
 
    Most methods above, especially :func:`init`, handle most complicated tasks. However, you may need some more fine-grained control over the mount process, which may require you to use the following methods. Each of these methods passes their activities down to all disks in the parser and return whether it succeeded.
 
    .. automethod:: rw_active
    .. automethod:: get_volumes
+   .. automethod:: get_by_index
 
    .. automethod:: mount_disks
    .. automethod:: mount_volumes
@@ -58,32 +59,31 @@ The best example of the use of the Python interface is the :command:`imount` com
 
    .. attribute:: paths
                   casename
-                  args
+                  fstypes
+                  keys
+                  vstypes
+                  mountdir
+                  pretty
 
       See the constructor of :class:`ImageParser`.
 
 .. autoclass:: Disk
 
    .. automethod:: init
+   .. automethod:: mount
+   .. automethod:: detect_volumes
+   .. automethod:: init_volumes
    .. automethod:: unmount
 
    The following methods are only required if you want some fine-grained control, typically if you are not using :func:`init`.
 
+   .. automethod:: get_disk_type
    .. automethod:: rw_active
    .. automethod:: get_fs_path
    .. automethod:: get_raw_path
    .. automethod:: get_volumes
 
-   .. automethod:: mount
-   .. automethod:: mount_volumes
-   .. automethod:: mount_multiple_volumes
-   .. automethod:: mount_single_volume
-
    The following attributes are also available:
-
-   .. attribute:: name
-
-      Pretty name of the disk.
 
    .. attribute:: index
 
@@ -101,10 +101,6 @@ The best example of the use of the Python interface is the :command:`imount` com
 
       :class:`VolumeSystem` of all direct child volumes of this disk, excluding all subvolumes. See :func:`get_volumes`.
 
-   .. attribute:: volume_source
-
-      The source of the volumes of this disk, either *single* or *multi*, filled after a call to :func:`mount_volumes`.
-
    .. attribute:: method
 
       Used to store the base mount method. If it is set to ``auto``, this value will be overwritten with the actually used
@@ -113,11 +109,10 @@ The best example of the use of the Python interface is the :command:`imount` com
       See also the constructor of :class:`Disk`.
 
    .. attribute:: parser
-                  path
+                  paths
                   offset
                   read_write
-                  multifile
-                  args
+                  disk_mounter
 
       See the constructor of :class:`Disk`.
 
@@ -125,6 +120,7 @@ The best example of the use of the Python interface is the :command:`imount` com
 
 
    .. automethod:: init
+   .. automethod:: init_volume
    .. automethod:: unmount
 
    The following methods offer some more information about the volume:
@@ -140,7 +136,8 @@ The best example of the use of the Python interface is the :command:`imount` com
    .. automethod:: get_raw_path
    .. automethod:: mount
    .. automethod:: bindmount
-   .. automethod:: load_fsstat_data
+   .. automethod:: carve
+   .. automethod:: detect_volume_shadow_copies
    .. automethod:: detect_mountpoint
 
    The following details may also be available as attributes:
@@ -158,13 +155,25 @@ The best example of the use of the Python interface is the :command:`imount` com
       The index of the volume in the disk. If there are subvolumes, the index is separated by periods, though the exact
       format depends on the detection method and its format.
 
+   .. attribute:: slot
+
+      Internal slot number of the volume.
+
    .. attribute:: flag
 
       Indicates whether this volume is allocated (*alloc*), unallocated (*unalloc*) or a meta volume (*meta*).
 
+   .. attribute:: block_size
+
+      The block size of this volume.
+
    .. attribute:: fstype
 
       The volume file system type used internally as determined by :func:`determine_fs_type`.
+
+   .. attribute:: key
+
+      The key used by some crypto methods.
 
    .. attribute:: info
 
@@ -190,8 +199,9 @@ The best example of the use of the Python interface is the :command:`imount` com
       The loopback device used by the volume after :func:`mount` (or related methods) has been called.
 
    .. attribute:: was_mounted
+                  is_mounted
 
-      Boolean indicating that the volume has successfully been mounted during its lifetime.
+      Booleans indicating that the volume has successfully been mounted during its lifetime, and is currently mounted
 
    .. attribute:: volumes
                   parent
@@ -211,7 +221,22 @@ The best example of the use of the Python interface is the :command:`imount` com
 .. autoclass:: VolumeSystem
 
    .. automethod:: detect_volumes
-   .. automethod:: load_disktype_data
+   .. automethod:: preload_volume_data
+
+   .. automethod:: __iter__
+   .. automethod:: __getitem__
+
+   .. attribute:: volumes
+
+      The list of all volumes in this system.
+
+   .. attribute:: volume_source
+
+      The source of the volumes of this system, either *single* or *multi*.
+
+   .. attribute:: has_detected
+
+      Boolean indicating whether this volume already ran its detection.
 
    .. attribute:: vstype
                   detection

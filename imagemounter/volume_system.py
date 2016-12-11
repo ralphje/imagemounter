@@ -73,8 +73,14 @@ class VolumeSystem(object):
         self.volumes.append(v)
         return v
 
-    def _make_single_subvolume(self, **args):
-        """Creates a subvolume, adds it to this class, sets the volume index to 0 and returns it."""
+    def _make_single_subvolume(self, only_one=True, **args):
+        """Creates a subvolume, adds it to this class, sets the volume index to 0 and returns it.
+
+        :param bool only_one: if this volume system already has at least one volume, it is returned instead.
+        """
+
+        if only_one and self.volumes:
+            return self.volumes[0]
 
         if self.parent.index is None:
             index = '0'
@@ -88,6 +94,7 @@ class VolumeSystem(object):
 
         :param str vstype: The volume system type to use. If None, uses :attr:`vstype`
         :param str method: The detection method to use. If None, uses :attr:`detection`
+        :param bool force: Specify if you wnat to force running the detection if has_Detected is True.
         """
         if self.has_detected and not force:
             logger.warning("Detection already ran.")
@@ -435,7 +442,12 @@ class VolumeSystem(object):
 
         return self.volumes
 
-    def load_disktype_data(self):
+    def preload_volume_data(self):
+        """Preloads volume data. It is used to call internal methods that contain information about a volume."""
+
+        self._load_disktype_data()
+
+    def _load_disktype_data(self):
         """Calls the :command:`disktype` command and obtains the disk GUID from GPT volume systems. As we
         are running the tool anyway, the label is also extracted from the tool if it is not yet set.
 

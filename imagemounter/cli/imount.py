@@ -104,10 +104,6 @@ def main():
     # Toggles for default settings you may perhaps want to override
 
     toggroup = parser.add_argument_group('toggles')
-    toggroup.add_argument('--disktype', action='store_true', default=False,
-                          help='use the disktype command to get even more information about the volumes (default)')
-    toggroup.add_argument('--no-disktype', action='store_true', default=False,
-                          help='do not use disktype to get more information')
     toggroup.add_argument('--single', action='store_true', default=False,
                           help="do not try to find a volume system, but assume the image contains a single volume")
     toggroup.add_argument('--no-single', action='store_true', default=False,
@@ -133,15 +129,6 @@ def main():
         print(col("Bug reports: use -vvvv to get maximum verbosity and include  imount --check  output in your report",
                   attrs=['dark']))
         print(col("Critical bug? Use git tag to list all versions and use git checkout <version>", attrs=['dark']))
-
-    # Make args.disktype default to True
-    explicit_disktype = False
-    if not args.disktype and args.no_disktype:
-        args.disktype = False
-    else:
-        if args.disktype:
-            explicit_disktype = True
-        args.disktype = True
 
     # Make args.single default to None
     if args.single == args.no_single:
@@ -186,12 +173,6 @@ def main():
         print(col("[-] No tools installed to detect volumes! Please install mmls (sleuthkit), pytsk3 or parted first.",
                   'red'))
         sys.exit(1)
-
-    # Check if disktype is available
-    if args.disktype and not _util.command_exists('disktype'):
-        if explicit_disktype:
-            print(col("[-] The disktype command can not be used in this session, as it is not installed.", 'yellow'))
-        args.disktype = False
 
     if args.fstypes:
         for k, v in args.fstypes.items():
@@ -290,8 +271,7 @@ def main():
                 if args.read_write:
                     print('[+] Created read-write cache at {0}'.format(disk.rwpath))
 
-                if args.disktype:
-                    disk.volumes.load_disktype_data()
+                disk.volumes.preload_volume_data()
                 print('[+] Mounted raw image [{num}/{total}]'.format(num=num, total=len(args.images)))
 
             sys.stdout.write("[+] Mounting volume...\r")

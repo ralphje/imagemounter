@@ -49,6 +49,12 @@ class Volume(object):
 
         :param disk: the parent disk
         :type disk: :class:`Disk`
+        :param parent: the parent volume or disk.
+        :param str index: the volume index within its volume system, see the attribute documentation.
+        :param int size: the volume size, see the attribute documentation.
+        :param int offset: the volume offset, see the attribute documentation.
+        :param str flag: the volume flag, see the attribute documentation.
+        :param int slot: the volume slot, see the attribute documentation.
         :param str fstype: the fstype you wish to use for this Volume. May be ?<fstype> as a fallback value. If not
                            specified, will be retrieved from the ImageParser instance instead.
         :param str key: the key to use for this Volume.
@@ -213,12 +219,23 @@ class Volume(object):
             logger.warning("The python-magic module is not available, but another module named magic was found.")
         return None  # returning None is better here, since we do not care about the exception in determine_fs_type
 
-    def get_raw_path(self):
+    def get_raw_path(self, include_self=False):
         """Retrieves the base mount path of the volume. Typically equals to :func:`Disk.get_fs_path` but may also be the
         path to a logical volume. This is used to determine the source path for a mount call.
+
+        The value returned is normally based on the parent's paths, e.g. if this volume is mounted to a more specific
+        path, only its children return the more specific path, this volume itself will keep returning the same path.
+        This makes for consistent use of the offset attribute. If you do not need this behaviour, you can override this
+        with the include_self argument.
         """
 
         v = self
+        if not include_self:
+            if v.parent and v.parent != self.disk:
+                v = v.parent
+            else:
+                return self.disk.get_fs_path()
+
         while True:
             if v._paths.get('lv'):
                 return v._paths['lv']
@@ -375,7 +392,7 @@ class Volume(object):
                 for s in v.init(only_mount, swallow_exceptions):
                     yield s
 
-    def init_volume(self):
+    def init_volume(self, fstype=None):
         """Initializes a single volume. You should use this method instead of :func:`mount` if you want some sane checks
         before mounting.
         """
@@ -397,7 +414,7 @@ class Volume(object):
             return False
 
         logger.info("Mounting volume {0}".format(self))
-        self.mount()
+        self.mount(fstype=fstype)
         self.detect_mountpoint()
 
         return True
@@ -602,7 +619,7 @@ class Volume(object):
 
         return self.fstype
 
-    def mount(self):
+    def mount(self, fstype=None):
         """Based on the file system type as determined by :func:`determine_fs_type`, the proper mount command is executed
         for this volume. The volume is mounted in a temporary path (or a pretty path if :attr:`pretty` is enabled) in
         the mountpoint as specified by :attr:`mountpoint`.
@@ -621,12 +638,13 @@ class Volume(object):
             raise NotMountedError(self.parent)
 
         raw_path = self.get_raw_path()
-        self.determine_fs_type()
+        if fstype is None:
+            fstype = self.determine_fs_type()
         self._load_fsstat_data()
 
         # we need a mountpoint if it is not a lvm or luks volume
-        if self.fstype not in ('luks', 'lvm', 'bde', 'raid', 'volumesystem') and \
-                self.fstype in FILE_SYSTEM_TYPES:
+        if fstype not in ('luks', 'lvm', 'bde', 'raid', 'volumesystem') and \
+                fstype in FILE_SYSTEM_TYPES:
             self._make_mountpoint()
 
         # Prepare mount command
@@ -638,59 +656,59 @@ class Volume(object):
 
                 _util.check_output_(cmd, stderr=subprocess.STDOUT)
 
-            if self.fstype == 'ext':
+            if fstype == 'ext':
                 call_mount('ext4', 'noexec,noload,loop,offset=' + str(self.offset))
 
-            elif self.fstype == 'ufs':
+            elif fstype == 'ufs':
                 call_mount('ufs', 'ufstype=ufs2,loop,offset=' + str(self.offset))
 
-            elif self.fstype == 'ntfs':
+            elif fstype == 'ntfs':
                 call_mount('ntfs', 'show_sys_files,noexec,force,loop,offset=' + str(self.offset))
 
-            elif self.fstype == 'xfs':
+            elif fstype == 'xfs':
                 call_mount('xfs', 'norecovery,loop,offset=' + str(self.offset))
 
-            elif self.fstype == 'hfs+':
+            elif fstype == 'hfs+':
                 call_mount('hfsplus', 'force,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
 
-            elif self.fstype in ('iso', 'udf', 'squashfs', 'cramfs', 'minix', 'fat', 'hfs'):
-                mnt_type = {'iso': 'iso9660', 'fat': 'vfat'}.get(self.fstype, self.fstype)
+            elif fstype in ('iso', 'udf', 'squashfs', 'cramfs', 'minix', 'fat', 'hfs'):
+                mnt_type = {'iso': 'iso9660', 'fat': 'vfat'}.get(fstype, fstype)
                 call_mount(mnt_type, 'loop,offset=' + str(self.offset))
 
-            elif self.fstype == 'vmfs':
+            elif fstype == 'vmfs':
                 self._find_loopback()
                 _util.check_call_(['vmfs-fuse', self.loopback, self.mountpoint], stdout=subprocess.PIPE)
 
-            elif self.fstype == 'unknown':  # mounts without specifying the filesystem type
+            elif fstype == 'unknown':  # mounts without specifying the filesystem type
                 cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
                 _util.check_call_(cmd, stdout=subprocess.PIPE)
 
-            elif self.fstype == 'jffs2':
+            elif fstype == 'jffs2':
                 self._open_jffs2()
 
-            elif self.fstype == 'luks':
+            elif fstype == 'luks':
                 self._open_luks_container()
 
-            elif self.fstype == 'bde':
+            elif fstype == 'bde':
                 self._open_bde_container()
 
-            elif self.fstype == 'lvm':
+            elif fstype == 'lvm':
                 self._open_lvm()
                 self.volumes.vstype = 'lvm'
                 for _ in self.volumes.detect_volumes('lvm'):
                     pass
 
-            elif self.fstype == 'raid':
+            elif fstype == 'raid':
                 self._open_raid_volume()
 
-            elif self.fstype == 'dir':
+            elif fstype == 'dir':
                 os.rmdir(self.mountpoint)
                 os.symlink(raw_path, self.mountpoint)
 
-            elif self.fstype == 'volumesystem':
+            elif fstype == 'volumesystem':
                 for _ in self.volumes.detect_volumes():
                     pass
 
@@ -701,11 +719,12 @@ class Volume(object):
                     size = self.size
 
                 logger.warning("Unsupported filesystem {0} (type: {1}, block offset: {2}, length: {3})"
-                               .format(self, self.fstype, self.offset // self.disk.block_size, size))
-                raise UnsupportedFilesystemError(self.fstype)
+                               .format(self, fstype, self.offset // self.disk.block_size, size))
+                raise UnsupportedFilesystemError(fstype)
 
             self.was_mounted = True
             self.is_mounted = True
+            self.fstype = fstype
         except Exception as e:
             logger.exception("Execution failed due to {} {}".format(type(e), e), exc_info=True)
             try:

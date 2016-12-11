@@ -291,19 +291,17 @@ class Disk(object):
                 for v in self.volumes.detect_volumes(method='single', force=True):
                     yield v
 
-    def init(self, single=None, disktype=True, only_mount=None, swallow_exceptions=True):
+    def init(self, single=None, only_mount=None, swallow_exceptions=True):
         """Calls several methods required to perform a full initialisation: :func:`mount`, and
         :func:`mount_volumes` and yields all detected volumes.
 
         :param bool|None single: indicates whether the disk should be mounted as a single disk, not as a single disk or
             whether it should try both (defaults to :const:`None`)
-        :param bool disktype: indicates whether disktype data should be loaded and used
         :rtype: generator
         """
 
         self.mount()
-        if disktype:
-            self.volumes.load_disktype_data()
+        self.volumes.preload_volume_data()
 
         for v in self.init_volumes(single, only_mount=only_mount, swallow_exceptions=swallow_exceptions):
             yield v
