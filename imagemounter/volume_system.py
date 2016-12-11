@@ -401,8 +401,8 @@ class VolumeSystem(object):
                 cur_v.info['label'] = l.replace("LV Name", "").strip()
             if "LV Size" in l:
                 size, unit = l.replace("LV Size", "").strip().split(" ", 1)
-                cur_v.size = int(float(size) * {'KiB': 1024, 'MiB': 1024 ** 2,
-                                                'GiB': 1024 ** 3, 'TiB': 1024 ** 4}.get(unit, 1))
+                cur_v.size = int(float(size.replace(',', '.')) * {'KiB': 1024, 'MiB': 1024 ** 2,
+                                                                  'GiB': 1024 ** 3, 'TiB': 1024 ** 4}.get(unit, 1))
             if "LV Path" in l:
                 cur_v._paths['lv'] = l.replace("LV Path", "").strip()
                 cur_v.offset = 0
