@@ -253,12 +253,14 @@ The best example of the use of the Python interface is the :command:`imount` com
    .. automethod:: find_mounts
    .. automethod:: find_base_images
    .. automethod:: find_volume_groups
+   .. automethod:: find_loopbacks
    .. automethod:: find_clean_dirs
 
    .. automethod:: unmount_bindmounts
    .. automethod:: unmount_mounts
    .. automethod:: unmount_base_images
    .. automethod:: unmount_volume_groups
+   .. automethod:: unmount_loopbacks
    .. automethod:: clean_dirs
 
    .. attribute:: re_pattern
