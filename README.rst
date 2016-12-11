@@ -39,14 +39,13 @@ Installation
 This package does not require other packages, though ``termcolor`` is recommended and ``pytsk3`` is needed if you wish to
 use this package for volume detection.
 
-Just perform the following commands for a full install, including all optional dependencies::
+Just perform the following commands for a basic installation::
 
-    apt-get install python-setuptools xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm cryptsetup libmagic1 avfs disktype squashfs-tools mtd-tools vmfs-tools
+    apt-get install python-setuptools xmount ewf-tools afflib-tools sleuthkit
     pip install imagemounter
+    imount --check
 
-You can install ``vmware-mount`` by installing VMware Workstation on your system.
-
-Use ``imount --check`` to verify which packages are (not) installed.
+Use ``imount --check`` to verify which packages are (not) installed. Install additional packages as needed.
 
 Contributing
 ============
