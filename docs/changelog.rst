@@ -10,7 +10,7 @@ Release history
 ------------------
 This new release includes several backwards-incompatible changes, mostly because features were removed from the public API or have been renamed to obtain a more consistent API.
 
-It was released after a long time of development, and does not even contain all features that were intended to go into this release, but it contains some important bugfixes that warranted a release.
+It was released after a long time of development, and does not even contain all features that were originally planned to go into this release, but it contains some important bugfixes that warranted a release.
 
 New major features:
 
@@ -21,6 +21,7 @@ New major features:
 * A split between detection and initialization of volumes has been made. The basic way to access volumes as calling :func:`init`, but that mounted all volumes immediately. Now, ``detect_*`` methods have been added.
 * Support ``blkid`` to retrieve FS type info
 * Support for Linux RAID volumes
+* (Still in development) interactive console, which will eventually become the primary means to interact with imagemounter.
 
 Bugfixes:
 
@@ -29,6 +30,7 @@ Bugfixes:
 * Fixed support for newer versions of ``mmls``
 * Fixed support for pytsk3 under Python 3 (contributed by insomniacslk)
 * Fixed support for EnCase v7 (EX01) image files (contributed by pix)
+* Improved detection of several volume types
 * :attr:`index` is now always ``str``
 * :attr:`Volume.size` is now always ``int``
 * Improved the unmounter with generic loopback support

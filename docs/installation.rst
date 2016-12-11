@@ -1,10 +1,13 @@
 Installation
 ============
 
-If you need an installation with full support, including all optional dependencies, you could use the following commands::
+If you need an installation with basic support, you are suggested to run the following commands::
 
-    apt-get install python-setuptools xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm cryptsetup
+    apt-get install python-setuptools xmount ewf-tools afflib-tools sleuthkit
     pip install imagemounter
+    imount --check
+
+The latter command will list all other packages you could install to expand the capabilities of imagemounter.
 
 Python packages
 ---------------
@@ -16,17 +19,9 @@ package from your distribution is also required. After that, you can easily inst
 
 Other dependencies
 ------------------
-This package highly depends on other utilities to be present on your system. For a full installation, you require more tools. YYou can run ``imount --check`` to get a full list of all required tools.
+This package highly depends on other utilities to be present on your system. For a full installation, you require more tools. You can run ``imount --check`` to get a full list of all required tools.
 
 A basic installation contains at least one of the mount tools. Highly recommended is also ``fsstat``, others are required
 for specific file system types.
 
-ewfmount on Ubuntu 13.10
-------------------------
-Due to a bug with *ewf-tools* in Ubuntu <=13.10, it may be that :command:`ewfmount` is not properly provided. This bug has been
-resolved in Ubuntu 14.04. If you are using Ubuntu 13.10, you can install *ewf-tools* with :command:`ewfmount` as follows:
-
-1. Download a recent build of *ewf-tools* from https://launchpad.net/ubuntu/+source/libewf/20130416-2ubuntu1
-   (choose your arch under 'Builds' and download all deb files under 'Built files')
-2. Execute ``sudo apt-get install libbfio1``
-3. Execute ``sudo dpkg -i ewf-tools_* libewf2_*``
+You can install ``vmware-mount`` by installing VMware Workstation on your system.

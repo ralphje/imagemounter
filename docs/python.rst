@@ -34,6 +34,9 @@ If you utilize the API, you typically only require the :class:`ImageParser` obje
 
 The best example of the use of the Python interface is the :command:`imount` command. The entirety of all methods and attributes is documented below.
 
+ImageParser
+^^^^^^^^^^^
+
 .. autoclass:: ImageParser
 
    .. automethod:: add_disk
@@ -66,6 +69,9 @@ The best example of the use of the Python interface is the :command:`imount` com
                   pretty
 
       See the constructor of :class:`ImageParser`.
+
+Disk
+^^^^
 
 .. autoclass:: Disk
 
@@ -115,6 +121,9 @@ The best example of the use of the Python interface is the :command:`imount` com
                   disk_mounter
 
       See the constructor of :class:`Disk`.
+
+Volume
+^^^^^^
 
 .. autoclass:: Volume
 
@@ -218,6 +227,9 @@ The best example of the use of the Python interface is the :command:`imount` com
 
       See the constructor of :class:`Volume`.
 
+VolumeSystem
+^^^^^^^^^^^^
+
 .. autoclass:: VolumeSystem
 
    .. automethod:: detect_volumes
@@ -243,6 +255,9 @@ The best example of the use of the Python interface is the :command:`imount` com
                   args
 
       See the constructor of :class:`VolumeSystem`.
+
+Unmounter
+^^^^^^^^^
 
 .. autoclass:: Unmounter
 

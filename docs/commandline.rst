@@ -62,6 +62,10 @@ The next four command-line options alter the behaviour of the :command:`imount` 
 
    Never ask for input from the user, implies :option:`--keep`.
 
+.. cmdoption:: --only-mount
+
+   Comma-separated list of volume indexes you want to mount. Other volumes are skipped.
+
 .. cmdoption:: --verbose
                -v
 
@@ -124,29 +128,21 @@ Advanced options
 ^^^^^^^^^^^^^^^^
 While :mod:`imagemounter` will try to automatically detect as much as possible, there are some cases where you may wish to override the automatically detected options. You can specify which detection methods should be used and override the volume system and file system types if needed.
 
-.. cmdoption:: --method <method>
+.. cmdoption:: --disk-mounter <method>
                -m <method>
 
    Specifies the method to use to mount the base image(s). Defaults to automatic detection, though different methods deliver different results. Available options are `xmount`, `affuse` and `ewfmount` (defaulting to `auto`).
 
    If you provide `dummy`, the base is not mounted but used directly.
 
-.. cmdoption:: --detection <method>
+.. cmdoption:: --volume-detector <method>
                -d <method>
 
    Specifies the volume detection method. Available options are `pytsk3`, `mmls`, `parted` and `auto`, which is the default. Though `pytsk3` and `mmls` should in principle deliver identical results, `pytsk3` can be considered more reliable as this uses the C API of The Sleuth Kit (TSK). However, it also requires :mod:`pytsk3` to be installed, which is not possible with Py3K.
 
-.. cmdoption:: --vstype <type>
+.. cmdoption:: --vstypes <types>
 
    Specifies the type of the volume system, defaulting to `detect`. However, detection may not always succeed and valid options are `dos`, `bsd`, `sun`, `mac`, `gpt` and `dbfiller`, though the exact available options depend on the detection method and installed modules on the operating system.
-
-.. cmdoption:: --fsfallback <type>
-
-   Specifies a fallback option for the filesystem of a volume if automatic detection fails. Available options include `ext`, `ufs`, `ntfs`, `luks`, `lvm` and `unknown`, with the latter simply mounting the volume without specifying type. See the command-line help for all available volume types.
-
-.. cmdoption:: --fsforce
-
-   Forces the use of the filesystem type specified with :option:`--fsfallback` for all volumes. In other words, disables the automatic filesystem detection.
 
 .. cmdoption:: --fstypes <types>
 
@@ -179,13 +175,6 @@ While :mod:`imagemounter` will try to automatically detect as much as possible, 
 Advanced toggles
 ^^^^^^^^^^^^^^^^
 :command:`imount` has some facilities that automatically detect some types of disks and volumes. However, these facilities may sometimes fail and can be disabled if needed.
-
-.. cmdoption:: --stats
-               --no-stats
-
-   With stats rerieval is enabled, additional volume information is obtained from the :command:`fsstat` command. This could possibly slow down mounting and may cause random issues such as partitions being unreadable. However, this additional information will probably include some useful information related to the volume system and is required for commands such as :option:`--reconstruct`.
-
-   Stats retrieval is enabled by default, but :option:`--stats` can be used to override :option:`--no-stats`.
 
 .. cmdoption:: --single
                --no-single
