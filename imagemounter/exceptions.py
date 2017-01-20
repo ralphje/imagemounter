@@ -110,6 +110,11 @@ class NoLoopbackAvailableError(AvailabilityError):
     pass
 
 
+class NoNetworkBlockAvailableError(AvailabilityError):
+    """Raised when a network block device is required, but could not be found, or could not be accessed."""
+    pass
+
+
 class SubsystemError(ImageMounterError):
     """Generic exception raised by methods when an unknown error occurs in one of the subsystems."""
 
