@@ -5,7 +5,6 @@ from collections import defaultdict
 import glob
 import logging
 import os
-import re
 import subprocess
 import tempfile
 import time
