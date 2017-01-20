@@ -11,7 +11,8 @@ import tempfile
 import time
 
 from imagemounter import _util, BLOCK_SIZE
-from imagemounter.exceptions import ImageMounterError, ArgumentError, MountpointEmptyError, MountError
+from imagemounter.exceptions import ImageMounterError, ArgumentError, MountpointEmptyError, MountError, \
+    NoNetworkBlockAvailableError
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ class Disk(object):
         self.rwpath = ""
         self.mountpoint = ""
         self.volumes = VolumeSystem(parent=self, volume_detector=volume_detector, vstype=vstype)
+        self.nbd = False
 
         self.was_mounted = False
         self.is_mounted = False
@@ -79,6 +81,8 @@ class Disk(object):
             return 'vmdk'
         elif _util.is_compressed(self.paths[0]):
             return 'compressed'
+        elif _util.is_qcow2(self.paths[0]):
+            return 'qcow2'
         else:
             return 'dd'
 
@@ -90,7 +94,9 @@ class Disk(object):
             methods = []
 
             def add_method_if_exists(method):
-                if (method == 'avfs' and _util.command_exists('avfsd')) or _util.command_exists(method):
+                if (method == 'avfs' and _util.command_exists('avfsd')) or \
+                        (method == 'nbd' and _util.command_exists('qemu-nbd')) or \
+                        _util.command_exists(method):
                     methods.append(method)
 
             if self.read_write:
@@ -105,6 +111,8 @@ class Disk(object):
                     add_method_if_exists('affuse')
                 elif disk_type == 'compressed':
                     add_method_if_exists('avfs')
+                elif disk_type == 'qcow2':
+                    add_method_if_exists('nbd')
                 add_method_if_exists('xmount')
         else:
             methods = [self.disk_mounter]
@@ -186,6 +194,16 @@ class Disk(object):
             elif method == 'vmware-mount':
                 cmds.append(['vmware-mount', '-r', '-f', self.paths[0], self.mountpoint])
 
+            elif method == 'nbd':
+                self.nbd = True
+                _util.check_output_(['modprobe', 'nbd', 'max_part=63'])  # Load nbd driver
+                try:
+                    self.mountpoint = _util.get_free_nbd_device()  # Get free nbd device
+                except NoNetworkBlockAvailableError:
+                    logger.warning("No free network block device found.", exc_info=True)
+                    raise
+                cmds.extend([['qemu-nbd', '--read-only', '-c', self.mountpoint, self.paths[0]]])
+
             else:
                 raise ArgumentError("Unknown mount method {0}".format(self.disk_mounter))
 
@@ -237,6 +255,7 @@ class Disk(object):
                 # avfs: apparently it is not a dir
                 for pattern in ['*.dd', '*.iso', '*.raw', '*.dmg', 'ewf1', 'flat', 'avfs']:
                     raw_path.extend(glob.glob(os.path.join(searchdir, pattern)))
+                raw_path.extend((glob.glob(self.mountpoint)))
 
             if not raw_path:
                 logger.warning("No viable mount file found in {}.".format(searchdirs))
@@ -348,7 +367,10 @@ class Disk(object):
                 logger.warning("Error unmounting volume {0}".format(m.mountpoint))
 
         if self.mountpoint:
-            _util.clean_unmount(['fusermount', '-u'], self.mountpoint)
+            if self.nbd:
+                _util.check_output_(['qemu-nbd', '-d', self.mountpoint])
+            else:
+                _util.clean_unmount(['fusermount', '-u'], self.mountpoint)
 
         if self._paths.get('avfs'):
             _util.clean_unmount(['fusermount', '-u'], self._paths['avfs'])

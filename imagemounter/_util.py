@@ -10,7 +10,7 @@ import os
 import sys
 import locale
 
-from imagemounter.exceptions import SubsystemError, CleanupError
+from imagemounter.exceptions import SubsystemError, CleanupError, NoNetworkBlockAvailableError
 
 logger = logging.getLogger(__name__)
 encoding = locale.getdefaultlocale()[1]
@@ -63,6 +63,10 @@ def is_compressed(path):
 
 def is_vmware(path):
     return re.match(r'^.*\.vmdk', path)
+
+
+def is_qcow2(path):
+    return re.match(r'.*\.qcow2', path)
 
 
 def expand_path(path):
@@ -127,6 +131,18 @@ def check_output_(cmd, *args, **kwargs):
         if e.output:
             result = e.output.decode(encoding)
             logger.debug('< {0}'.format(result))
+        raise
+
+
+def get_free_nbd_device():
+    try:
+        result = check_output_(['/bin/bash', '-c', 'for x in /sys/class/block/nbd*; do S=`cat $x/size`; '
+                                                 'if [ "$S" == "0" ]; then echo "/dev/`basename $x`"; '
+                                                 'break; fi; done']).strip()
+        if not result:
+            raise NoNetworkBlockAvailableError()
+        return result
+    except subprocess.CalledProcessError:
         raise
 
 
