@@ -235,7 +235,7 @@ def main():
     for num, image in enumerate(args.images):
         # If is a directory, find a E01 file in the directory
         if os.path.isdir(image):
-            for f in glob.glob(os.path.join(image, '*.[E0]01')):
+            for f in glob.glob(os.path.join(image, '*.[Ee0]01')):
                 images.append(f)
                 break
             else:
