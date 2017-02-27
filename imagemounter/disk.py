@@ -57,7 +57,6 @@ class Disk(object):
         self.rwpath = ""
         self.mountpoint = ""
         self.volumes = VolumeSystem(parent=self, volume_detector=volume_detector, vstype=vstype)
-        self.nbd = False
 
         self.was_mounted = False
         self.is_mounted = False
@@ -194,14 +193,13 @@ class Disk(object):
                 cmds.append(['vmware-mount', '-r', '-f', self.paths[0], self.mountpoint])
 
             elif method == 'nbd':
-                self.nbd = True
                 _util.check_output_(['modprobe', 'nbd', 'max_part=63'])  # Load nbd driver
                 try:
-                    self.mountpoint = _util.get_free_nbd_device()  # Get free nbd device
+                    self._paths['nbd'] = _util.get_free_nbd_device()  # Get free nbd device
                 except NoNetworkBlockAvailableError:
                     logger.warning("No free network block device found.", exc_info=True)
                     raise
-                cmds.extend([['qemu-nbd', '--read-only', '-c', self.mountpoint, self.paths[0]]])
+                cmds.extend([['qemu-nbd', '--read-only', '-c', self._paths['nbd'], self.paths[0]]])
 
             else:
                 raise ArgumentError("Unknown mount method {0}".format(self.disk_mounter))
@@ -250,11 +248,13 @@ class Disk(object):
                 searchdirs = (self.mountpoint, )
 
             raw_path = []
+            if self._paths.get('nbd'):
+                raw_path.append(self._paths['nbd'])
+
             for searchdir in searchdirs:
                 # avfs: apparently it is not a dir
                 for pattern in ['*.dd', '*.iso', '*.raw', '*.dmg', 'ewf1', 'flat', 'avfs']:
                     raw_path.extend(glob.glob(os.path.join(searchdir, pattern)))
-                raw_path.extend((glob.glob(self.mountpoint)))
 
             if not raw_path:
                 logger.warning("No viable mount file found in {}.".format(searchdirs))
@@ -365,11 +365,11 @@ class Disk(object):
             except ImageMounterError:
                 logger.warning("Error unmounting volume {0}".format(m.mountpoint))
 
+        if self._paths.get('nbd'):
+            _util.clean_unmount(['qemu-nbd', '-d'], self._paths['nbd'], rmdir=False)
+
         if self.mountpoint:
-            if self.nbd:
-                _util.check_output_(['qemu-nbd', '-d', self.mountpoint])
-            else:
-                _util.clean_unmount(['fusermount', '-u'], self.mountpoint)
+            _util.clean_unmount(['fusermount', '-u'], self.mountpoint)
 
         if self._paths.get('avfs'):
             _util.clean_unmount(['fusermount', '-u'], self._paths['avfs'])

@@ -16,6 +16,7 @@ class ImageMounterError(Exception):
        |- AvailabilityError
           |- NoMountpointAvailableError
           |- NoLoopbackAvailableError
+          |- NoNetworkBlockAvailableError
     |- CleanupError
     |- NoRootFoundError
     |- DiskIndexError
