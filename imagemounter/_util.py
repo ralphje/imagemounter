@@ -26,6 +26,8 @@ def clean_unmount(cmd, mountpoint, tries=5, rmdir=True):
         logger.debug("Removed {}".format(os.path.join(mountpoint, 'avfs')))
     elif os.path.islink(mountpoint):
         pass  # if it is a symlink, we can simply skip to removing it
+    elif not os.path.ismount(mountpoint):
+        pass  # if is not a mount point, we can simply skip to removing it
     else:
         # Perform unmount
         # noinspection PyBroadException
@@ -135,15 +137,15 @@ def check_output_(cmd, *args, **kwargs):
 
 
 def get_free_nbd_device():
-    try:
-        result = check_output_(['/bin/bash', '-c', 'for x in /sys/class/block/nbd*; do S=`cat $x/size`; '
-                                                 'if [ "$S" == "0" ]; then echo "/dev/`basename $x`"; '
-                                                 'break; fi; done']).strip()
-        if not result:
-            raise NoNetworkBlockAvailableError()
-        return result
-    except subprocess.CalledProcessError:
-        raise
+    for nbd_path in glob.glob("/sys/class/block/nbd*"):
+        try:
+            if check_output_(["cat", "{0}/size".format(nbd_path), ]).strip() == "0":
+                return "/dev/{}".format(os.path.basename(nbd_path))
+        except subprocess.CalledProcessError as e:
+            if e.output:
+                result = e.output.decode(encoding)
+                logger.debug("< {0}".format(result))
+    raise NoNetworkBlockAvailableError()
 
 
 def determine_slot(table, slot):

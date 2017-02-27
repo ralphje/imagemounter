@@ -47,7 +47,6 @@ class CheckAction(argparse.Action):
         self._check_command("affuse", "afflib-tools", "AFF images (partially covered by xmount)")
         self._check_command("vmware-mount", why="VMWare disks")
         self._check_command("mountavfs", "avfs", "compressed disk images")
-        self._check_command("qemu-nbd", "qemu-utils", "Qcow2 images")
         print("-- Detecting volumes and volume types (at least one required) --")
         self._check_command("mmls", "sleuthkit")
         self._check_module("pytsk3")
@@ -69,6 +68,7 @@ class CheckAction(argparse.Action):
         self._check_command("cryptsetup", "cryptsetup", "LUKS containers")
         self._check_command("bdemount", "libbde-utils", "Bitlocker Drive Encryption volumes")
         self._check_command("vshadowmount", "libvshadow-utils", "NTFS volume shadow copies")
+        self._check_command("qemu-nbd", "qemu-utils", "Qcow2 images")
         parser.exit()
 
 
