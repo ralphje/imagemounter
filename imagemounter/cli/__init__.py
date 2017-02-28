@@ -68,6 +68,7 @@ class CheckAction(argparse.Action):
         self._check_command("cryptsetup", "cryptsetup", "LUKS containers")
         self._check_command("bdemount", "libbde-utils", "Bitlocker Drive Encryption volumes")
         self._check_command("vshadowmount", "libvshadow-utils", "NTFS volume shadow copies")
+        self._check_command("qemu-nbd", "qemu-utils", "Qcow2 images")
         parser.exit()
 
 
