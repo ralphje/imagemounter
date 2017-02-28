@@ -10,7 +10,7 @@ import os
 import sys
 import locale
 
-from imagemounter.exceptions import SubsystemError, CleanupError
+from imagemounter.exceptions import SubsystemError, CleanupError, NoNetworkBlockAvailableError
 
 logger = logging.getLogger(__name__)
 encoding = locale.getdefaultlocale()[1]
@@ -26,6 +26,8 @@ def clean_unmount(cmd, mountpoint, tries=5, rmdir=True):
         logger.debug("Removed {}".format(os.path.join(mountpoint, 'avfs')))
     elif os.path.islink(mountpoint):
         pass  # if it is a symlink, we can simply skip to removing it
+    elif not os.path.ismount(mountpoint):
+        pass  # if is not a mount point, we can simply skip to removing it
     else:
         # Perform unmount
         # noinspection PyBroadException
@@ -63,6 +65,10 @@ def is_compressed(path):
 
 def is_vmware(path):
     return re.match(r'^.*\.vmdk', path)
+
+
+def is_qcow2(path):
+    return re.match(r'.*\.qcow2', path)
 
 
 def expand_path(path):
@@ -128,6 +134,18 @@ def check_output_(cmd, *args, **kwargs):
             result = e.output.decode(encoding)
             logger.debug('< {0}'.format(result))
         raise
+
+
+def get_free_nbd_device():
+    for nbd_path in glob.glob("/sys/class/block/nbd*"):
+        try:
+            if check_output_(["cat", "{0}/size".format(nbd_path), ]).strip() == "0":
+                return "/dev/{}".format(os.path.basename(nbd_path))
+        except subprocess.CalledProcessError as e:
+            if e.output:
+                result = e.output.decode(encoding)
+                logger.debug("< {0}".format(result))
+    raise NoNetworkBlockAvailableError()
 
 
 def determine_slot(table, slot):
