@@ -662,7 +662,7 @@ class Volume(object):
                 call_mount('ufs', 'ufstype=ufs2,loop,offset=' + str(self.offset))
 
             elif fstype == 'ntfs':
-                call_mount('ntfs', 'show_sys_files,noexec,force,loop,offset=' + str(self.offset))
+                call_mount('ntfs', 'show_sys_files,noexec,force,loop,streams_interface=windows,offset=' + str(self.offset))
 
             elif fstype == 'xfs':
                 call_mount('xfs', 'norecovery,loop,offset=' + str(self.offset))
