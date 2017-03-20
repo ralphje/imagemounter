@@ -11,7 +11,7 @@ import tempfile
 import time
 
 from imagemounter import _util, BLOCK_SIZE
-from imagemounter.exceptions import ImageMounterError, ArgumentError, MountpointEmptyError, MountError
+from imagemounter.exceptions import ImageMounterError, ArgumentError, MountpointEmptyError, MountError, SubsystemError
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
@@ -348,10 +348,16 @@ class Disk(object):
                 logger.warning("Error unmounting volume {0}".format(m.mountpoint))
 
         if self.mountpoint:
-            _util.clean_unmount(['fusermount', '-u'], self.mountpoint)
+            try:
+                _util.clean_unmount(['fusermount', '-u'], self.mountpoint)
+            except SubsystemError:
+                _util.clean_unmount(['fusermount', '-uz'], self.mountpoint)
 
         if self._paths.get('avfs'):
-            _util.clean_unmount(['fusermount', '-u'], self._paths['avfs'])
+            try:
+                _util.clean_unmount(['fusermount', '-u'], self._paths['avfs'])
+            except SubsystemError:
+                _util.clean_unmount(['fusermount', '-uz'], self._paths['avfs'])
 
         if self.rw_active() and remove_rw:
             os.remove(self.rwpath)
