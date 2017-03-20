@@ -16,6 +16,7 @@ class ImageMounterError(Exception):
        |- AvailabilityError
           |- NoMountpointAvailableError
           |- NoLoopbackAvailableError
+          |- NoNetworkBlockAvailableError
     |- CleanupError
     |- NoRootFoundError
     |- DiskIndexError
@@ -107,6 +108,11 @@ class NoMountpointAvailableError(AvailabilityError):
 
 class NoLoopbackAvailableError(AvailabilityError):
     """Raised when a loopback device is required, but could not be found, or could not be accessed."""
+    pass
+
+
+class NoNetworkBlockAvailableError(AvailabilityError):
+    """Raised when a network block device is required, but could not be found, or could not be accessed."""
     pass
 
 
