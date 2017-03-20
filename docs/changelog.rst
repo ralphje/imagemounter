@@ -6,6 +6,12 @@ We try to reduce backwards compatibility breakage only to major version releases
 Release history
 ~~~~~~~~~~~~~~~
 
+3.0.1 (unreleased)
+------------------
+* Add support for qcow2 (contributed by Jarmo van Lenthe)
+* Allow use of lowercase e01 file extension when mounting a directory in imount CLI (contributed by sourcex)
+* Add ADS support for NTFS volumes (contributed by Patrick Leedom)
+
 3.0.0 (2016-12-11)
 ------------------
 This new release includes several backwards-incompatible changes, mostly because features were removed from the public API or have been renamed to obtain a more consistent API.

@@ -7,9 +7,9 @@ imagemounter
 ============
 imagemounter is a command-line utility and Python package to ease the mounting and unmounting of EnCase, Affuse, vmdk
 and dd disk images (and other formats supported by supported tools). It supports mounting disk images using xmount (with
-optional RW cache), affuse, ewfmount and vmware-mount; detecting DOS, BSD, Sun, Mac and GPT volume systems; mounting
-FAT, Ext, XFS UFS, HFS+, LUKS and NTFS volumes, in addition to some less known filesystems; detecting (nested) LVM
-volume systems and mounting its subvolumes; and reconstructing Linux Software RAID arrays.
+optional RW cache), affuse, ewfmount, vmware-mount and qemu-nbd; detecting DOS, BSD, Sun, Mac and GPT volume systems;
+mounting FAT, Ext, XFS UFS, HFS+, LUKS and NTFS volumes, in addition to some less known filesystems; detecting (nested)
+LVM volume systems and mounting its subvolumes; and reconstructing Linux Software RAID arrays.
 
 In its default mode, imagemounter will try to start mounting the base image on a temporary mount point,
 detect the volume system and then mount each volume seperately. If it fails finding a volume system,
