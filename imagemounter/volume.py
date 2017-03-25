@@ -1097,7 +1097,7 @@ class Volume(object):
         return result
 
     # noinspection PyBroadException
-    def unmount(self):
+    def unmount(self, allow_lazy=False):
         """Unounts the volume from the filesystem.
 
         :raises SubsystemError: if one of the underlying processes fails
@@ -1106,7 +1106,7 @@ class Volume(object):
 
         for volume in self.volumes:
             try:
-                volume.unmount()
+                volume.unmount(allow_lazy=allow_lazy)
             except ImageMounterError:
                 pass
 
@@ -1126,6 +1126,8 @@ class Volume(object):
             try:
                 _util.clean_unmount(['fusermount', '-u'], self._paths['bde'])
             except SubsystemError:
+                if not allow_lazy:
+                    raise
                 _util.clean_unmount(['fusermount', '-uz'], self._paths['bde'])
             del self._paths['bde']
 
@@ -1138,7 +1140,7 @@ class Volume(object):
             logger.debug("All other volumes that use %s as well will also be unmounted", md_path)
             for v in self.disk.get_volumes():
                 if v != self and v._paths.get('md') == md_path:
-                    v.unmount()
+                    v.unmount(allow_lazy=allow_lazy)
 
             try:
                 _util.check_output_(["mdadm", '--stop', md_path], stderr=subprocess.STDOUT)
@@ -1150,6 +1152,8 @@ class Volume(object):
             try:
                 _util.clean_unmount(['fusermount', '-u'], self._paths['vss'])
             except SubsystemError:
+                if not allow_lazy:
+                    raise
                 _util.clean_unmount(['fusermount', '-uz'], self._paths['vss'])
             del self._paths['vss']
 

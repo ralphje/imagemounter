@@ -157,11 +157,12 @@ class ImageParser(object):
             volumes.extend(disk.get_volumes())
         return volumes
 
-    def clean(self, remove_rw=False):
+    def clean(self, remove_rw=False, allow_lazy=False):
         """Cleans all volumes of all disks (:func:`Volume.unmount`) and all disks (:func:`Disk.unmount`). Volume errors
         are ignored, but returns immediately on disk unmount error.
 
         :param bool remove_rw: indicates whether a read-write cache should be removed
+        :param bool allow_lazy: indicates whether lazy unmounting is allowed
         :return: whether the command completed successfully
         :rtype: boolean
         :raises SubsystemError: when one of the underlying commands fails. Some are swallowed.
@@ -173,13 +174,13 @@ class ImageParser(object):
         volumes = list(sorted(self.get_volumes(), key=lambda v: v.mountpoint or "", reverse=True))
         for v in volumes:
             try:
-                v.unmount()
+                v.unmount(allow_lazy=allow_lazy)
             except ImageMounterError:
                 logger.error("Error unmounting volume {0}".format(v.mountpoint))
 
         # Now just clean the rest.
         for disk in self.disks:
-            disk.unmount(remove_rw)
+            disk.unmount(remove_rw, allow_lazy=allow_lazy)
 
     def reconstruct(self):
         """Reconstructs the filesystem of all volumes mounted by the parser by inspecting the last mount point and

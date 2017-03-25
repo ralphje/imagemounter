@@ -172,6 +172,11 @@ While :mod:`imagemounter` will try to automatically detect as much as possible, 
         f:key-file
         m:master-key-file
 
+
+.. cmdoption:: --lazy-unmount
+
+   Enables to unmount the volumes and disk lazily when the direct unmounting of the volumes fails.
+
 Advanced toggles
 ^^^^^^^^^^^^^^^^
 :command:`imount` has some facilities that automatically detect some types of disks and volumes. However, these facilities may sometimes fail and can be disabled if needed.

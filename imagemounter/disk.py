@@ -352,7 +352,7 @@ class Disk(object):
 
         return self.rwpath and os.path.getsize(self.rwpath)
 
-    def unmount(self, remove_rw=False):
+    def unmount(self, remove_rw=False, allow_lazy=False):
         """Removes all ties of this disk to the filesystem, so the image can be unmounted successfully.
 
         :raises SubsystemError: when one of the underlying commands fails. Some are swallowed.
@@ -361,7 +361,7 @@ class Disk(object):
 
         for m in list(sorted(self.volumes, key=lambda v: v.mountpoint or "", reverse=True)):
             try:
-                m.unmount()
+                m.unmount(allow_lazy=allow_lazy)
             except ImageMounterError:
                 logger.warning("Error unmounting volume {0}".format(m.mountpoint))
 
@@ -372,12 +372,16 @@ class Disk(object):
             try:
                 _util.clean_unmount(['fusermount', '-u'], self.mountpoint)
             except SubsystemError:
+                if not allow_lazy:
+                    raise
                 _util.clean_unmount(['fusermount', '-uz'], self.mountpoint)
 
         if self._paths.get('avfs'):
             try:
                 _util.clean_unmount(['fusermount', '-u'], self._paths['avfs'])
             except SubsystemError:
+                if not allow_lazy:
+                    raise
                 _util.clean_unmount(['fusermount', '-uz'], self._paths['avfs'])
 
         if self.rw_active() and remove_rw:
