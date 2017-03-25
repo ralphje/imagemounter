@@ -1123,7 +1123,10 @@ class Volume(object):
             del self._paths['luks']
 
         if self._paths.get('bde'):
-            _util.clean_unmount(['fusermount', '-u'], self._paths['bde'])
+            try:
+                _util.clean_unmount(['fusermount', '-u'], self._paths['bde'])
+            except SubsystemError:
+                _util.clean_unmount(['fusermount', '-uz'], self._paths['bde'])
             del self._paths['bde']
 
         if self._paths.get('md'):
@@ -1144,7 +1147,10 @@ class Volume(object):
                 raise SubsystemError(e)
 
         if self._paths.get('vss'):
-            _util.clean_unmount(['fusermount', '-u'], self._paths['vss'])
+            try:
+                _util.clean_unmount(['fusermount', '-u'], self._paths['vss'])
+            except SubsystemError:
+                _util.clean_unmount(['fusermount', '-uz'], self._paths['vss'])
             del self._paths['vss']
 
         if self.loopback:
