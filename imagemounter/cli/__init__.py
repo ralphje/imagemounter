@@ -121,6 +121,8 @@ class ImageMounterFormatter(logging.Formatter):
         elif msg.startswith('<'):
             if self.verbosity >= 4:
                 return self.colored_func("  " + "\n  < ".join(msg.splitlines()), 'cyan')
+            else:
+                return ""
         else:
             return self.colored_func("    " + msg, 'cyan')
 
