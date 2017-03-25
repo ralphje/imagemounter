@@ -100,6 +100,8 @@ def main():
     parser.add_argument('--keys', action=AppendDictAction, default={},
                         help="allows the specification of key material per volume number; format: 0.1=p:pass,...; "
                              "exact format depends on volume type")
+    parser.add_argument('--lazy-unmount', action='store_true', default=False,
+                        help="enables lazily unmounting volumes and disks if direct unmounting fails")
 
     # Toggles for default settings you may perhaps want to override
 
@@ -375,7 +377,7 @@ def main():
                     # to unmount.
                     while True:
                         try:
-                            volume.unmount()
+                            volume.unmount(allow_lazy=args.lazy_unmount)
                             break
                         except ImageMounterError:
                             try:
@@ -463,7 +465,7 @@ def main():
 
                 while True:
                     try:
-                        p.clean(remove_rw)
+                        p.clean(remove_rw, allow_lazy=args.lazy_unmount)
                         print("[+] All cleaned up")
                         break
                     except ImageMounterError:

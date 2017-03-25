@@ -11,6 +11,7 @@ Release history
 * Add support for qcow2 (contributed by Jarmo van Lenthe)
 * Allow use of lowercase e01 file extension when mounting a directory in imount CLI (contributed by sourcex)
 * Add ADS support for NTFS volumes (contributed by Patrick Leedom)
+* Ability to lazily call fusermount -uz when unmounting (contributed by Patrick Leedom)
 
 3.0.0 (2016-12-11)
 ------------------

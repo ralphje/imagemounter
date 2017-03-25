@@ -196,10 +196,7 @@ class Unmounter(object):
         """Unmounts all mounts identified by :func:`find_base_images`"""
 
         for mountpoint in self.find_base_images():
-            try:
-                _util.clean_unmount(['fusermount', '-u'], mountpoint)
-            except SubsystemError:
-                _util.clean_unmount(['fusermount', '-uz'], mountpoint)
+            _util.clean_unmount(['fusermount', '-u'], mountpoint)
 
 
     def unmount_volume_groups(self):
