@@ -932,19 +932,23 @@ class Volume(object):
         self._find_loopback()
         time.sleep(0.2)
 
-        # Scan for new lvm volumes
-        result = _util.check_output_(["lvm", "pvscan"])
-        for l in result.splitlines():
-            if self.loopback in l or (self.offset == 0 and self.get_raw_path() in l):
-                for vg in re.findall(r'VG (\S+)', l):
-                    self.info['volume_group'] = vg
+        try:
+            # Scan for new lvm volumes
+            result = _util.check_output_(["lvm", "pvscan"])
+            for l in result.splitlines():
+                if self.loopback in l or (self.offset == 0 and self.get_raw_path() in l):
+                    for vg in re.findall(r'VG (\S+)', l):
+                        self.info['volume_group'] = vg
 
-        if not self.info.get('volume_group'):
-            logger.warning("Volume is not a volume group. (Searching for %s)", self.loopback)
-            raise IncorrectFilesystemError()
+            if not self.info.get('volume_group'):
+                logger.warning("Volume is not a volume group. (Searching for %s)", self.loopback)
+                raise IncorrectFilesystemError()
 
-        # Enable lvm volumes
-        _util.check_call_(["lvm", "vgchange", "-a", "y", self.info['volume_group']], stdout=subprocess.PIPE)
+            # Enable lvm volumes
+            _util.check_call_(["lvm", "vgchange", "-a", "y", self.info['volume_group']], stdout=subprocess.PIPE)
+        except Exception:
+            self._free_loopback()
+            raise
 
     def _open_raid_volume(self):
         """Add the volume to a RAID system. The RAID array is activated as soon as the array can be activated.
@@ -975,6 +979,7 @@ class Volume(object):
                     raid_status = 'active'
         except Exception as e:
             logger.exception("Failed mounting RAID.")
+            self._free_loopback()
             raise SubsystemError(e)
 
         # search for the RAID volume
