@@ -226,11 +226,19 @@ class Volume(object):
         path, only its children return the more specific path, this volume itself will keep returning the same path.
         This makes for consistent use of the offset attribute. If you do not need this behaviour, you can override this
         with the include_self argument.
+
+        This behavior, however, is not retained for paths that directly affect the volume itself, not the child volumes.
+        This includes VSS stores and LV volumes.
         """
 
         v = self
         if not include_self:
-            if v.parent and v.parent != self.disk:
+            # lv / vss_store are exceptions, as it covers the volume itself, not the child volume
+            if v._paths.get('lv'):
+                return v._paths['lv']
+            elif v._paths.get('vss_store'):
+                return v._paths['vss_store']
+            elif v.parent and v.parent != self.disk:
                 v = v.parent
             else:
                 return self.disk.get_fs_path()

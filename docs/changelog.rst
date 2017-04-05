@@ -13,6 +13,8 @@ Release history
 * Add ADS support for NTFS volumes (contributed by Patrick Leedom)
 * Ability to lazily call fusermount -uz when unmounting (contributed by Patrick Leedom)
 
+* Fix regression in mounting LV volumes; the path was incorrectly detected in :func:`get_raw_path` for these volumes.
+
 3.0.0 (2016-12-11)
 ------------------
 This new release includes several backwards-incompatible changes, mostly because features were removed from the public API or have been renamed to obtain a more consistent API.
