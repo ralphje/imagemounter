@@ -14,6 +14,7 @@ Release history
 * Ability to lazily call fusermount -uz when unmounting (contributed by Patrick Leedom)
 
 * Fix regression in mounting LV volumes; the path was incorrectly detected in :func:`get_raw_path` for these volumes.
+* Fix regression in detection of single volumes that would be detected as DOS/MBR based on file type.
 
 3.0.0 (2016-12-11)
 ------------------
