@@ -6,7 +6,7 @@ We try to reduce backwards compatibility breakage only to major version releases
 Release history
 ~~~~~~~~~~~~~~~
 
-3.0.1 (unreleased)
+3.0.1 (2017-04-08)
 ------------------
 * Add support for qcow2 (contributed by Jarmo van Lenthe)
 * Allow use of lowercase e01 file extension when mounting a directory in imount CLI (contributed by sourcex)
