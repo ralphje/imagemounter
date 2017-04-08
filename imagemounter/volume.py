@@ -589,9 +589,10 @@ class Volume(object):
                     self.fstype = 'vmfs'
                 elif 'linux_raid_member' in fsdesc or 'linux software raid' in fsdesc:
                     self.fstype = 'raid'
-                elif "dos/mbr boot sector" in fsdesc:
-                    self.fstype = 'volumesystem'
-                    self.volumes.vstype = 'detect'
+                # dos/mbr boot sector is shown for a lot of types, not just for volume system, so we ignore this for now
+                #elif "dos/mbr boot sector" in fsdesc:
+                #    self.fstype = 'volumesystem'
+                #    self.volumes.vstype = 'detect'
                 elif fsdesc in FILE_SYSTEM_TYPES:
                     # fallback for stupid cases where we can not determine 'ufs' from the fsdesc 'ufs'
                     self.fstype = fsdesc
