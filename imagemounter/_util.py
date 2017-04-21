@@ -80,9 +80,9 @@ def expand_path(path):
     '/path/to/image.[0-9][0-9]?'
     """
     if is_encase(path):
-        return glob.glob(path[:-2] + '??')
+        return glob.glob(path[:-2] + '??') or [path]
     elif re.match(r'^.*\.\d{2,3}$', path):
-        return glob.glob(path[:path.rfind('.')] + '.[0-9][0-9]?')
+        return glob.glob(path[:path.rfind('.')] + '.[0-9][0-9]?') or [path]
     else:
         return [path]
 
