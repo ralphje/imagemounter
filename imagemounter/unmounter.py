@@ -209,6 +209,9 @@ class Unmounter(object):
     def unmount_loopbacks(self):
         """Unmounts all loopback devices as identified by :func:`find_loopbacks`"""
 
+        # re-index loopback devices
+        self._index_loopbacks()
+
         for dev in self.find_loopbacks():
             _util.check_output_(['losetup', '-d', dev])
 
