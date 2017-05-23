@@ -665,30 +665,30 @@ class Volume(object):
                 _util.check_output_(cmd, stderr=subprocess.STDOUT)
 
             if fstype == 'ext':
-                call_mount('ext4', 'noexec,noload,loop,offset=' + str(self.offset))
+                call_mount('ext4', 'noexec,noload,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
 
             elif fstype == 'ufs':
-                call_mount('ufs', 'ufstype=ufs2,loop,offset=' + str(self.offset))
+                call_mount('ufs', 'ufstype=ufs2,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
 
             elif fstype == 'ntfs':
-                call_mount('ntfs', 'show_sys_files,noexec,force,loop,streams_interface=windows,offset=' + str(self.offset))
+                call_mount('ntfs', 'show_sys_files,noexec,force,loop,streams_interface=windows,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
 
             elif fstype == 'xfs':
-                call_mount('xfs', 'norecovery,loop,offset=' + str(self.offset))
+                call_mount('xfs', 'norecovery,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
 
             elif fstype == 'hfs+':
                 call_mount('hfsplus', 'force,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
 
             elif fstype in ('iso', 'udf', 'squashfs', 'cramfs', 'minix', 'fat', 'hfs'):
                 mnt_type = {'iso': 'iso9660', 'fat': 'vfat'}.get(fstype, fstype)
-                call_mount(mnt_type, 'loop,offset=' + str(self.offset))
+                call_mount(mnt_type, 'loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
 
             elif fstype == 'vmfs':
                 self._find_loopback()
                 _util.check_call_(['vmfs-fuse', self.loopback, self.mountpoint], stdout=subprocess.PIPE)
 
             elif fstype == 'unknown':  # mounts without specifying the filesystem type
-                cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset)]
+                cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size)]
                 if not self.disk.read_write:
                     cmd[-1] += ',ro'
 
