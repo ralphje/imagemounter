@@ -308,7 +308,7 @@ class VolumeSystem(object):
             # since mmls cannot determine the partition type for exFAT superfloppy formatting; check for this.
             elif self._detect_exfat_superfloppy():
                 volume = self._make_exfat_superfloppy()
-                logger.debug("** exfat volume: '{}'".format(volume))
+                logger.debug("Found exFAT superfloppy: '{}'".format(volume))
                 output = ''
             else:
                 logger.exception("Failed executing mmls command")
