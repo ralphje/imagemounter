@@ -73,6 +73,21 @@ class VolumeSystem(object):
         self.volumes.append(v)
         return v
 
+    def _make_exfat_superfloppy(self):
+        """Creates a single exFAT superfloppy volume; returns it."""
+
+        volume = self._make_single_subvolume(offset=0)
+
+        filesize = _util.check_output_(['du', '-scDb', self.parent.get_raw_path()]).strip()
+        if filesize:
+            volume.size = int(filesize.splitlines()[-1].split()[0])
+
+        volume.offset = 0
+        volume.flag = 'alloc'
+        self.volume_source = 'single'
+        self._assign_disktype_data(volume)
+        return volume
+
     def _make_single_subvolume(self, only_one=True, **args):
         """Creates a subvolume, adds it to this class, sets the volume index to 0 and returns it.
 
@@ -225,6 +240,17 @@ class VolumeSystem(object):
                 baseimage.close()
                 del baseimage
 
+    def _detect_exfat_superfloppy(self):
+        """'Detects' a single exFAT superfloppy volume."""
+        f = open(self.parent.get_raw_path(), 'rb')
+        bytes = f.read(8)
+        f.close()
+        if 'EXFAT' in bytes.decode('latin_1'):
+            logger.info('exFAT superfloppy detected')
+            return True
+        else:
+            return False
+
     def _detect_pytsk3_volumes(self, vstype='detect'):
         """Generator that mounts every partition of this image and yields the mountpoint."""
 
@@ -279,6 +305,11 @@ class VolumeSystem(object):
                 except Exception as e:
                     logger.exception("Failed executing mmls command")
                     raise SubsystemError(e)
+            # since mmls cannot determine the partition type for exFAT superfloppy formatting; check for this.
+            elif self._detect_exfat_superfloppy():
+                volume = self._make_exfat_superfloppy()
+                logger.debug("** exfat volume: '{}'".format(volume))
+                output = ''
             else:
                 logger.exception("Failed executing mmls command")
                 raise SubsystemError(e)
@@ -374,9 +405,12 @@ class VolumeSystem(object):
                 # TODO: detection of meta volumes
 
                 if description == 'free':
-                    volume.flag = 'unalloc'
-                    logger.info("Found unallocated space: block offset: {0}, length: {1}".format(start[:-1],
-                                                                                                 length[:-1]))
+                    if self._detect_exfat_superfloppy():
+                        volume = self._make_exfat_superfloppy()
+                        logger.debug("Found exFAT superfloppy: '{}'".format(volume))
+                    else:
+                        volume.flag = 'unalloc'
+                        logger.info("Found unallocated space: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
                 elif slot in meta_volumes:
                     volume.flag = 'meta'
                     volume.slot = slot
