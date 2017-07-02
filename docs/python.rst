@@ -44,6 +44,7 @@ ImageParser
    .. automethod:: init_volumes
    .. automethod:: reconstruct
    .. automethod:: clean
+   .. automethod:: force_clean
 
    Most methods above, especially :func:`init`, handle most complicated tasks. However, you may need some more fine-grained control over the mount process, which may require you to use the following methods. Each of these methods passes their activities down to all disks in the parser and return whether it succeeded.
 

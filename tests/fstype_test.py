@@ -11,7 +11,7 @@ class FilesystemDirectMountTestBase(object):
         for v in parser.init():
             volumes.append(v)
 
-        parser.clean()
+        parser.force_clean()
 
         self.validate_count(volumes)
         self.validate_types(volumes)
