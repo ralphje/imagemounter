@@ -558,10 +558,13 @@ class Volume(object):
                     self.fstype = 'ext'
                 elif 'bsd' in fsdesc or 'ufs 2' in fsdesc:
                     self.fstype = 'ufs'
-                elif '0x07' in fsdesc or 'ntfs' in fsdesc or 'exfat' in fsdesc:
-                    # Use blkid to differentiate between ntfs and exfat
-                    self.fstype = self._get_blkid_type()
-                    logger.info("Detected filesystem type: '{}'".format(self.fstype))
+                elif '0x07' in fsdesc or 'ntfs / exfat' in fsdesc:
+                    last_resort = 'ntfs'
+                    continue
+                elif 'ntfs' in fsdesc:
+                    self.fstype = 'ntfs'
+                elif 'exfat' in fsdesc:
+                    self.fstype = 'exfat'
                 elif '0x8e' in fsdesc or 'lvm' in fsdesc:
                     self.fstype = 'lvm'
                 elif 'hfs+' in fsdesc:
