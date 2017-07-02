@@ -347,7 +347,7 @@ class ImageMounterShell(ArgumentParsedShell):
             def _show_volume_system(volumes, level=0):
                 level += 1
                 for i, v in enumerate(volumes):
-                    level_str = "  "*level + ("└ " if i == len(volumes)-1 else "├ ")
+                    level_str = "  " * level + ("└ " if i == len(volumes) - 1 else "├ ")
                     tp = v.volumes.vstype if v.fstype == 'volumesystem' else v.fstype if v.flag == 'alloc' else v.flag
 
                     print("{level_str}{index}  {type} {size:<10}  {description}".format(

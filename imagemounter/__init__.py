@@ -12,8 +12,8 @@ FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'hfs', 'hfs+', 'xfs', 'iso', 'udf', '
                      'luks', 'bde', 'lvm', 'raid',
                      'dir', 'volumesystem', 'unknown')
 
-from imagemounter.parser import ImageParser
-from imagemounter.disk import Disk
-from imagemounter.volume import Volume
-from imagemounter.unmounter import Unmounter
-from imagemounter.volume_system import VolumeSystem
+from imagemounter.parser import ImageParser  # NOQA
+from imagemounter.disk import Disk  # NOQA
+from imagemounter.volume import Volume  # NOQA
+from imagemounter.unmounter import Unmounter  # NOQA
+from imagemounter.volume_system import VolumeSystem  # NOQA

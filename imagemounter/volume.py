@@ -299,7 +299,7 @@ class Volume(object):
         if not self.slot:
             if not self.loopback:
                 self._find_loopback()
-                #Can't carve if volume has no slot number and can't be mounted on loopback.
+                # Can't carve if volume has no slot number and can't be mounted on loopback.
                 loopback_was_created_for_carving = True
 
             # noinspection PyBroadException
@@ -442,8 +442,9 @@ class Volume(object):
         if parser.pretty:
             md = parser.mountdir or tempfile.gettempdir()
             case_name = casename or self.disk.parser.casename or \
-                        ".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]) or \
-                        os.path.basename(self.disk.paths[0])
+                ".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]) or \
+                os.path.basename(self.disk.paths[0])
+
             if self.disk.parser.casename == case_name:  # the casename is already in the path in this case
                 pretty_label = "{0}-{1}".format(self.index, self.get_safe_label() or self.fstype or 'volume')
             else:
@@ -590,9 +591,9 @@ class Volume(object):
                 elif 'linux_raid_member' in fsdesc or 'linux software raid' in fsdesc:
                     self.fstype = 'raid'
                 # dos/mbr boot sector is shown for a lot of types, not just for volume system, so we ignore this for now
-                #elif "dos/mbr boot sector" in fsdesc:
-                #    self.fstype = 'volumesystem'
-                #    self.volumes.vstype = 'detect'
+                # elif "dos/mbr boot sector" in fsdesc:
+                #     self.fstype = 'volumesystem'
+                #     self.volumes.vstype = 'detect'
                 elif fsdesc in FILE_SYSTEM_TYPES:
                     # fallback for stupid cases where we can not determine 'ufs' from the fsdesc 'ufs'
                     self.fstype = fsdesc
@@ -1090,11 +1091,11 @@ class Volume(object):
             result = '/boot'
         elif 'usr' in paths and 'var' in paths and 'root' in paths:
             result = '/'
-        elif 'bin' in paths and 'lib' in paths and 'local' in paths and 'src' in paths and not 'usr' in paths:
+        elif 'bin' in paths and 'lib' in paths and 'local' in paths and 'src' in paths and 'usr' not in paths:
             result = '/usr'
-        elif 'bin' in paths and 'lib' in paths and 'local' not in paths and 'src' in paths and not 'usr' in paths:
+        elif 'bin' in paths and 'lib' in paths and 'local' not in paths and 'src' in paths and 'usr' not in paths:
             result = '/usr/local'
-        elif 'lib' in paths and 'local' in paths and 'tmp' in paths and not 'var' in paths:
+        elif 'lib' in paths and 'local' in paths and 'tmp' in paths and 'var' not in paths:
             result = '/var'
         # elif sum(['bin' in paths, 'boot' in paths, 'cdrom' in paths, 'dev' in paths, 'etc' in paths, 'home' in paths,
         #          'lib' in paths, 'lib64' in paths, 'media' in paths, 'mnt' in paths, 'opt' in paths,
@@ -1193,4 +1194,3 @@ class Volume(object):
                 del self._paths['carve']
 
         self.is_mounted = False
-

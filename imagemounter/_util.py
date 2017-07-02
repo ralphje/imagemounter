@@ -156,5 +156,5 @@ def determine_slot(table, slot):
 
 
 def terminal_supports_color():
-    return (sys.platform != 'Pocket PC' and (sys.platform != 'win32' or 'ANSICON' in os.environ)
-            and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty())
+    return (sys.platform != 'Pocket PC' and (sys.platform != 'win32' or 'ANSICON' in os.environ) and
+            hasattr(sys.stdout, 'isatty') and sys.stdout.isatty())

@@ -5,7 +5,6 @@ import os
 import re
 import tempfile
 from imagemounter import _util
-from imagemounter.exceptions import SubsystemError
 
 
 class Unmounter(object):
@@ -197,7 +196,6 @@ class Unmounter(object):
 
         for mountpoint in self.find_base_images():
             _util.clean_unmount(['fusermount', '-u'], mountpoint)
-
 
     def unmount_volume_groups(self):
         """Unmounts all volume groups and related loopback devices as identified by :func:`find_volume_groups`"""

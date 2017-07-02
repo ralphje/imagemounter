@@ -203,4 +203,3 @@ class ImageParser(object):
         for v in volumes:
             v.bindmount(os.path.join(root.mountpoint, v.info.get('lastmountpoint')[1:]))
         return root
-

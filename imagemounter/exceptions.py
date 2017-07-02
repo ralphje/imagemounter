@@ -123,4 +123,3 @@ class SubsystemError(ImageMounterError):
 class CleanupError(ImageMounterError):
     """Raised by the unmounter when cleaning failed."""
     pass
-
