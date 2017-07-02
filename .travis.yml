@@ -15,9 +15,9 @@ before_install:
   - sudo modprobe fuse
 
 install:
-  - pip install -r requirements.txt
-  - pip install -r tests/requirements.txt
-  - pip install codecov tox-travis
+  - sudo pip install -r requirements.txt
+  - sudo pip install -r tests/requirements.txt
+  - sudo pip install codecov tox-travis
 
 script:
   - sudo tox
