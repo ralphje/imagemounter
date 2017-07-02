@@ -9,6 +9,11 @@ python:
   - "3.5"
   - "3.6"
 
+env:
+  global:
+    - PIP_WHEEL_DIR=$HOME/.wheels
+    - PIP_FIND_LINKS=file://$PIP_WHEEL_DIR
+
 before_install:
   - sudo apt-get update -qq
   - sudo apt-get install -y xmount ewf-tools afflib-tools sleuthkit lvm2 mdadm cryptsetup libmagic1 avfs disktype squashfs-tools mtd-tools vmfs-tools
@@ -24,3 +29,7 @@ script:
 
 after_success:
   - codecov
+
+cache:
+  directories:
+    - $HOME/.wheels
