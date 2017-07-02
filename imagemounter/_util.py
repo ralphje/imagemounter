@@ -56,7 +56,7 @@ def clean_unmount(cmd, mountpoint, tries=5, rmdir=True):
 
 
 def is_encase(path):
-    return re.match(r'^.*\.[Ee][Xx]?\w\w$', path)
+    return re.match(r'^.*\.[Ee][Xx]?\d\d$', path)
 
 
 def is_compressed(path):
