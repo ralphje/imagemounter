@@ -742,7 +742,7 @@ class Volume(object):
                     self.mountpoint = ""
                 if self.loopback:
                     self.loopback = ""
-            except Exception as e2:
+            except Exception:
                 logger.exception("Clean-up failed", exc_info=True)
 
             if not isinstance(e, ImageMounterError):
@@ -1057,7 +1057,7 @@ class Volume(object):
                     else:
                         self.info['lastmountpoint'] = self.info['label']
 
-            except Exception as e:  # ignore any exceptions here.
+            except Exception:  # ignore any exceptions here.
                 logger.exception("Error while obtaining stats.")
                 pass
 
