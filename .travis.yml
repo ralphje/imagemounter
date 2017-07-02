@@ -1,4 +1,4 @@
-sudo: yes
+sudo: required
 language: python
 
 python:
@@ -21,10 +21,11 @@ before_install:
 install:
   - mkdir -p $PIP_WHEEL_DIR
   - pip wheel -r requirements.txt
-  - pip wheel -r tests/requirements.txt codecov tox-travis tox
+  - pip wheel -r tests/requirements.txt
+  - pip install codecov tox-travis
 
 script:
-  - tox
+  - sudo tox
 
 after_success:
   - codecov
