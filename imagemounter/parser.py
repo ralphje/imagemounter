@@ -5,6 +5,8 @@ import logging
 import os
 import tempfile
 
+import time
+
 from imagemounter.disk import Disk
 from imagemounter.exceptions import NoRootFoundError, ImageMounterError, DiskIndexError
 
@@ -163,8 +165,6 @@ class ImageParser(object):
 
         :param bool remove_rw: indicates whether a read-write cache should be removed
         :param bool allow_lazy: indicates whether lazy unmounting is allowed
-        :return: whether the command completed successfully
-        :rtype: boolean
         :raises SubsystemError: when one of the underlying commands fails. Some are swallowed.
         :raises CleanupError: when actual cleanup fails. Some are swallowed.
         """
@@ -181,6 +181,25 @@ class ImageParser(object):
         # Now just clean the rest.
         for disk in self.disks:
             disk.unmount(remove_rw, allow_lazy=allow_lazy)
+
+    def force_clean(self, remove_rw=False, allow_lazy=False, retries=5, sleep_interval=0.5):
+        """Attempts to call the clean method, but will retry automatically if an error is raised.
+
+        Note that the method will only catch :class:`ImageMounterError` exceptions.
+
+        :param bool remove_rw: indicates whether a read-write cache should be removed
+        :param bool allow_lazy: indicates whether lazy unmounting is allowed
+        :param retries: Maximum amount of retries while unmounting
+        :param sleep_interval: The sleep interval between attempts.
+        """
+
+        try:
+            self.clean(remove_rw=remove_rw, allow_lazy=allow_lazy)
+        except ImageMounterError:
+            if retries == 0:
+                raise
+            retries -= 1
+            time.sleep(sleep_interval)
 
     def reconstruct(self):
         """Reconstructs the filesystem of all volumes mounted by the parser by inspecting the last mount point and
