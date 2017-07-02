@@ -6,6 +6,8 @@ imagemounter
     :target: https://travis-ci.org/ralphje/imagemounter
 .. image:: https://codecov.io/gh/ralphje/imagemounter/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/ralphje/imagemounter
+.. image:: https://readthedocs.org/projects/imagemounter/badge/?version=latest
+    :target: http://imagemounter.readthedocs.io/en/latest/?badge=latest
 
 imagemounter is a command-line utility and Python package to ease the mounting and unmounting of EnCase, Affuse, vmdk
 and dd disk images (and other formats supported by supported tools). It supports mounting disk images using xmount (with

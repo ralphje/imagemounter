@@ -3,7 +3,6 @@ language: python
 
 python:
   - "2.7"
-  - "3.2"
   - "3.3"
   - "3.4"
   - "3.5"
@@ -22,7 +21,7 @@ before_install:
 install:
   - mkdir -p $PIP_WHEEL_DIR
   - pip wheel -r requirements.txt
-  - pip wheel -r tests/requirements.txt codecov tox-travis
+  - pip wheel -r tests/requirements.txt codecov tox-travis tox
 
 script:
   - tox
