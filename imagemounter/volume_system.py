@@ -370,6 +370,10 @@ class VolumeSystem(object):
                                               offset=int(start[:-1]) * self.disk.block_size,  # remove last s
                                               size=int(length[:-1]) * self.disk.block_size)
                 volume.info['fsdescription'] = description
+                if label:
+                    volume.info['label'] = label
+                if flags:
+                    volume.info['parted_flags'] = flags
 
                 # TODO: detection of meta volumes
 
@@ -433,7 +437,7 @@ class VolumeSystem(object):
             if line.startswith("Store:"):
                 idx = line.split(":")[-1].strip()
                 current_store = self._make_subvolume(index=self._format_index(idx), flag='alloc', offset=0)
-                current_store._paths['vss_store'] = os.path.join(path, 'vss'+idx)
+                current_store._paths['vss_store'] = os.path.join(path, 'vss' + idx)
                 current_store.info['fsdescription'] = 'VSS Store'
             elif line.startswith("Volume size"):
                 current_store.size = int(line.split(":")[-1].strip().split()[0])
