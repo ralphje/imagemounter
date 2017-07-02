@@ -3,10 +3,7 @@ import unittest
 from imagemounter import ImageParser
 
 
-class BaseTestFilesystemMount(object):
-    def setUp(self):
-        self.filename = None
-
+class FilesystemDirectMountTestBase(object):
     def test_mount(self):
         volumes = []
         self.filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), self.filename)
@@ -19,14 +16,8 @@ class BaseTestFilesystemMount(object):
         self.validate_count(volumes)
         self.validate_types(volumes)
 
-    def validate_count(self, volumes):
-        raise NotImplementedError()
 
-    def validate_types(self, volumes):
-        raise NotImplementedError()
-
-
-class CramFSTest(BaseTestFilesystemMount, unittest.TestCase):
+class CramFSDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
     def setUp(self):
         self.filename = 'images/test.cramfs'
 
@@ -37,19 +28,18 @@ class CramFSTest(BaseTestFilesystemMount, unittest.TestCase):
         self.assertEqual(volumes[0].fstype, "cramfs")
 
 
-# Ext3 test fails because it looks like EX01 format...
-#class Ext3Test(BaseTestFilesystemMount, unittest.TestCase):
-#    def setUp(self):
-#        self.filename = 'images/test.ext3'
-#
-#    def validate_count(self, volumes):
-#        self.assertEqual(len(volumes), 1)
-#
-#    def validate_types(self, volumes):
-#        self.assertEqual(volumes[0].fstype, "ext")
+class ExtDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
+    def setUp(self):
+        self.filename = 'images/test.ext3'
+
+    def validate_count(self, volumes):
+        self.assertEqual(len(volumes), 1)
+
+    def validate_types(self, volumes):
+        self.assertEqual(volumes[0].fstype, "ext")
 
 
-class Fat12Test(BaseTestFilesystemMount, unittest.TestCase):
+class Fat12DirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
     def setUp(self):
         self.filename = 'images/test.fat12'
 
@@ -60,7 +50,7 @@ class Fat12Test(BaseTestFilesystemMount, unittest.TestCase):
         self.assertEqual(volumes[0].fstype, "fat")
 
 
-class IsoTest(BaseTestFilesystemMount, unittest.TestCase):
+class IsoDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
     def setUp(self):
         self.filename = 'images/test.iso'
 
@@ -71,7 +61,30 @@ class IsoTest(BaseTestFilesystemMount, unittest.TestCase):
         self.assertEqual(volumes[0].fstype, "iso")
 
 
-class MinixTest(BaseTestFilesystemMount, unittest.TestCase):
+class MbrDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
+    def setUp(self):
+        self.filename = 'images/test.mbr'
+
+    def validate_count(self, volumes):
+        self.assertEqual(len(volumes), 13)
+
+    def validate_types(self, volumes):
+        self.assertEqual(volumes[0].flag, "meta")
+        self.assertEqual(volumes[1].flag, "unalloc")
+        self.assertEqual(volumes[2].fstype, "fat")
+        self.assertEqual(volumes[3].fstype, "ext")
+        self.assertEqual(volumes[4].fstype, "unknown")
+        self.assertEqual(volumes[5].flag, "meta")
+        self.assertEqual(volumes[6].flag, "meta")
+        self.assertEqual(volumes[7].flag, "unalloc")
+        self.assertEqual(volumes[8].fstype, "ext")
+        self.assertEqual(volumes[9].flag, "meta")
+        self.assertEqual(volumes[10].flag, "meta")
+        self.assertEqual(volumes[11].flag, "unalloc")
+        self.assertEqual(volumes[12].fstype, "fat")
+
+
+class MinixDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
     def setUp(self):
         self.filename = 'images/test.minix'
 
@@ -82,7 +95,29 @@ class MinixTest(BaseTestFilesystemMount, unittest.TestCase):
         self.assertEqual(volumes[0].fstype, "minix")
 
 
-class ZipTest(BaseTestFilesystemMount, unittest.TestCase):
+class NtfsDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
+    def setUp(self):
+        self.filename = 'images/test.ntfs'
+
+    def validate_count(self, volumes):
+        self.assertEqual(len(volumes), 1)
+
+    def validate_types(self, volumes):
+        self.assertEqual(volumes[0].fstype, "ntfs")
+
+
+class SquashDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
+    def setUp(self):
+        self.filename = 'images/test.sqsh'
+
+    def validate_count(self, volumes):
+        self.assertEqual(len(volumes), 1)
+
+    def validate_types(self, volumes):
+        self.assertEqual(volumes[0].fstype, "squashfs")
+
+
+class ZipDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
     def setUp(self):
         self.filename = 'images/test.zip'
 

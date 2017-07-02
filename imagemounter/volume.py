@@ -563,6 +563,8 @@ class Volume(object):
                     self.fstype = 'ntfs'
                 elif '0x8e' in fsdesc or 'lvm' in fsdesc:
                     self.fstype = 'lvm'
+                elif 'squashfs' in fsdesc:  # before hfs
+                    self.fstype = 'squashfs'
                 elif 'hfs+' in fsdesc:
                     self.fstype = 'hfs+'
                 elif 'hfs' in fsdesc:
@@ -580,8 +582,6 @@ class Volume(object):
                     self.fstype = "xfs"
                 elif 'swap file' in fsdesc or 'linux swap' in fsdesc or 'linux-swap' in fsdesc:
                     self.fstype = 'swap'
-                elif 'squashfs' in fsdesc:
-                    self.fstype = 'squashfs'
                 elif "jffs2" in fsdesc:
                     self.fstype = 'jffs2'
                 elif "minix filesystem" in fsdesc:
