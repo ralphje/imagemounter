@@ -243,10 +243,9 @@ class VolumeSystem(object):
     def _detect_exfat_superfloppy(self):
         """'Detects' a single exFAT superfloppy volume."""
         f = open(self.parent.get_raw_path(), 'rb')
-        bytes = f.read(11)
+        header = f.read(11)
         f.close()
-        if 'EXFAT' in bytes.decode('latin_1'):
-            logger.info('exFAT superfloppy detected')
+        if b'EXFAT' in header:
             return True
         else:
             return False
