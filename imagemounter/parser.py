@@ -183,7 +183,8 @@ class ImageParser(object):
             disk.unmount(remove_rw, allow_lazy=allow_lazy)
 
     def force_clean(self, remove_rw=False, allow_lazy=False, retries=5, sleep_interval=0.5):
-        """Attempts to call the clean method, but will retry automatically if an error is raised.
+        """Attempts to call the clean method, but will retry automatically if an error is raised. When the attempts
+        run out, it will raise the last error.
 
         Note that the method will only catch :class:`ImageMounterError` exceptions.
 
@@ -191,15 +192,20 @@ class ImageParser(object):
         :param bool allow_lazy: indicates whether lazy unmounting is allowed
         :param retries: Maximum amount of retries while unmounting
         :param sleep_interval: The sleep interval between attempts.
+        :raises SubsystemError: when one of the underlying commands fails. Some are swallowed.
+        :raises CleanupError: when actual cleanup fails. Some are swallowed.
         """
 
-        try:
-            self.clean(remove_rw=remove_rw, allow_lazy=allow_lazy)
-        except ImageMounterError:
-            if retries == 0:
-                raise
-            retries -= 1
-            time.sleep(sleep_interval)
+        while True:
+            try:
+                self.clean(remove_rw=remove_rw, allow_lazy=allow_lazy)
+            except ImageMounterError:
+                if retries == 0:
+                    raise
+                retries -= 1
+                time.sleep(sleep_interval)
+            else:
+                return
 
     def reconstruct(self):
         """Reconstructs the filesystem of all volumes mounted by the parser by inspecting the last mount point and
