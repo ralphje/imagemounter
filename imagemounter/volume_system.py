@@ -73,21 +73,6 @@ class VolumeSystem(object):
         self.volumes.append(v)
         return v
 
-    def _make_exfat_superfloppy(self):
-        """Creates a single exFAT superfloppy volume; returns it."""
-
-        volume = self._make_single_subvolume(offset=0)
-
-        filesize = _util.check_output_(['du', '-scDb', self.parent.get_raw_path()]).strip()
-        if filesize:
-            volume.size = int(filesize.splitlines()[-1].split()[0])
-
-        volume.offset = 0
-        volume.flag = 'alloc'
-        self.volume_source = 'single'
-        self._assign_disktype_data(volume)
-        return volume
-
     def _make_single_subvolume(self, only_one=True, **args):
         """Creates a subvolume, adds it to this class, sets the volume index to 0 and returns it.
 
@@ -304,11 +289,6 @@ class VolumeSystem(object):
                 except Exception as e:
                     logger.exception("Failed executing mmls command")
                     raise SubsystemError(e)
-            # since mmls cannot determine the partition type for exFAT superfloppy formatting; check for this.
-            elif self._detect_exfat_superfloppy():
-                volume = self._make_exfat_superfloppy()
-                logger.debug("Found exFAT superfloppy: '{}'".format(volume))
-                output = ''
             else:
                 logger.exception("Failed executing mmls command")
                 raise SubsystemError(e)
@@ -405,8 +385,10 @@ class VolumeSystem(object):
 
                 if description == 'free':
                     if self._detect_exfat_superfloppy():
-                        volume = self._make_exfat_superfloppy()
-                        logger.debug("Found exFAT superfloppy: '{}'".format(volume))
+                        volume.offset = 0
+                        volume.flag = 'alloc'
+                        volume.info['fsdescription'] = 'exfat'
+                        logger.info("Found exFAT superfloppy: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
                     else:
                         volume.flag = 'unalloc'
                         logger.info("Found unallocated space: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
