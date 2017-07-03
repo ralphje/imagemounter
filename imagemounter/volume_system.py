@@ -225,16 +225,6 @@ class VolumeSystem(object):
                 baseimage.close()
                 del baseimage
 
-    def _detect_exfat_superfloppy(self):
-        """'Detects' a single exFAT superfloppy volume."""
-        f = open(self.parent.get_raw_path(), 'rb')
-        header = f.read(11)
-        f.close()
-        if b'EXFAT' in header:
-            return True
-        else:
-            return False
-
     def _detect_pytsk3_volumes(self, vstype='detect'):
         """Generator that mounts every partition of this image and yields the mountpoint."""
 
@@ -380,18 +370,17 @@ class VolumeSystem(object):
                                               offset=int(start[:-1]) * self.disk.block_size,  # remove last s
                                               size=int(length[:-1]) * self.disk.block_size)
                 volume.info['fsdescription'] = description
+                if label:
+                    volume.info['label'] = label
+                if flags:
+                    volume.info['parted_flags'] = flags
 
                 # TODO: detection of meta volumes
 
                 if description == 'free':
-                    if self._detect_exfat_superfloppy():
-                        volume.offset = 0
-                        volume.flag = 'alloc'
-                        volume.info['fsdescription'] = 'exfat'
-                        logger.info("Found exFAT superfloppy: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
-                    else:
-                        volume.flag = 'unalloc'
-                        logger.info("Found unallocated space: block offset: {0}, length: {1}".format(start[:-1], length[:-1]))
+                    volume.flag = 'unalloc'
+                    logger.info("Found unallocated space: block offset: {0}, length: {1}".format(start[:-1],
+                                                                                                 length[:-1]))
                 elif slot in meta_volumes:
                     volume.flag = 'meta'
                     volume.slot = slot
@@ -448,7 +437,7 @@ class VolumeSystem(object):
             if line.startswith("Store:"):
                 idx = line.split(":")[-1].strip()
                 current_store = self._make_subvolume(index=self._format_index(idx), flag='alloc', offset=0)
-                current_store._paths['vss_store'] = os.path.join(path, 'vss'+idx)
+                current_store._paths['vss_store'] = os.path.join(path, 'vss' + idx)
                 current_store.info['fsdescription'] = 'VSS Store'
             elif line.startswith("Volume size"):
                 current_store.size = int(line.split(":")[-1].strip().split()[0])
