@@ -559,8 +559,13 @@ class Volume(object):
                     self.fstype = 'ext'
                 elif 'bsd' in fsdesc or 'ufs 2' in fsdesc:
                     self.fstype = 'ufs'
-                elif '0x07' in fsdesc or 'ntfs' in fsdesc:
+                elif '0x07' in fsdesc or 'ntfs / exfat' in fsdesc:
+                    last_resort = 'ntfs'
+                    continue
+                elif 'ntfs' in fsdesc:
                     self.fstype = 'ntfs'
+                elif 'exfat' in fsdesc:
+                    self.fstype = 'exfat'
                 elif '0x8e' in fsdesc or 'lvm' in fsdesc:
                     self.fstype = 'lvm'
                 elif 'squashfs' in fsdesc:  # before hfs
@@ -673,6 +678,9 @@ class Volume(object):
 
             elif fstype == 'ntfs':
                 call_mount('ntfs', 'show_sys_files,noexec,force,loop,streams_interface=windows,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
+
+            elif fstype == 'exfat':
+                call_mount('exfat', 'noexec,force,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
 
             elif fstype == 'xfs':
                 call_mount('xfs', 'norecovery,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
