@@ -1025,16 +1025,16 @@ class Volume(object):
             logger.warning("fsstat is not installed, could not mount volume shadow copies")
             return
 
-        process = None
+        self.process = None
 
         def stats_thread():
             try:
                 cmd = ['fsstat', self.get_raw_path(), '-o', str(self.offset // self.disk.block_size)]
                 logger.debug('$ {0}'.format(' '.join(cmd)))
                 # noinspection PyShadowingNames
-                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-                for line in iter(process.stdout.readline, b''):
+                for line in iter(self.process.stdout.readline, b''):
                     line = line.decode()
                     if line.startswith("File System Type:"):
                         self.info['statfstype'] = line[line.index(':') + 2:].strip()
@@ -1049,7 +1049,7 @@ class Volume(object):
                     elif 'CYLINDER GROUP INFORMATION' in line:
                         # noinspection PyBroadException
                         try:
-                            process.terminate()  # some attempt
+                            self.process.terminate()  # some attempt
                         except Exception:
                             pass
                         break
@@ -1077,7 +1077,7 @@ class Volume(object):
         if thread.is_alive():
             # noinspection PyBroadException
             try:
-                process.terminate()
+                self.process.terminate()
             except Exception:
                 pass
             thread.join()
