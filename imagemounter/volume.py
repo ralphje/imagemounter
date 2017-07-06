@@ -1049,7 +1049,7 @@ class Volume(object):
                     elif 'CYLINDER GROUP INFORMATION' in line:
                         # noinspection PyBroadException
                         try:
-                            self.process.terminate()  # some attempt
+                            process.terminate()  # some attempt
                         except Exception:
                             pass
                         break
