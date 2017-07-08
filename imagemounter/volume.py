@@ -20,7 +20,6 @@ from imagemounter.exceptions import CommandNotFoundError, NoMountpointAvailableE
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
-process = None
 
 FILE_SYSTEM_GUIDS = {
     '2AE031AA-0F40-DB11-9590-000C2911D1B8': 'vmfs',
