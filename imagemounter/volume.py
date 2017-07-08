@@ -21,7 +21,6 @@ from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
 
-
 FILE_SYSTEM_GUIDS = {
     '2AE031AA-0F40-DB11-9590-000C2911D1B8': 'vmfs',
     '8053279D-AD40-DB11-BF97-000C2911D1B8': 'vmkcore-diagnostics',
@@ -1025,13 +1024,12 @@ class Volume(object):
             logger.warning("fsstat is not installed, could not mount volume shadow copies")
             return
 
-        process = None
-
         def stats_thread():
             try:
                 cmd = ['fsstat', self.get_raw_path(), '-o', str(self.offset // self.disk.block_size)]
                 logger.debug('$ {0}'.format(' '.join(cmd)))
                 # noinspection PyShadowingNames
+                global process
                 process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
                 for line in iter(process.stdout.readline, b''):
