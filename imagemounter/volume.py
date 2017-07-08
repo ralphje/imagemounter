@@ -20,7 +20,7 @@ from imagemounter.exceptions import CommandNotFoundError, NoMountpointAvailableE
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
-
+process = None
 
 FILE_SYSTEM_GUIDS = {
     '2AE031AA-0F40-DB11-9590-000C2911D1B8': 'vmfs',
@@ -1025,16 +1025,15 @@ class Volume(object):
             logger.warning("fsstat is not installed, could not mount volume shadow copies")
             return
 
-        self.process = None
-
         def stats_thread():
             try:
                 cmd = ['fsstat', self.get_raw_path(), '-o', str(self.offset // self.disk.block_size)]
                 logger.debug('$ {0}'.format(' '.join(cmd)))
                 # noinspection PyShadowingNames
-                self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                global process
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-                for line in iter(self.process.stdout.readline, b''):
+                for line in iter(process.stdout.readline, b''):
                     line = line.decode()
                     if line.startswith("File System Type:"):
                         self.info['statfstype'] = line[line.index(':') + 2:].strip()
@@ -1077,7 +1076,7 @@ class Volume(object):
         if thread.is_alive():
             # noinspection PyBroadException
             try:
-                self.process.terminate()
+                process.terminate()
             except Exception:
                 pass
             thread.join()
