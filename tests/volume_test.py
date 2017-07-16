@@ -42,6 +42,7 @@ class FsTypeTest(unittest.TestCase):
             volume = Volume(disk=Disk(ImageParser(), "..."))
             volume._get_blkid_type = mock.Mock(return_value=None)
             volume._get_magic_type = mock.Mock(return_value=None)
+            self.fstype = ""  # prevent fallback to unknown by default
             volume.info['fsdescription'] = description
             volume.determine_fs_type()
             self.assertEqual(fstype, volume.fstype)
@@ -150,6 +151,13 @@ class FsTypeTest(unittest.TestCase):
         volume.determine_fs_type()
         self.assertEqual("unknown", volume.fstype)
 
+    def test_little_clue_fstype(self):
+        volume = Volume(disk=Disk(ImageParser(), "..."))
+        volume._get_blkid_type = mock.Mock(return_value="-")
+        volume._get_magic_type = mock.Mock(return_value="-")
+        volume.determine_fs_type()
+        self.assertEqual("unknown", volume.fstype)
+
     def test_fstype_fallback(self):
         volume = Volume(disk=Disk(ImageParser(), "..."))
         volume.fstype = "?bsd"
@@ -157,6 +165,22 @@ class FsTypeTest(unittest.TestCase):
         volume._get_magic_type = mock.Mock(return_value=None)
         volume.determine_fs_type()
         self.assertEqual("bsd", volume.fstype)
+
+    def test_fstype_fallback_unknown(self):
+        volume = Volume(disk=Disk(ImageParser(), "..."))
+        volume._get_blkid_type = mock.Mock(return_value=None)
+        volume._get_magic_type = mock.Mock(return_value=None)
+        volume.info['fsdescription'] = "Linux (0x83)"
+
+        # If something more specific is set, we use that
+        volume.fstype = "?bsd"
+        volume.determine_fs_type()
+        self.assertEqual("bsd", volume.fstype)
+
+        # Otherwise we fallback to unknown if Linux (0x83) is set
+        volume.fstype = ""
+        volume.determine_fs_type()
+        self.assertEqual("unknown", volume.fstype)
 
 
 class FsstatTest(unittest.TestCase):
