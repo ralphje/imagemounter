@@ -5,7 +5,158 @@ import time
 
 from imagemounter.parser import ImageParser
 from imagemounter.disk import Disk
-from imagemounter.volume import Volume
+from imagemounter.volume import Volume, FILE_SYSTEM_GUIDS
+
+
+class FsTypeTest(unittest.TestCase):
+    def test_valid_fstype(self):
+        volume = Volume(disk=Disk(ImageParser(), "..."))
+        volume.fstype = 'ext'
+        volume.determine_fs_type()
+        self.assertEqual("ext", volume.fstype)
+
+    def test_valid_vstype(self):
+        volume = Volume(disk=Disk(ImageParser(), "..."))
+        volume.fstype = 'dos'
+        volume.determine_fs_type()
+        self.assertEqual("dos", volume.volumes.vstype)
+        self.assertEqual("volumesystem", volume.fstype)
+
+    def test_fsdescription(self):
+        # Add names in here that are shown in the wild for output of mmls / gparted
+        # !! Always try to add it also to test_combination
+
+        descriptions = {
+            # Names assigned by imagemounter
+            "Logical Volume": "unknown",
+            "LUKS Volume": "unknown",
+            "BDE Volume": "unknown",
+            "RAID Volume": "unknown",
+            "VSS Store": "unknown",
+
+            "NTFS / exFAT": "ntfs",  # mmls, should use fallback
+            "Linux (0x83)": "unknown",  # should use unknown
+            "DOS FAT16": "fat",
+        }
+        for description, fstype in descriptions.items():
+            volume = Volume(disk=Disk(ImageParser(), "..."))
+            volume._get_blkid_type = mock.Mock(return_value=None)
+            volume._get_magic_type = mock.Mock(return_value=None)
+            volume.info['fsdescription'] = description
+            volume.determine_fs_type()
+            self.assertEqual(fstype, volume.fstype)
+
+    def test_guid(self):
+        for description, fstype in FILE_SYSTEM_GUIDS.items():
+            volume = Volume(disk=Disk(ImageParser(), "..."))
+            volume._get_blkid_type = mock.Mock(return_value=None)
+            volume._get_magic_type = mock.Mock(return_value=None)
+            volume.info['guid'] = description
+            volume.determine_fs_type()
+            self.assertEqual(fstype, volume.fstype)
+
+    def test_blkid(self):
+        # Add values here that are shown in the wild for blkid
+        # !! Always try to add it also to test_combination
+
+        descriptions = {
+            "cramfs": "cramfs",
+            "ext4": "ext",
+            "ext2": "ext",
+            "vfat": "fat",
+            "iso9660": "iso",
+            "minix": "minix",
+            "ntfs": "ntfs",
+            "squashfs": "squashfs",
+
+            "dos": "volumesystem",
+        }
+
+        for description, fstype in descriptions.items():
+            volume = Volume(disk=Disk(ImageParser(), "..."))
+            volume._get_blkid_type = mock.Mock(return_value=description)
+            volume._get_magic_type = mock.Mock(return_value=None)
+            volume.determine_fs_type()
+            self.assertEqual(fstype, volume.fstype)
+
+    def test_magic(self):
+        # Add values here that are shown in the wild for file magic output
+        # !! Always try to add it also to test_combination
+
+        descriptions = {
+            "Linux Compressed ROM File System data": "cramfs",
+            "Linux rev 1.0 ext2 filesystem data": "ext",
+
+            'DOS/MBR boot sector, code offset 0x3c+2, OEM-ID "mkfs.fat", sectors/cluster 4, '
+            'root entries 512, sectors 100 (volumes <=32 MB) , Media descriptor 0xf8, '
+            'sectors/FAT 1, sectors/track 32, heads 64, serial number 0x3cb7474b, '
+            'label: "TEST       ", FAT (12 bit)': "fat",
+
+            "ISO 9660 CD-ROM filesystem data 'test'": "iso",
+            "Minix filesystem, V1, 30 char names, 12800 zones": "minix",
+
+            'DOS/MBR boot sector, code offset 0x52+2, OEM-ID "NTFS    ", sectors/cluster 8, '
+            'Media descriptor 0xf8, sectors/track 0, dos < 4.0 BootSector (0x80), FAT (1Y bit '
+            'by descriptor); NTFS, sectors 2048, $MFT start cluster 4, $MFTMirror start '
+            'cluster 128, bytes/RecordSegment 2^(-1*246), clusters/index block 1, serial '
+            'number 04e8742c12a96cecd; contains Microsoft Windows XP/VISTA bootloader BOOTMGR': "ntfs",
+
+            "Squashfs filesystem, little endian, version 4.0": "squashfs",
+        }
+
+        for description, fstype in descriptions.items():
+            volume = Volume(disk=Disk(ImageParser(), "..."))
+            volume._get_blkid_type = mock.Mock(return_value=None)
+            volume._get_magic_type = mock.Mock(return_value=description)
+            volume.determine_fs_type()
+            self.assertEqual(fstype, volume.fstype)
+
+    def test_combination(self):
+        # Add values here to test full combinations of specific filesystem types
+        # The _ as key is the expected result
+
+        _ = "use as key for the expected result"
+        definitions = [
+            {_: "cramfs", "blkid": "cramfs", "magic": "Linux Compressed ROM File System data", "fsdescription": "???"},
+            {_: "exfat", "blkid": "exfat", "fsdescription": "NTFS / exFAT", "statfstype": "exFAT"},
+            {_: "ext", "blkid": "ext4", "fsdescription": "Linux (0x83)", "guid": "", "statfstype": "Ext2"},
+            {_: "fat", "blkid": "vfat", "magic": "FAT (12 bit)", "fsdescription": "DOS FAT12 (0x04)",
+                       "statfstype": "FAT12"},
+            {_: "iso", "blkid": "iso9660", "magic": ".. ISO 9660 ..", "statfstype": "ISO9660"},
+            {_: "minix", "blkid": "min  ix", "magic": "Minix filesystem", "fsdescription": "???"},
+            {_: "ntfs", "blkid": "ntfs", "magic": ".. NTFS ..", "fsdescription": "NTFS / exFAT", "statfstype": "NTFS"},
+            {_: "squashfs", "blkid": "squashfs", "magic": "Squashfs filesystem", "fsdescription": "???"},
+
+            {_: "lvm", "guid": "79D3D6E6-07F5-C244-A23C-238F2A3DF928"},
+            {_: "raid", "fsdescription": "Linux (0x83)", "blkid": "linux_raid_member"},
+
+            {_: "volumesystem", "blkid": "dos", "fsdescription": "Logical Volume"},
+            {_: "volumesystem", "blkid": "dos", "fsdescription": "RAID Volume"},
+            {_: "volumesystem", "blkid": "dos", "magic": "DOS/MBR boot sector"},
+        ]
+
+        for definition in definitions:
+            volume = Volume(disk=Disk(ImageParser(), "..."))
+            volume._get_blkid_type = mock.Mock(return_value=definition.get("blkid"))
+            volume._get_magic_type = mock.Mock(return_value=definition.get("magic"))
+            volume.info = definition
+            volume.determine_fs_type()
+            self.assertEqual(definition[_], volume.fstype)
+
+    def test_no_clue_fstype(self):
+        volume = Volume(disk=Disk(ImageParser(), "..."))
+        volume._get_blkid_type = mock.Mock(return_value=None)
+        volume._get_magic_type = mock.Mock(return_value=None)
+        volume.determine_fs_type()
+        self.assertEqual("unknown", volume.fstype)
+
+    def test_fstype_fallback(self):
+        volume = Volume(disk=Disk(ImageParser(), "..."))
+        volume.fstype = "?bsd"
+        volume._get_blkid_type = mock.Mock(return_value=None)
+        volume._get_magic_type = mock.Mock(return_value=None)
+        volume.determine_fs_type()
+        self.assertEqual("bsd", volume.fstype)
 
 
 class FsstatTest(unittest.TestCase):
