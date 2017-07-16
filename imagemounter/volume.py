@@ -1018,23 +1018,20 @@ class Volume(object):
         else:
             return [self]
 
-    def _load_fsstat_data(self):
+    def _load_fsstat_data(self, timeout=5):
         """Using :command:`fsstat`, adds some additional information of the volume to the Volume."""
 
         if not _util.command_exists('fsstat'):
             logger.warning("fsstat is not installed, could not mount volume shadow copies")
             return
 
-        process = None
-
         def stats_thread():
             try:
                 cmd = ['fsstat', self.get_raw_path(), '-o', str(self.offset // self.disk.block_size)]
                 logger.debug('$ {0}'.format(' '.join(cmd)))
-                # noinspection PyShadowingNames
-                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                stats_thread.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-                for line in iter(process.stdout.readline, b''):
+                for line in iter(stats_thread.process.stdout.readline, b''):
                     line = line.decode()
                     if line.startswith("File System Type:"):
                         self.info['statfstype'] = line[line.index(':') + 2:].strip()
@@ -1049,7 +1046,7 @@ class Volume(object):
                     elif 'CYLINDER GROUP INFORMATION' in line:
                         # noinspection PyBroadException
                         try:
-                            process.terminate()  # some attempt
+                            stats_thread.process.terminate()  # some attempt
                         except Exception:
                             pass
                         break
@@ -1069,19 +1066,19 @@ class Volume(object):
                 logger.exception("Error while obtaining stats.")
                 pass
 
+        stats_thread.process = None
+
         thread = threading.Thread(target=stats_thread)
         thread.start()
-
-        duration = 5  # longest possible duration for fsstat.
-        thread.join(duration)
+        thread.join(timeout)
         if thread.is_alive():
             # noinspection PyBroadException
             try:
-                process.terminate()
+                stats_thread.process.terminate()
             except Exception:
                 pass
             thread.join()
-            logger.debug("Killed fsstat after {0}s".format(duration))
+            logger.debug("Killed fsstat after {0}s".format(timeout))
 
     def detect_mountpoint(self):
         """Attempts to detect the previous mountpoint if this was not done through :func:`load_fsstat_data`. This
