@@ -579,7 +579,7 @@ class Volume(object):
                 elif 'fat' in fsdesc or 'efi system partition' in fsdesc:
                     # based on http://en.wikipedia.org/wiki/EFI_System_partition, efi is always fat.
                     self.fstype = 'fat'
-                elif 'iso 9660' in fsdesc:
+                elif 'iso 9660' in fsdesc or 'iso9660' in fsdesc:
                     self.fstype = 'iso'
                 elif 'linux compressed rom file system' in fsdesc or 'cramfs' in fsdesc:
                     self.fstype = 'cramfs'
