@@ -1043,7 +1043,7 @@ class Volume(object):
                         self.info['version'] = line[line.index(':') + 2:].strip()
                     elif line.startswith("Source OS:"):
                         self.info['version'] = line[line.index(':') + 2:].strip()
-                    elif 'CYLINDER GROUP INFORMATION' in line:
+                    elif 'CYLINDER GROUP INFORMATION' in line or 'BLOCK GROUP INFORMATION' in line:
                         # noinspection PyBroadException
                         try:
                             stats_thread.process.terminate()  # some attempt
@@ -1064,7 +1064,6 @@ class Volume(object):
 
             except Exception:  # ignore any exceptions here.
                 logger.exception("Error while obtaining stats.")
-                pass
 
         stats_thread.process = None
 
