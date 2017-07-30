@@ -1032,7 +1032,7 @@ class Volume(object):
                 stats_thread.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
                 for line in iter(stats_thread.process.stdout.readline, b''):
-                    line = line.decode()
+                    line = line.decode('utf-8')
                     if line.startswith("File System Type:"):
                         self.info['statfstype'] = line[line.index(':') + 2:].strip()
                     elif line.startswith("Last Mount Point:") or line.startswith("Last mounted on:"):
