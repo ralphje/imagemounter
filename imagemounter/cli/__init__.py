@@ -81,18 +81,26 @@ class AppendDictAction(argparse.Action):
 
     """
 
+    def __init__(self, allow_commas=True, *args, **kwargs):
+        self.allow_commas = allow_commas
+        super(AppendDictAction, self).__init__(*args, **kwargs)
+
     def __call__(self, parser, namespace, values, option_string=None):
-        items = getattr(namespace, self.dest, {})
+        items = getattr(namespace, self.dest, {}) or {}
         if ',' not in values and '=' not in values:
             items['*'] = values
         else:
             try:
-                vals = values.split(',')
-                for t in vals:
-                    k, v = t.split('=', 1)
+                if self.allow_commas:
+                    vals = values.split(',')
+                    for t in vals:
+                        k, v = t.split('=', 1)
+                        items[k] = v
+                else:
+                    k, v = values.split('=', 1)
                     items[k] = v
             except ValueError:
-                parser.error("invalid argument {}".format(self.dest))
+                parser.error("could not parse {}".format(self.dest))
         setattr(namespace, self.dest, items)
 
 
