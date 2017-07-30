@@ -8,6 +8,16 @@ from imagemounter.disk import Disk
 from imagemounter.volume import Volume, FILE_SYSTEM_GUIDS
 
 
+class InitializationTest(unittest.TestCase):
+    def test_key_material_read(self):
+        volume = Volume(disk=Disk(ImageParser(keys={'3': 'hello'}), "..."), index='3')
+        self.assertEqual(volume.key, "hello")
+        volume = Volume(disk=Disk(ImageParser(keys={'3': 'hello', '*': 'ola'}), "..."), index='2')
+        self.assertEqual(volume.key, "ola")
+        volume = Volume(disk=Disk(ImageParser(keys={'3': 'hello'}), "..."), index='1')
+        self.assertEqual(volume.key, "")
+
+
 class FsTypeTest(unittest.TestCase):
     def test_valid_fstype(self):
         volume = Volume(disk=Disk(ImageParser(), "..."))

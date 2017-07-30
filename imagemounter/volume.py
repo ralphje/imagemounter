@@ -81,6 +81,8 @@ class Volume(object):
             self.key = key
         elif self.index in self.disk.parser.keys:
             self.key = self.disk.parser.keys[self.index]
+        elif '*' in self.disk.parser.keys:
+            self.key = self.disk.parser.keys['*']
         else:
             self.key = ""
 
