@@ -193,7 +193,6 @@ class FileMagicTest(unittest.TestCase):
         self.assertIsNone(volume._get_magic_type())
 
 
-
 class FsstatTest(unittest.TestCase):
     def test_ext4(self):
         # Removed some items from this output as we don't use it in its entirety anyway
