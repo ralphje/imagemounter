@@ -182,9 +182,13 @@ class Volume(object):
     def _get_magic_type(self):
         """Checks the volume for its magic bytes and returns the magic."""
 
-        with io.open(self.disk.get_fs_path(), "rb") as file:
-            file.seek(self.offset)
-            fheader = file.read(min(self.size, 4096) if self.size else 4096)
+        try:
+            with io.open(self.disk.get_fs_path(), "rb") as file:
+                file.seek(self.offset)
+                fheader = file.read(min(self.size, 4096) if self.size else 4096)
+        except IOError:
+            logger.exception("Failed reading first 4K bytes from volume.")
+            return None
 
         # TODO fallback to img-cat image -s blocknum | file -
         # if we were able to load the module magic

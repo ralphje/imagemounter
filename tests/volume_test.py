@@ -183,6 +183,17 @@ class FsTypeTest(unittest.TestCase):
         self.assertEqual("unknown", volume.fstype)
 
 
+class FileMagicTest(unittest.TestCase):
+    @mock.patch("io.open")
+    def test_read_bytes_crash(self, mock_open):
+        mock_open().__enter__().read.side_effect = IOError
+        volume = Volume(disk=Disk(ImageParser(), "..."))
+        volume.get_raw_path = mock.Mock(return_value="...")
+
+        self.assertIsNone(volume._get_magic_type())
+
+
+
 class FsstatTest(unittest.TestCase):
     def test_ext4(self):
         # Removed some items from this output as we don't use it in its entirety anyway
