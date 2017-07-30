@@ -846,7 +846,7 @@ class Volume(object):
                 logger.debug('$ {0}'.format(' '.join(cmd)))
                 # for py 3.2+, we could have used input=, but that doesn't exist in py2.7.
                 p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                p.communicate(key)
+                p.communicate(key.encode("utf-8"))
                 p.wait()
                 retcode = p.poll()
                 if retcode:
