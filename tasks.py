@@ -19,9 +19,14 @@ def test(ctx):
     pythonpath.append(os.path.join(cwp, 'tests'))
     os.environ['PYTHONPATH'] = os.pathsep.join(pythonpath)
 
-    run('flake8 --ignore=W801,E128,E501,W402 imagemounter')
+    test_flake(ctx)
     run('coverage run --source=imagemounter --branch `which pytest`')
     run('coverage report')
+
+
+@task
+def test_flake(ctx):
+    run('flake8 --ignore=W801,E128,E501,W402 imagemounter')
 
 
 @task
