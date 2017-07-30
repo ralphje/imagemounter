@@ -628,6 +628,17 @@ class Volume(object):
                     continue  # this loop failed
 
                 logger.info("Detected {0} as {1}".format(fsdesc, self.fstype))
+
+                if isinstance(self.parent, Volume) and \
+                        self.parent.offset == self.offset and \
+                        self.size == self.parent.size and \
+                        self.fstype == self.parent.fstype and \
+                        self.volumes.vstype == self.parent.volumes.vstype and \
+                        self.get_raw_path() == self.parent.get_raw_path():
+                    logger.warning("Detected volume type is identical to the parent. This makes no sense. Assuming "
+                                   "detection was wrong.")
+                    continue
+
                 break  # we found something
             else:  # we found nothing
                 # if last_resort is something more sensible than unknown, we use that
