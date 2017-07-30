@@ -331,7 +331,7 @@ class VolumeSystem(object):
         meta_volumes = []
         # noinspection PyBroadException
         try:
-            output = _util.check_output_(['parted', self.parent.get_raw_path(), 'print'])
+            output = _util.check_output_(['parted', self.parent.get_raw_path(), 'print'], stdin=subprocess.PIPE)
             for line in output.splitlines():
                 if 'extended' in line:
                     meta_volumes.append(int(line.split()[0]))
@@ -343,7 +343,7 @@ class VolumeSystem(object):
         try:
             # parted does not support passing in the vstype. It either works, or it doesn't.
             cmd = ['parted', self.parent.get_raw_path(), '-sm', 'unit s', 'print free']
-            output = _util.check_output_(cmd)
+            output = _util.check_output_(cmd, stdin=subprocess.PIPE)
             self.volume_source = 'multi'
         except Exception as e:
             logger.exception("Failed executing parted command")
