@@ -157,7 +157,7 @@ While :mod:`imagemounter` will try to automatically detect as much as possible, 
 
 .. cmdoption:: --keys <keys>
 
-   Allows the specification of key information for each volume separately. This is similar to :option:`--fstypes`. The format of the specifc value depends on the volume type.
+   Allows the specification of key information for each volume separately. This is similar to :option:`--fstypes`, except that you can only specify one key per argument (i.e. a comma is not interpreted as special). The format of the specifc value depends on the volume type:
 
    For BDE, you can use a single letter, followed by a colon, followed by the value. This leads to the following accepted formats, similar to how the :command:`bdemount` command interprets input::
 

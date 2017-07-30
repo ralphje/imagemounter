@@ -99,7 +99,7 @@ def main():
                              ", and none only for the ? volume (defaults to unknown)")
     parser.add_argument('--keys', action=AppendDictAction, default={},
                         help="allows the specification of key material per volume number; format: 0.1=p:pass,...; "
-                             "exact format depends on volume type")
+                             "exact format depends on volume type", allow_commas=False)
     parser.add_argument('--lazy-unmount', action='store_true', default=False,
                         help="enables lazily unmounting volumes and disks if direct unmounting fails")
 
