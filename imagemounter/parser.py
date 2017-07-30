@@ -215,7 +215,7 @@ class ImageParser(object):
         :return: the root :class:`Volume`
         """
         volumes = list(sorted((v for v in self.get_volumes() if v.mountpoint and v.info.get('lastmountpoint')),
-                              key=lambda v: v.mountpoint or "", reverse=True))
+                              key=lambda v: v.numeric_index, reverse=True))
 
         try:
             root = list(filter(lambda x: x.info.get('lastmountpoint') == '/', volumes))[0]
@@ -226,5 +226,8 @@ class ImageParser(object):
         volumes.remove(root)
 
         for v in volumes:
+            if v.info.get('lastmountpoint') == root.info.get('lastmountpoint'):
+                logger.debug("Skipping volume %s as it has the same root as %s", v, root)
+                continue
             v.bindmount(os.path.join(root.mountpoint, v.info.get('lastmountpoint')[1:]))
         return root
