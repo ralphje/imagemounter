@@ -563,9 +563,12 @@ class Volume(object):
                     self.fstype = 'dir'  # dummy fs type
                 elif re.search(r'\bext[0-9]*\b', fsdesc):
                     self.fstype = 'ext'
-                elif 'bsd' in fsdesc or 'ufs 2' in fsdesc:
+                elif '4.2bsd' in fsdesc or 'ufs 2' in fsdesc:
                     self.fstype = 'ufs'
-                elif '0x07' in fsdesc or 'ntfs / exfat' in fsdesc:
+                elif 'bsd' in fsdesc:
+                    self.fstype = 'volumesystem'
+                    self.volumes.fstype = 'bsd'
+                elif 'ntfs / exfat' in fsdesc:
                     last_resort = 'ntfs'
                     continue
                 elif 'ntfs' in fsdesc:
@@ -591,7 +594,7 @@ class Volume(object):
                     self.fstype = 'cramfs'
                 elif fsdesc.startswith("sgi xfs") or re.search(r'\bxfs\b', fsdesc):
                     self.fstype = "xfs"
-                elif 'swap file' in fsdesc or 'linux swap' in fsdesc or 'linux-swap' in fsdesc:
+                elif 'swap file' in fsdesc or 'linux swap' in fsdesc or 'linux-swap' in fsdesc or 'swap (0x01)' in fsdesc:
                     self.fstype = 'swap'
                 elif "jffs2" in fsdesc:
                     self.fstype = 'jffs2'
@@ -680,6 +683,7 @@ class Volume(object):
                 call_mount('ext4', 'noexec,noload,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
 
             elif fstype == 'ufs':
+                # TODO: support for other ufstypes
                 call_mount('ufs', 'ufstype=ufs2,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
 
             elif fstype == 'ntfs':
