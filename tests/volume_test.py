@@ -240,6 +240,24 @@ Version: Windows XP"""
             self.assertNotIn("label", volume.info)
             self.assertEqual(volume.info['version'], 'Windows XP')
 
+    def test_utf8_label(self):
+        # Removed some items from this output as we don't use it in its entirety anyway
+        result = b"""FILE SYSTEM INFORMATION
+--------------------------------------------
+File System Type: Ext4
+Volume Name: \xd0\xa0\xd0\xbe\xd1\x81\xd1\x81\xd0\xb8\xd0\xb8
+Volume ID: 2697f5b0479b15b1b4c81994387cdba"""
+        with mock.patch('subprocess.Popen') as mock_popen:
+            type(mock_popen()).stdout = mock.PropertyMock(return_value=io.BytesIO(result))
+
+            volume = Volume(disk=Disk(ImageParser(), "..."))
+            volume.get_raw_path = mock.Mock(return_value="...")
+
+            volume._load_fsstat_data()
+
+            self.assertEqual(volume.info['statfstype'], 'Ext4')
+            self.assertEqual(volume.info['label'], u'\u0420\u043e\u0441\u0441\u0438\u0438')
+
     def test_killed_after_timeout(self):
         def mock_side_effect(*args, **kwargs):
             time.sleep(0.2)
