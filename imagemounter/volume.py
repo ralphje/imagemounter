@@ -1018,7 +1018,7 @@ class Volume(object):
         else:
             return [self]
 
-    def _load_fsstat_data(self, timeout=5):
+    def _load_fsstat_data(self, timeout=3):
         """Using :command:`fsstat`, adds some additional information of the volume to the Volume."""
 
         if not _util.command_exists('fsstat'):
