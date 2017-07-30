@@ -48,6 +48,8 @@ class FsTypeTest(unittest.TestCase):
 
             "NTFS / exFAT": "ntfs",  # mmls, should use fallback
             "Linux (0x83)": "unknown",  # should use unknown
+            "4.2BSD": "ufs",
+            "BSD/386, 386BSD, NetBSD, FreeBSD (0xa5)": "volumesystem",
             "DOS FAT16": "fat",
         }
         for description, fstype in descriptions.items():
@@ -81,6 +83,7 @@ class FsTypeTest(unittest.TestCase):
             "minix": "minix",
             "ntfs": "ntfs",
             "squashfs": "squashfs",
+            "ufs": "ufs",
 
             "dos": "volumesystem",
         }
@@ -146,6 +149,8 @@ class FsTypeTest(unittest.TestCase):
             {_: "volumesystem", "blkid": "dos", "fsdescription": "Logical Volume"},
             {_: "volumesystem", "blkid": "dos", "fsdescription": "RAID Volume"},
             {_: "volumesystem", "blkid": "dos", "magic": "DOS/MBR boot sector"},
+            {_: "volumesystem", "fsdescription": "BSD/386, 386BSD, NetBSD, FreeBSD (0xa5)", "blkid": "ufs"},
+            {_: "ufs", "fsdescription": "4.2BSD", "blkid": "ufs"},
         ]
 
         for definition in definitions:
@@ -310,7 +315,7 @@ class LuksTest(unittest.TestCase):
             if cmd[0:3] == ['cryptsetup', '-r', 'luksOpen']:
                 # A command that requests user input
                 x = original_popen(["python2", "-c", "print(raw_input(''))"],
-                                      *args, **kwargs)
+                                   *args, **kwargs)
                 return x
             return mock.DEFAULT
 
