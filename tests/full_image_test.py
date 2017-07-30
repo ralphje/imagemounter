@@ -121,7 +121,7 @@ class ZipDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
     def setUp(self):
         self.filename = 'images/test.zip'
 
-    @unittest.skipIf(os.geteuid(), "must be root to run this test")
+    @unittest.skipIf(os.geteuid(), "requires root")
     def test_mount(self):
         super(ZipDirectMountTest, self).test_mount()
 

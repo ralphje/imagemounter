@@ -150,7 +150,7 @@ class FsTypeTest(unittest.TestCase):
             {_: "volumesystem", "blkid": "dos", "fsdescription": "RAID Volume"},
             {_: "volumesystem", "blkid": "dos", "magic": "DOS/MBR boot sector"},
             {_: "volumesystem", "fsdescription": "BSD/386, 386BSD, NetBSD, FreeBSD (0xa5)", "blkid": "ufs"},
-            {_: "ufs", "fsdescription": "4.2BSD", "blkid": "ufs"},
+            {_: "ufs", "fsdescription": "4.2BSD (0x07)", "blkid": "ufs"},
         ]
 
         for definition in definitions:
