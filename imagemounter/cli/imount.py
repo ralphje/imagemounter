@@ -56,6 +56,8 @@ def main():
                         help="do not ask for any user input, implies --keep")
     parser.add_argument('-o', '--only-mount', default=None,
                         help="specify which volume(s) you want to mount, comma-separated")
+    parser.add_argument('--skip', default=None,
+                        help="specify which volume(s) you do not want to mount, comma-separated")
     parser.add_argument('-v', '--verbose', action='count', default=False, help='enable verbose output')
     parser.add_argument('-c', '--color', action='store_true', default=False, help='force colorizing the output')
     parser.add_argument('--no-color', action='store_true', default=False, help='prevent colorizing the output')
@@ -192,6 +194,8 @@ def main():
 
     if args.only_mount:
         args.only_mount = args.only_mount.split(',')
+    if args.skip:
+        args.skip = args.skip.split(',')
 
     if args.vstypes:
         for k, v in args.vstypes.items():
@@ -280,7 +284,7 @@ def main():
             sys.stdout.flush()
             has_left_mounted = False
 
-            for volume in p.init_volumes(args.single, args.only_mount, swallow_exceptions=True):
+            for volume in p.init_volumes(args.single, args.only_mount, args.skip, swallow_exceptions=True):
                 try:
                     # something failed?
                     if not volume.mountpoint and not volume.loopback:
