@@ -103,6 +103,13 @@ class Volume(object):
     def __getitem__(self, item):
         return self.volumes[item]
 
+    @property
+    def numeric_index(self):
+        try:
+            return tuple([int(x) for x in self.index.split(".")])
+        except ValueError:
+            return ()
+
     def _get_fstype_from_parser(self, fstype=None):
         """Load fstype information from the parser instance."""
         if fstype:
