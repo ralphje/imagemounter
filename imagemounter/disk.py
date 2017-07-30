@@ -309,22 +309,26 @@ class Disk(object):
                 for v in self.volumes.detect_volumes(method='single', force=True):
                     yield v
 
-    def init(self, single=None, only_mount=None, swallow_exceptions=True):
+    def init(self, single=None, only_mount=None, skip_mount=None, swallow_exceptions=True):
         """Calls several methods required to perform a full initialisation: :func:`mount`, and
         :func:`mount_volumes` and yields all detected volumes.
 
         :param bool|None single: indicates whether the disk should be mounted as a single disk, not as a single disk or
             whether it should try both (defaults to :const:`None`)
+        :param list only_mount: If set, must be a list of volume indexes that are only mounted.
+        :param list skip_mount: If set, must be a list of volume indexes tat should not be mounted.
+        :param bool swallow_exceptions: If True, Exceptions are not raised but rather set on the instance.
         :rtype: generator
         """
 
         self.mount()
         self.volumes.preload_volume_data()
 
-        for v in self.init_volumes(single, only_mount=only_mount, swallow_exceptions=swallow_exceptions):
+        for v in self.init_volumes(single, only_mount=only_mount, skip_mount=skip_mount,
+                                   swallow_exceptions=swallow_exceptions):
             yield v
 
-    def init_volumes(self, single=None, only_mount=None, swallow_exceptions=True):
+    def init_volumes(self, single=None, only_mount=None, skip_mount=None, swallow_exceptions=True):
         """Generator that detects and mounts all volumes in the disk.
 
         :param single: If *single* is :const:`True`, this method will call :Func:`init_single_volumes`.
@@ -332,11 +336,13 @@ class Disk(object):
                        :func:`init_multiple_volumes` is always called, being followed by :func:`init_single_volume`
                        if no volumes were detected.
         :param list only_mount: If set, must be a list of volume indexes that are only mounted.
+        :param list skip_mount: If set, must be a list of volume indexes tat should not be mounted.
         :param bool swallow_exceptions: If True, Exceptions are not raised but rather set on the instance.
         """
 
         for volume in self.detect_volumes(single=single):
-            for vol in volume.init(only_mount=only_mount, swallow_exceptions=swallow_exceptions):
+            for vol in volume.init(only_mount=only_mount, skip_mount=skip_mount,
+                                   swallow_exceptions=swallow_exceptions):
                 yield vol
 
     def get_volumes(self):

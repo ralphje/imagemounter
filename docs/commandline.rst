@@ -66,6 +66,10 @@ The next four command-line options alter the behaviour of the :command:`imount` 
 
    Comma-separated list of volume indexes you want to mount. Other volumes are skipped.
 
+.. cmdoption:: --skip
+
+   Comma-separated list of volume indexes you do not want to mount.
+
 .. cmdoption:: --verbose
                -v
 

@@ -127,7 +127,7 @@ class ImageParser(object):
             result = disk.rw_active() or result
         return result
 
-    def init_volumes(self, single=None, only_mount=None, swallow_exceptions=True):
+    def init_volumes(self, single=None, only_mount=None, skip_mount=None, swallow_exceptions=True):
         """Detects volumes (as volume system or as single volume) in all disks and yields the volumes. This calls
         :func:`Disk.init_volumes` on all disks and should be called after :func:`mount_disks`.
 
@@ -135,7 +135,7 @@ class ImageParser(object):
 
         for disk in self.disks:
             logger.info("Mounting volumes in {0}".format(disk))
-            for volume in disk.init_volumes(single, only_mount, swallow_exceptions=swallow_exceptions):
+            for volume in disk.init_volumes(single, only_mount, skip_mount, swallow_exceptions=swallow_exceptions):
                 yield volume
 
     def get_by_index(self, index):

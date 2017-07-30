@@ -368,15 +368,20 @@ class Volume(object):
         else:
             return self.volumes.detect_volumes(vstype='vss')
 
-    def _should_mount(self, only_mount=None):
+    def _should_mount(self, only_mount=None, skip_mount=None):
         """Indicates whether this volume should be mounted. Internal method, used by imount.py"""
 
-        return only_mount is None or \
+        om = only_mount is None or \
             self.index in only_mount or \
             self.info.get('lastmountpoint') in only_mount or \
             self.info.get('label') in only_mount
+        sm = skip_mount is None or \
+             (self.index not in skip_mount and
+              self.info.get('lastmountpoint') not in skip_mount and
+              self.info.get('label') not in skip_mount)
+        return om and sm
 
-    def init(self, only_mount=None, swallow_exceptions=True):
+    def init(self, only_mount=None, skip_mount=None, swallow_exceptions=True):
         """Generator that mounts this volume and either yields itself or recursively generates its subvolumes.
 
         More specifically, this function will call :func:`load_fsstat_data` (iff *no_stats* is False), followed by
@@ -384,6 +389,7 @@ class Volume(object):
         of the :func:`init` call on each subvolume is yielded
 
         :param only_mount: if specified, only volume indexes in this list are mounted. Volume indexes are strings.
+        :param skip_mount: if specified, volume indexes in this list are not mounted.
         :param swallow_exceptions: if True, any error occuring when mounting the volume is swallowed and added as an
             exception attribute to the yielded objects.
         """
@@ -391,7 +397,7 @@ class Volume(object):
             self.exception = None
 
         try:
-            if not self._should_mount(only_mount):
+            if not self._should_mount(only_mount, skip_mount):
                 yield self
                 return
 
@@ -409,7 +415,7 @@ class Volume(object):
             yield self
         else:
             for v in self.volumes:
-                for s in v.init(only_mount, swallow_exceptions):
+                for s in v.init(only_mount, skip_mount, swallow_exceptions):
                     yield s
 
     def init_volume(self, fstype=None):
