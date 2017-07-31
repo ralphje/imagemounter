@@ -558,7 +558,7 @@ class Volume(object):
             # we have two possible sources for determining the FS type: the description given to us by the detection
             # method, and the type given to us by the stat function
             for fsdesc in (self.info.get('fsdescription'), self.info.get('guid'),
-                           self._get_blkid_type, self.info.get('statfstype'), self._get_magic_type):
+                           self._get_blkid_type, self._get_magic_type):
                 # For efficiency reasons, not all functions are called instantly.
                 if callable(fsdesc):
                     fsdesc = fsdesc()
