@@ -648,8 +648,8 @@ class Volume(object):
                         self.fstype == self.parent.fstype and \
                         self.volumes.vstype == self.parent.volumes.vstype and \
                         self.get_raw_path() == self.parent.get_raw_path():
-                    logger.warning("Detected volume type is identical to the parent. This makes no sense. Assuming "
-                                   "detection was wrong.")
+                    logger.warning("Detected volume type is identical to the parent. This makes little sense. "
+                                   "Assuming detection was wrong.")
                     continue
 
                 break  # we found something
@@ -1062,10 +1062,21 @@ class Volume(object):
         def stats_thread():
             try:
                 cmd = ['fsstat', self.get_raw_path(), '-o', str(self.offset // self.disk.block_size)]
+
+                # Setting the fstype explicitly makes fsstat much faster and more reliable
+                # In some versions, the auto-detect yaffs2 check takes ages for large images
+                fstype = {
+                    "ntfs": "ntfs", "fat": "fat", "ext": "ext", "iso": "iso9660", "hfs+": "hfs",
+                    "ufs": "ufs", "swap": "swap", "exfat": "exfat",
+                }.get(self.fstype, None)
+                if fstype:
+                    cmd.extend(["-f", fstype])
+
                 logger.debug('$ {0}'.format(' '.join(cmd)))
                 stats_thread.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
                 for line in iter(stats_thread.process.stdout.readline, b''):
+                    logger.debug('< {0}'.format(line))
                     line = line.decode('utf-8')
                     if line.startswith("File System Type:"):
                         self.info['statfstype'] = line[line.index(':') + 2:].strip()
@@ -1080,7 +1091,8 @@ class Volume(object):
                     elif 'CYLINDER GROUP INFORMATION' in line or 'BLOCK GROUP INFORMATION' in line:
                         # noinspection PyBroadException
                         try:
-                            stats_thread.process.terminate()  # some attempt
+                            logger.debug("Terminated fsstat after group information.")
+                            stats_thread.process.terminate()
                         except Exception:
                             pass
                         break
