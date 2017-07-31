@@ -10,7 +10,7 @@ import shlex
 import pickle
 
 from imagemounter import __version__, DISK_MOUNTERS, FILE_SYSTEM_TYPES
-from imagemounter.cli import CheckAction, ImageMounterFormatter, get_coloring_func, ImageMounterStreamHandler
+from imagemounter.cli import CheckAction, get_coloring_func, ImageMounterStreamHandler
 from imagemounter.disk import Disk
 from imagemounter.parser import ImageParser
 
