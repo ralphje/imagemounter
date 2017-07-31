@@ -14,8 +14,7 @@ import os
 
 from imagemounter import _util, ImageParser, Unmounter, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES, \
     DISK_MOUNTERS
-from imagemounter.cli import CheckAction, ImageMounterFormatter, get_coloring_func, AppendDictAction, \
-    ImageMounterStreamHandler
+from imagemounter.cli import CheckAction, get_coloring_func, AppendDictAction, ImageMounterStreamHandler
 from imagemounter.exceptions import NoRootFoundError, ImageMounterError, UnsupportedFilesystemError
 
 # Python 2 compatibility
