@@ -104,6 +104,19 @@ class AppendDictAction(argparse.Action):
         setattr(namespace, self.dest, items)
 
 
+class ImageMounterStreamHandler(logging.StreamHandler):
+    terminator = "\n"
+
+    def __init__(self, colored_func=None, verbosity=0, *args, **kwargs):
+        super(ImageMounterStreamHandler, self).__init__(*args, **kwargs)
+        self.setFormatter(ImageMounterFormatter(colored_func, verbosity=verbosity))
+
+    def emit(self, record):
+        if record.getMessage().startswith("<") and self.formatter.verbosity <= 3:
+            return
+        return super(ImageMounterStreamHandler, self).emit(record)
+
+
 class ImageMounterFormatter(logging.Formatter):
     """Formats logging messages according to ImageMounter's format."""
 

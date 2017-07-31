@@ -10,7 +10,7 @@ import shlex
 import pickle
 
 from imagemounter import __version__, DISK_MOUNTERS, FILE_SYSTEM_TYPES
-from imagemounter.cli import CheckAction, ImageMounterFormatter, get_coloring_func
+from imagemounter.cli import CheckAction, ImageMounterFormatter, get_coloring_func, ImageMounterStreamHandler
 from imagemounter.disk import Disk
 from imagemounter.parser import ImageParser
 
@@ -438,8 +438,7 @@ def main():
 
     print(col("WARNING: the interactive console is still in active development.", attrs=['dark']))
 
-    handler = logging.StreamHandler()
-    handler.setFormatter(ImageMounterFormatter(col, verbosity=args.verbose))
+    handler = ImageMounterStreamHandler(col, args.verbose)
     logger = logging.getLogger("imagemounter")
     logger.setLevel({0: logging.CRITICAL, 1: logging.WARNING, 2: logging.INFO}.get(args.verbose, logging.DEBUG))
     logger.handlers = []
