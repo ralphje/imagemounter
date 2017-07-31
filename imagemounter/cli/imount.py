@@ -14,7 +14,8 @@ import os
 
 from imagemounter import _util, ImageParser, Unmounter, __version__, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES, \
     DISK_MOUNTERS
-from imagemounter.cli import CheckAction, ImageMounterFormatter, get_coloring_func, AppendDictAction
+from imagemounter.cli import CheckAction, ImageMounterFormatter, get_coloring_func, AppendDictAction, \
+    ImageMounterStreamHandler
 from imagemounter.exceptions import NoRootFoundError, ImageMounterError, UnsupportedFilesystemError
 
 # Python 2 compatibility
@@ -117,8 +118,7 @@ def main():
     col = get_coloring_func(color=args.color, no_color=args.color)
 
     # Set logging level for internal Python
-    handler = logging.StreamHandler()
-    handler.setFormatter(ImageMounterFormatter(col, verbosity=args.verbose))
+    handler = ImageMounterStreamHandler(col, args.verbose)
     logger = logging.getLogger("imagemounter")
     logger.setLevel({0: logging.CRITICAL, 1: logging.WARNING, 2: logging.INFO}.get(args.verbose, logging.DEBUG))
     logger.addHandler(handler)

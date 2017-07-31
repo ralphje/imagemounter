@@ -1091,8 +1091,8 @@ class Volume(object):
                     elif 'CYLINDER GROUP INFORMATION' in line or 'BLOCK GROUP INFORMATION' in line:
                         # noinspection PyBroadException
                         try:
-                            logger.debug("Terminated fsstat after group information.")
                             stats_thread.process.terminate()
+                            logger.debug("Terminated fsstat at cylinder/block group information.")
                         except Exception:
                             pass
                         break
