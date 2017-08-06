@@ -52,7 +52,14 @@ class ReconstructionTest(unittest.TestCase):
         v2.index = '2'
         v2.mountpoint = '....'
         v2.info['lastmountpoint'] = '/'
-        disk.volumes.volumes = [v1, v2]
-        with mock.patch.object(v2, "bindmount") as v2_bm:
+        v3 = Volume(disk)
+        v3.index = '3'
+        v3.mountpoint = '.....'
+        v3.info['lastmountpoint'] = '/etc'
+        disk.volumes.volumes = [v1, v2, v3]
+        with mock.patch.object(v1, "bindmount") as v1_bm, mock.patch.object(v2, "bindmount") as v2_bm, \
+                mock.patch.object(v3, "bindmount") as v3_bm:
             parser.reconstruct()
+            v1_bm.assert_not_called()
             v2_bm.assert_not_called()
+            v3_bm.assert_called_with('.../etc')
