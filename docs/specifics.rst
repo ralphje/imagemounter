@@ -13,7 +13,11 @@ ext2, ext3 and ext4 are all supported by imagemounter. All mounts use the ext4 d
 
 UFS
 ---
-Supported are UFS and UFS2. Similar to ext, we use the UFS2 driver to mount both types.
+Supported is UFS2, as we explicitly pass in the UFS2 driver type in the mount call. This may result in some UFS volumes not mounting. There is currently no workaround for that.
+
+Normally, a volume can be detected as both a UFS volume, as well as a BSD partition table. When the former happens, it may appear as if there is only a single volume, as this hides the other UFS volumes. Although detections have been amended for this, it is important to note that you can explicitly override detection using :option:`--fstypes` if detection fails for some reason.
+
+(See BSD volume system below for more information.)
 
 Depending on your OS, you may need to run ``modprobe ufs`` to enable UFS support in your kernel.
 
@@ -35,11 +39,13 @@ For mounting LUKS volumes, the :command:`cryptsetup` command is used. At this po
     f:key-file
     m:master-key-file
 
+Note that you can't provide multiple keys using a single --keys argument. Repeat the argument to accomplish this, e.g. ``--keys 0=p:passphrase --keys 1=p:passphrase``.
+
 To determine whether a volume is a LUKS volume, ``cryptsetup isLuks`` is called. This method should return true; if it doesn't, imagemounter will also not be able to mount the volume. The next step is to create a loopback device that is used to call ``cryptsetup luksOpen <device> <name>``, where name is of the form ``image_mounter_luks_<number>``. Additional details of the volume are extracted by using ``cryptsetup status``. The actual dd image of the volume is mounted in ``/dev/mapper/<name>`` by the OS.
 
 The LUKS volume will get a subvolume at index 0 with the file system description ``LUKS Volume``. When this volume is a LVM volume that is not be properly recognized by imagemounter, you could use something like the following to amend this::
 
-    imount image.E01 --fstypes=1=luks,1.0=lvm,1.0.0=ext --keys=1=passphrase
+    imount image.E01 --fstypes=1=luks,1.0=lvm,1.0.0=ext --keys=1=p:passphrase
 
 LUKS volumes are automatically unmounted by ending the script normally, but can't be unmounted by :option:`--unmount`.
 
@@ -104,7 +110,13 @@ No additional details.
 
 FAT
 ---
-FAT volumes, independent of type, are mounted through the exFAT driver.
+FAT volumes, independent of type, are mounted through the VFAT driver.
+
+exFAT
+-----
+exFAT volumes are mounted by teh exFAT driver. Note that exFAT volumes are sometimes recognized as NTFS volumes.
+
+Another quirk may be that parted recognizes a single exFAT volume as a DOS partition table with some free space (also see `this comment <https://github.com/ralphje/imagemounter/pull/18/files/bcfdc26b954c4831e93a1afd0a2b7763de851328#r125325626>`_). Use another detection method or an explicit :option:`--single` to amend this.
 
 VMFS
 ----
@@ -169,7 +181,9 @@ See the DOS/MBR volume system.
 
 BSD
 ---
-No additional details.
+The BSD volume system (BSD disklabel) is commonly used in conjunction with UFS.
+
+BSD volume c (BSD disk label uses letters to indicate the volumes, imagemounter will number this as volume 3) may appear to contain the entire volume set, and have the same offset as UFS volume a. The correct volume is volume a, and you should skip volume c. This is currently not fixed by imagemounter.
 
 Sun
 ---
