@@ -215,7 +215,7 @@ class ImageParser(object):
         :return: the root :class:`Volume`
         """
         volumes = list(sorted((v for v in self.get_volumes() if v.mountpoint and v.info.get('lastmountpoint')),
-                              key=lambda v: v.numeric_index, reverse=True))
+                              key=lambda v: v.numeric_index))
 
         try:
             root = list(filter(lambda x: x.info.get('lastmountpoint') == '/', volumes))[0]
