@@ -6,6 +6,30 @@ We try to reduce backwards compatibility breakage only to major version releases
 Release history
 ~~~~~~~~~~~~~~~
 
+3.1.0 (2017-08-06)
+------------------
+New features:
+
+* Support for exFAT filesystems (contributed by ldgriffin)
+* Addition of ``force_clean`` method to :class:`ImageParser`
+* Addition of :option:`--skip`, to complement :option:`--only-mount`
+* Improved support for UFS / BSD volumes
+
+Bugfixes:
+
+* Updated :option:`--keys` to not parse commas (as these may be part of the key themselves) and properly support
+  the asterisk key.
+* Several fixes for ``fsstat`` call, including actually killing it after 3 seconds and optimizations by passing
+  in the correct FS type, making mounting actually a lot faster.
+* Fixes for path expanding (contributed by ruzzle)
+* Re-index loopbacks prior to unmounting in the :class:`Unmounter` class (contributed by ldgriffin)
+* Use ``--sizelimit`` for various mounts, for support in newer kernel versions (contributed by ldgriffin)
+* Improved support for non-ASCII volume labels
+* The parted detection method does not hang anymore when parted requests input
+* Fix for communication of LUKS keys to the ``cryptsetup`` command
+* Fixes for reconstruction when multiple roots exist
+
+
 3.0.1 (2017-04-08)
 ------------------
 * Add support for qcow2 (contributed by Jarmo van Lenthe)
