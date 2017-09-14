@@ -93,7 +93,6 @@ class Disk(object):
 
             def add_method_if_exists(method):
                 if (method == 'avfs' and _util.command_exists('avfsd')) or \
-                        (method == 'nbd' and _util.command_exists('qemu-nbd')) or \
                         _util.command_exists(method):
                     methods.append(method)
 
@@ -110,7 +109,7 @@ class Disk(object):
                 elif disk_type == 'compressed':
                     add_method_if_exists('avfs')
                 elif disk_type == 'qcow2':
-                    add_method_if_exists('nbd')
+                    add_method_if_exists('qemu-nbd')
                 add_method_if_exists('xmount')
         else:
             methods = [self.disk_mounter]
@@ -192,7 +191,7 @@ class Disk(object):
             elif method == 'vmware-mount':
                 cmds.append(['vmware-mount', '-r', '-f', self.paths[0], self.mountpoint])
 
-            elif method == 'nbd':
+            elif method == 'qemu-nbd':
                 _util.check_output_(['modprobe', 'nbd', 'max_part=63'])  # Load nbd driver
                 try:
                     self._paths['nbd'] = _util.get_free_nbd_device()  # Get free nbd device
