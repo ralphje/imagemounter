@@ -5,7 +5,7 @@ __ALL__ = ['Volume', 'VolumeSystem', 'Disk', 'ImageParser', 'Unmounter']
 __version__ = '3.1.0'
 
 BLOCK_SIZE = 512
-DISK_MOUNTERS = ('xmount', 'affuse', 'ewfmount', 'vmware-mount', 'avfs', 'auto', 'dummy')
+DISK_MOUNTERS = ('xmount', 'affuse', 'ewfmount', 'vmware-mount', 'avfs', 'qemu-nbd', 'auto', 'dummy')
 VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt')
 FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'exfat', 'hfs', 'hfs+', 'xfs', 'iso', 'udf', 'fat',
                      'vmfs', 'squashfs', 'jffs2', 'cramfs', 'minix',
