@@ -81,10 +81,10 @@ def expand_path(path):
     """
     if is_encase(path):
         return glob.glob(path[:-2] + '??') or [path]
-    elif re.match(r'^.*\.\d{2,3}$', path):
-        return glob.glob(path[:path.rfind('.')] + '.[0-9][0-9]?') or [path]
-    elif re.match(r'^.*\.\d{4}$', path):
-        return glob.glob(path[:path.rfind('.')] + '.[0-9][0-9][0-9]?') or [path]
+    ext_match = re.match(r'^.*\.(\d{2,})$', path)
+    if ext_match is not None:
+        ext_size = len(ext_match.groups()[-1])
+        return glob.glob(path[:-ext_size] + '[0-9]' * ext_size) or [path]
     else:
         return [path]
 
