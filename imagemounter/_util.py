@@ -71,6 +71,10 @@ def is_qcow2(path):
     return re.match(r'.*\.qcow2', path)
 
 
+def is_vbox(path):
+    return re.match(r'.*\.vdi', path)
+
+
 def expand_path(path):
     """
     Expand the given path to either an Encase image or a dd image
