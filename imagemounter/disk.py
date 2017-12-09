@@ -81,6 +81,8 @@ class Disk(object):
             return 'compressed'
         elif _util.is_qcow2(self.paths[0]):
             return 'qcow2'
+        elif _util.is_vbox(self.paths[0]):
+            return 'vdi'
         else:
             return 'dd'
 
@@ -109,6 +111,8 @@ class Disk(object):
                 elif disk_type == 'compressed':
                     add_method_if_exists('avfs')
                 elif disk_type == 'qcow2':
+                    add_method_if_exists('qemu-nbd')
+                elif disk_type == 'vdi':
                     add_method_if_exists('qemu-nbd')
                 add_method_if_exists('xmount')
         else:
