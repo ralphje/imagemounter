@@ -178,9 +178,10 @@ class Disk(object):
                 return
 
             elif method == 'xmount':
-                cmds.append(['xmount', '--in', 'ewf' if disk_type == 'encase' else 'dd'])
+                cmds.append(['xmount', ])
                 if self.read_write:
-                    cmds[-1].extend(['--rw', self.rwpath])
+                    cmds[-1].extend(['--cache', self.rwpath])
+                cmds[-1].extend(['--in', 'ewf' if disk_type == 'encase' else 'dd'])
                 cmds[-1].extend(self.paths)  # specify all paths, xmount needs this :(
                 cmds[-1].append(self.mountpoint)
 
