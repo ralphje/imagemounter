@@ -1,7 +1,33 @@
+"""Dependencies (optional and required) for the imagemounter package."""
+
 from imagemounter import _util
 
 
 class Dependency(object):
+    """An abstract class representing external tools imagemounter depends on.
+
+    Subclasses of this class should define the following two properties:
+
+    - ``is_available``: returns True or False depending on whether the dependency is available.
+        "Available" generally means that the system has this dependency installed and configured correctly to be used.
+
+    - ``status_message``: returns a string indicating the status of the dependency.
+       This message may specify it is installed or not, how and why to
+       install it, etc.. The string may contain format specifiers; the
+       ``printable_status`` property interpolates the current dependency object
+       as ``{0}``.
+
+    :param name: name for the dependency; used in status messages and as
+        the ``__str__()`` representation.
+    :type name: str
+    :param package: the package that can be installed to provide this
+        dependency.
+    :type package: str
+    :param why: description of why this dependency is useful; used in
+        status messages to help user decide if they need to install the
+        dependency package.
+    :type why: str
+    """
 
     def __init__(self, name, package="", why=""):
         self.name = name
@@ -13,18 +39,31 @@ class Dependency(object):
 
     @property
     def printable_status(self):
+        """A printable message about the status of the dependency.
+
+        :return: the status of the dependency
+        :rtype: str
+        """
         return self.status_message.format(self)
 
 
 class CommandDependency(Dependency):
+    """A dependency on a CLI command"""
 
     @property
     def is_available(self):
-        """Check if the command is available on the system"""
+        """Whether the command is available on the system.
+
+        :rtype: bool
+        """
         return _util.command_exists(self.name)
 
     @property
     def status_message(self):
+        """Detailed message about whether the dependency is installed.
+
+        :rtype: str
+        """
         if self.is_available:
             return "INSTALLED {0!s}"
         elif self.why and self.package:
@@ -41,11 +80,18 @@ class PythonModuleDependency(Dependency):
 
     @property
     def is_available(self):
-        """Check if the Python module is available"""
+        """Whether the Python module is available on the system.
+
+        :rtype: bool
+        """
         return _util.module_exists(self.name)
 
     @property
     def status_message(self):
+        """Detailed message about whether the dependency is installed.
+
+        :rtype: str
+        """
         if self.is_available:
             return "INSTALLED {0!s}"
         elif self.why:
@@ -55,7 +101,12 @@ class PythonModuleDependency(Dependency):
 
 
 class MagicDependency(PythonModuleDependency):
-    """This is a special case"""
+    """A special case of PythonModuleDependency
+
+    The ``magic`` Python module can be provided by either the ``python-magic`` PyPI package
+    or the ``python-magic`` apt package (on debian-based systems). They have
+    different APIs, but ``imagemounter`` supports either.
+    """
 
     @property
     def _importable(self):
@@ -68,10 +119,18 @@ class MagicDependency(PythonModuleDependency):
 
     @property
     def is_available(self):
+        """Whether an acceptable version of the ``magic`` module is available on the system.
+
+        :rtype: bool
+        """
         return self.is_python_package or self.is_system_package
 
     @property
     def is_python_package(self):
+        """Whether the ``magic`` module is provided by the ``python-magic`` PyPI package.
+
+        :rtype: bool
+        """
         if not self._importable:
             return False
 
@@ -80,6 +139,10 @@ class MagicDependency(PythonModuleDependency):
 
     @property
     def is_system_package(self):
+        """Whether the ``magic`` module is provided by the ``python-magic`` system package.
+
+        :rtype: bool
+        """
         if not self._importable:
             return False
 
@@ -88,6 +151,10 @@ class MagicDependency(PythonModuleDependency):
 
     @property
     def status_message(self):
+        """Detailed message about whether the dependency is installed.
+
+        :rtype: str
+        """
         if self.is_python_package:
             return "INSTALLED {0!s:<20}(Python package)"
         elif self.is_system_package:
@@ -99,6 +166,15 @@ class MagicDependency(PythonModuleDependency):
 
 
 class DependencySection(object):
+    """Group of dependencies that are displayed together in ``imount --check``.
+
+    :param name: name for the group
+    :type name: str
+    :param description: explanation of which dependencies in the group are needed.
+    :type description: str
+    :param deps: dependencies that are part of this group.
+    :type deps: list of ``Dependency``
+    """
 
     def __init__(self, name, description, deps):
         self.name = name
