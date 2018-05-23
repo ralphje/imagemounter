@@ -38,7 +38,7 @@ class CommandDependency(Dependency):
             return ""
 
 
-class PyModuleDependency(Dependency):
+class PythonModuleDependency(Dependency):
 
     def __str__(self):
         # Fall back to name if not provided (in case it's the same as the package)
@@ -56,7 +56,7 @@ class PyModuleDependency(Dependency):
             return "install using pip"
 
 
-class MagicDependency(PyModuleDependency):
+class MagicDependency(PythonModuleDependency):
     """This is a special case"""
 
     def __init__(self):
@@ -108,7 +108,7 @@ mountavfs = CommandDependency("mountavfs", "avfs", "compressed disk images")
 qemu_nbd = CommandDependency("qemu-nbd", "qemu-utils", "Qcow2 images")
 
 mmls = CommandDependency("mmls", "sleuthkit")
-pytsk3 = PyModuleDependency("pytsk3")
+pytsk3 = PythonModuleDependency("pytsk3")
 parted = CommandDependency("parted", "parted")
 
 fsstat = CommandDependency("fsstat", "sleuthkit")
@@ -145,7 +145,7 @@ mount_volumes = DependencySection(name="Mounting volumes",
                                   deps=[mount_xfs, mount_ntfs, lvm, vmfs_fuse, mount_jffs2,
                                         mount_squashfs, mdadm, cryptsetup, bdemount, vshadowmount])
 
-ALL = [
+ALL_SECTIONS = [
     mount_images,
     detect_volumes,
     detect_volume_types,
