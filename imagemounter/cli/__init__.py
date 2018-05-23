@@ -11,7 +11,7 @@ class CheckAction(argparse.Action):
         print("The following commands are used by imagemounter internally. Without most commands, imagemounter "
               "works perfectly fine, but may lack some detection or mounting capabilities.")
 
-        for section in dependencies.ALL:
+        for section in dependencies.ALL_SECTIONS:
             section.print_status()
 
         parser.exit()
