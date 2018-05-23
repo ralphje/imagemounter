@@ -2,25 +2,21 @@ from imagemounter import _util
 
 
 class Dependency(object):
-    installed_explanation = "INSTALLED {!s}"
 
     def __init__(self, name, package="", why=""):
         self.name = name
         self.package = package
         self.why = why
 
+    def __str__(self):
+        return self.name
+
     @property
     def printable_status(self):
-        if self.is_available:
-            return self.installed_explanation.format(self)
-        else:
-            return "MISSING   {!s:<20}".format(self) + self.missing_explanation
+        return self.status_message.format(self)
 
 
 class CommandDependency(Dependency):
-
-    def __str__(self):
-        return self.name
 
     @property
     def is_available(self):
@@ -28,22 +24,20 @@ class CommandDependency(Dependency):
         return _util.command_exists(self.name)
 
     @property
-    def missing_explanation(self):
-        if self.why and self.package:
-            return "needed for {}, part of the {} package".format(self.why, self.package)
+    def status_message(self):
+        if self.is_available:
+            return "INSTALLED {0!s}"
+        elif self.why and self.package:
+            return "MISSING   {0!s:<20}needed for {0.why}, part of the {0.package} package"
         elif self.why:
-            return "needed for {}".format(self.why)
+            return "MISSING   {0!s:<20}needed for {0.why}"
         elif self.package:
-            return "part of the {} package".format(self.package)
+            return "MISSING   {0!s:<20}part of the {0.package} package"
         else:
-            return ""
+            return "MISSING   {0!s:<20}"
 
 
 class PythonModuleDependency(Dependency):
-
-    def __str__(self):
-        # Fall back to name if not provided (in case it's the same as the package)
-        return self.package or self.name
 
     @property
     def is_available(self):
@@ -51,43 +45,57 @@ class PythonModuleDependency(Dependency):
         return _util.module_exists(self.name)
 
     @property
-    def missing_explanation(self):
-        if self.why:
-            return "needed for {}, install using pip".format(self.why)
+    def status_message(self):
+        if self.is_available:
+            return "INSTALLED {0!s}"
+        elif self.why:
+            return "MISSING   {0!s:<20}needed for {0.why}, install using pip"
         else:
-            return "install using pip"
+            return "MISSING   {0!s:<20}install using pip"
 
 
 class MagicDependency(PythonModuleDependency):
     """This is a special case"""
 
-    def __init__(self):
-        super(MagicDependency, self).__init__("magic", "python-magic")
-        self.source = None
+    @property
+    def _importable(self):
+        """Check if there is an importable module named 'magic'.
+
+        Don't rely on the is_available property, since if the source of the
+        'magic' module is unknown, we should consider it missing
+        """
+        return _util.module_exists('magic')
 
     @property
     def is_available(self):
-        try:
-            import magic
-        except ImportError:
-            return False
-
-        if hasattr(magic, 'from_file'):
-            self.source = "Python package"
-        elif hasattr(magic, 'open'):
-            self.source = "system package"
-        else:
-            self.source = "unknown"
-
-        return True
+        return self.is_python_package or self.is_system_package
 
     @property
-    def installed_explanation(self):
-        if not self.source:
-            self.check()
-        if self.source == "unknown":
-            return "ERROR     {0!s:<20}expecting {0}, found other module named {0.name}"
-        return "INSTALLED {!s:<20}" + "({})".format(self.source)
+    def is_python_package(self):
+        if not self._importable:
+            return False
+
+        import magic
+        return hasattr(magic, 'from_file')
+
+    @property
+    def is_system_package(self):
+        if not self._importable:
+            return False
+
+        import magic
+        return hasattr(magic, 'open')
+
+    @property
+    def status_message(self):
+        if self.is_python_package:
+            return "INSTALLED {0!s:<20}(Python package)"
+        elif self.is_system_package:
+            return "INSTALLED {0!s:<20}(system package)"
+        elif self._importable:
+            return "ERROR     {0!s:<20}expecting {0}, found other module named magic"
+        else:
+            return "MISSING   {0!s:<20}install using pip"
 
 
 class DependencySection(object):
@@ -121,7 +129,7 @@ parted = CommandDependency("parted", "parted")
 fsstat = CommandDependency("fsstat", "sleuthkit")
 file = CommandDependency("file", "libmagic1")
 blkid = CommandDependency("blkid")
-magic = MagicDependency()
+magic = MagicDependency('python-magic')
 disktype = CommandDependency("disktype", "disktype")
 
 mount_xfs = CommandDependency("mount.xfs", "xfsprogs", "XFS volumes")
