@@ -12,7 +12,7 @@ class CheckAction(argparse.Action):
               "works perfectly fine, but may lack some detection or mounting capabilities.")
 
         for section in dependencies.ALL_SECTIONS:
-            section.print_status()
+            print(section.printable_status)
 
         parser.exit()
 

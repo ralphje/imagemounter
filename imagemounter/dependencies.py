@@ -10,7 +10,7 @@ class Dependency(object):
         self.why = why
 
     @property
-    def status(self):
+    def printable_status(self):
         if self.check():
             return self.installed_explanation.format(self)
         else:
@@ -94,10 +94,14 @@ class DependencySection(object):
         self.description = description
         self.deps = deps
 
-    def print_status(self):
-        print("-- {0.name} ({0.description}) --".format(self))
+    @property
+    def printable_status(self):
+        lines = [
+            "-- {0.name} ({0.description}) --".format(self)
+        ]
         for dep in self.deps:
-            print(" " + dep.status)
+            lines.append(" " + dep.printable_status)
+        return "\n".join(lines)
 
 
 xmount = CommandDependency("xmount", "xmount", "several types of disk images")
