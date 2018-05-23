@@ -11,7 +11,7 @@ class Dependency(object):
 
     @property
     def printable_status(self):
-        if self.check():
+        if self.is_available:
             return self.installed_explanation.format(self)
         else:
             return "MISSING   {!s:<20}".format(self) + self.missing_explanation
@@ -22,7 +22,8 @@ class CommandDependency(Dependency):
     def __str__(self):
         return self.name
 
-    def check(self):
+    @property
+    def is_available(self):
         """Check if the command is available on the system"""
         return _util.command_exists(self.name)
 
@@ -44,7 +45,8 @@ class PythonModuleDependency(Dependency):
         # Fall back to name if not provided (in case it's the same as the package)
         return self.package or self.name
 
-    def check(self):
+    @property
+    def is_available(self):
         """Check if the Python module is available"""
         return _util.module_exists(self.name)
 
@@ -63,7 +65,8 @@ class MagicDependency(PythonModuleDependency):
         super(MagicDependency, self).__init__("magic", "python-magic")
         self.source = None
 
-    def check(self):
+    @property
+    def is_available(self):
         try:
             import magic
         except ImportError:
