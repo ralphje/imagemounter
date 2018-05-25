@@ -30,6 +30,7 @@ Contents
    :maxdepth: 2
 
    installation
+   dependencies
    commandline
    python
    specifics
