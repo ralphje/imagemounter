@@ -1,74 +1,19 @@
 import argparse
 import logging
-from imagemounter import _util
+from imagemounter import _util, dependencies
 
 
 class CheckAction(argparse.Action):
     """Action that checks the current state of the system according to the command requirements that imount has."""
 
-    def _check_command(self, command, package="", why=""):
-        if _util.command_exists(command):
-            print(" INSTALLED {}".format(command))
-        elif why and package:
-            print(" MISSING   {:<20}needed for {}, part of the {} package".format(command, why, package))
-        elif why:
-            print(" MISSING   {:<20}needed for {}".format(command, why))
-        elif package:
-            print(" MISSING   {:<20}part of the {} package".format(command, package))
-        else:
-            print(" MISSING   {}".format(command))
-
-    def _check_module(self, module, pip_name="", why=""):
-        if not pip_name:
-            pip_name = module
-
-        if module == "magic" and _util.module_exists(module):
-            import magic
-            if hasattr(magic, 'from_file'):
-                print(" INSTALLED {:<20}(Python package)".format(pip_name))
-            elif hasattr(magic, 'open'):
-                print(" INSTALLED {:<20}(system package)".format(pip_name))
-            else:
-                print(" ERROR     {:<20}expecting {}, found other module named magic".format(pip_name, pip_name))
-        elif module != "magic" and _util.module_exists(module):
-            print(" INSTALLED {}".format(pip_name))
-        elif why:
-            print(" MISSING   {:<20}needed for {}, install using pip".format(pip_name, why))
-        else:
-            print(" MISSING   {:<20}install using pip".format(pip_name, why))
-
     # noinspection PyShadowingNames
     def __call__(self, parser, namespace, values, option_string=None):
         print("The following commands are used by imagemounter internally. Without most commands, imagemounter "
               "works perfectly fine, but may lack some detection or mounting capabilities.")
-        print("-- Mounting base disk images (at least one required, first three recommended) --")
-        self._check_command("xmount", "xmount", "several types of disk images")
-        self._check_command("ewfmount", "ewf-tools", "EWF images (partially covered by xmount)")
-        self._check_command("affuse", "afflib-tools", "AFF images (partially covered by xmount)")
-        self._check_command("vmware-mount", why="VMWare disks")
-        self._check_command("mountavfs", "avfs", "compressed disk images")
-        self._check_command("qemu-nbd", "qemu-utils", "Qcow2 images")
-        print("-- Detecting volumes and volume types (at least one required) --")
-        self._check_command("mmls", "sleuthkit")
-        self._check_module("pytsk3")
-        self._check_command("parted", "parted")
-        print("-- Detecting volume types (all recommended, first two highly recommended) --")
-        self._check_command("fsstat", "sleuthkit")
-        self._check_command("file", "libmagic1")
-        self._check_command("blkid")
-        self._check_module("magic", "python-magic")
-        self._check_command("disktype", "disktype")
-        print("-- Mounting volumes (install when needed) --")
-        self._check_command("mount.xfs", "xfsprogs", "XFS volumes")
-        self._check_command("mount.ntfs", "ntfs-3g", "NTFS volumes")
-        self._check_command("lvm", "lvm2", "LVM volumes")
-        self._check_command("vmfs-fuse", "vmfs-tools", "VMFS volumes")
-        self._check_command("mount.jffs2", "mtd-tools", "JFFS2 volumes")
-        self._check_command("mount.squashfs", "squashfs-tools", "SquashFS volumes")
-        self._check_command("mdadm", "mdadm", "RAID volumes")
-        self._check_command("cryptsetup", "cryptsetup", "LUKS containers")
-        self._check_command("bdemount", "libbde-utils", "Bitlocker Drive Encryption volumes")
-        self._check_command("vshadowmount", "libvshadow-utils", "NTFS volume shadow copies")
+
+        for section in dependencies.ALL_SECTIONS:
+            print(section.printable_status)
+
         parser.exit()
 
 
