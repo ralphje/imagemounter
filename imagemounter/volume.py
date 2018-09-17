@@ -13,7 +13,7 @@ import threading
 import shutil
 
 from imagemounter import _util, filesystems, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES, dependencies
-from imagemounter.exceptions import CommandNotFoundError, NoMountpointAvailableError, SubsystemError, \
+from imagemounter.exceptions import NoMountpointAvailableError, SubsystemError, \
     NoLoopbackAvailableError, NotMountedError, \
     ImageMounterError
 from imagemounter.volume_system import VolumeSystem
