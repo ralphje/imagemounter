@@ -52,6 +52,11 @@ class CommandDependencyTest(unittest.TestCase):
             return x + y
         self.assertRaises(CommandNotFoundError, test)
 
+        @require(dep, none_on_failure=True)
+        def test2(x, y):
+            return x + y
+        self.assertEqual(None, test2(1, 2))
+
     @mock.patch('imagemounter.dependencies._util')
     def test_mocked_dependency(self, util):
         util.command_exists.return_value = True
