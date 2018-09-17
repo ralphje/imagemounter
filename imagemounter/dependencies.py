@@ -1,6 +1,28 @@
 """Dependencies (optional and required) for the imagemounter package."""
 
 from imagemounter import _util
+from imagemounter.exceptions import PrerequisiteFailedError, CommandNotFoundError, ModuleNotFoundError
+import functools
+
+
+def require(*requirements, none_on_failure=False):
+    """Decorator that can be used to require requirements.
+
+    :param requirements: List of requirements that should be verified
+    :param none_on_failure: If true, does not raise a PrerequisiteFailedError, but instead returns None
+    """
+    def inner(f):
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            for req in requirements:
+                if none_on_failure:
+                    if not getattr(req, 'is_available'):
+                        return None
+                else:
+                    getattr(req, 'require')()
+            return f(*args, **kwargs)
+        return wrapper
+    return inner
 
 
 class Dependency(object):
@@ -37,6 +59,12 @@ class Dependency(object):
     def __str__(self):
         return self.name
 
+    def require(self, *a, **kw):
+        """Raises an error when the specified requirement is not available.
+        """
+        if not self.is_available:
+            raise PrerequisiteFailedError(str(self))
+
     @property
     def printable_status(self):
         """A printable message about the status of the dependency.
@@ -49,6 +77,10 @@ class Dependency(object):
 
 class CommandDependency(Dependency):
     """A dependency on a CLI command"""
+
+    def require(self):
+        if not self.is_available:
+            raise CommandNotFoundError(str(self))
 
     @property
     def is_available(self):
@@ -77,6 +109,9 @@ class CommandDependency(Dependency):
 
 
 class PythonModuleDependency(Dependency):
+    def require(self):
+        if not self.is_available:
+            raise ModuleNotFoundError(str(self))
 
     @property
     def is_available(self):
@@ -218,6 +253,7 @@ mdadm = CommandDependency("mdadm", "mdadm", "RAID volumes")
 cryptsetup = CommandDependency("cryptsetup", "cryptsetup", "LUKS containers")
 bdemount = CommandDependency("bdemount", "libbde-utils", "Bitlocker Drive Encryption volumes")
 vshadowmount = CommandDependency("vshadowmount", "libvshadow-utils", "NTFS volume shadow copies")
+photorec = CommandDependency("photorec", "photorec", "carving free space")
 
 mount_images = DependencySection(name="Mounting base disk images",
                                  description="at least one required, first three recommended",
@@ -234,7 +270,7 @@ detect_volume_types = DependencySection(name="Detecting volume types",
 mount_volumes = DependencySection(name="Mounting volumes",
                                   description="install when needed",
                                   deps=[mount_xfs, mount_ntfs, lvm, vmfs_fuse, mount_jffs2,
-                                        mount_squashfs, mdadm, cryptsetup, bdemount, vshadowmount])
+                                        mount_squashfs, mdadm, cryptsetup, bdemount, vshadowmount, photorec])
 
 ALL_SECTIONS = [
     mount_images,

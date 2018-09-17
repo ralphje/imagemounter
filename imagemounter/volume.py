@@ -12,7 +12,7 @@ import tempfile
 import threading
 import shutil
 
-from imagemounter import _util, filesystems, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
+from imagemounter import _util, filesystems, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES, dependencies
 from imagemounter.exceptions import CommandNotFoundError, NoMountpointAvailableError, SubsystemError, \
     NoLoopbackAvailableError, NotMountedError, \
     ImageMounterError
@@ -162,6 +162,7 @@ class Volume(object):
         else:
             return self.size
 
+    @dependencies.require(dependencies.blkid, none_on_failure=True)
     def _get_blkid_type(self):
         """Retrieves the FS type from the blkid command."""
         try:
@@ -182,6 +183,7 @@ class Volume(object):
         except Exception:
             return None  # returning None is better here, since we do not care about the exception in determine_fs_type
 
+    @dependencies.require(dependencies.magic, none_on_failure=True)
     def _get_magic_type(self):
         """Checks the volume for its magic bytes and returns the magic."""
 
@@ -282,6 +284,7 @@ class Volume(object):
             suffix = suffix[:-1]
         return suffix
 
+    @dependencies.require(dependencies.photorec)
     def carve(self, freespace=True):
         """Call this method to carve the free space of the volume for (deleted) files. Note that photorec has its
         own interface that temporarily takes over the shell.
@@ -294,10 +297,6 @@ class Volume(object):
         :raises NoMountpointAvailableError: if there is no mountpoint available
         :raises NoLoopbackAvailableError: if there is no loopback available (only when volume has no slot number)
         """
-
-        if not _util.command_exists('photorec'):
-            logger.warning("photorec is not installed, could not carve volume")
-            raise CommandNotFoundError("photorec")
 
         self._make_mountpoint(var_name='carve', suffix="carve", in_paths=True)
 
@@ -339,6 +338,7 @@ class Volume(object):
                 logger.exception("Failed carving the volume.")
                 raise SubsystemError(e)
 
+    @dependencies.require(dependencies.vshadowmount)
     def detect_volume_shadow_copies(self):
         """Method to call vshadowmount and mount NTFS volume shadow copies.
 
@@ -347,10 +347,6 @@ class Volume(object):
         :raises SubSystemError: if the underlying command fails
         :raises NoMountpointAvailableError: if there is no mountpoint available
         """
-
-        if not _util.command_exists('vshadowmount'):
-            logger.warning("vshadowmount is not installed, could not mount volume shadow copies")
-            raise CommandNotFoundError('vshadowmount')
 
         self._make_mountpoint(var_name='vss', suffix="vss", in_paths=True)
 
@@ -667,12 +663,9 @@ class Volume(object):
         else:
             return [self]
 
+    @dependencies.require(dependencies.fsstat, none_on_failure=True)
     def _load_fsstat_data(self, timeout=3):
         """Using :command:`fsstat`, adds some additional information of the volume to the Volume."""
-
-        if not _util.command_exists('fsstat'):
-            logger.warning("fsstat is not installed, could not mount volume shadow copies")
-            return
 
         def stats_thread():
             try:
