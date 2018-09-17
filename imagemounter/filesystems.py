@@ -8,7 +8,7 @@ import sys
 import tempfile
 import time
 
-from imagemounter import _util, VOLUME_SYSTEM_TYPES
+from imagemounter import _util, VOLUME_SYSTEM_TYPES, dependencies
 from imagemounter.exceptions import UnsupportedFilesystemError, IncorrectFilesystemError, ArgumentError, \
     KeyInvalidError, ImageMounterError, SubsystemError
 
@@ -290,7 +290,7 @@ class Jffs2FileSystemType(FileSystemType):
         _util.check_call_(['modprobe', '-v', 'mtdram', 'total_size={}'.format(size_in_kb), 'erase_size=256'])
         _util.check_call_(['modprobe', '-v', 'mtdblock'])
         _util.check_call_(['dd', 'if=' + volume.get_raw_path(), 'of=/dev/mtd0'])
-        _util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', mountpoint])
+        _util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', volume.mountpoint])
 
 
 class LuksFileSystemType(FileSystemType):
@@ -303,6 +303,7 @@ class LuksFileSystemType(FileSystemType):
             res.update({self: 0})
         return res
 
+    @dependencies.require(dependencies.cryptsetup)
     def mount(self, volume):
         """Command that is an alternative to the :func:`mount` command that opens a LUKS container. The opened volume is
         added to the subvolume set of this volume. Requires the user to enter the key manually.
@@ -406,6 +407,7 @@ class BdeFileSystemType(FileSystemType):
             res.update({self: 0})
         return res
 
+    @dependencies.require(dependencies.bdemount)
     def mount(self, volume):
         """Mounts a BDE container. Uses key material provided by the :attr:`keys` attribute. The key material should be
         provided in the same format as to :cmd:`bdemount`, used as follows:
@@ -454,6 +456,7 @@ class LvmFileSystemType(FileSystemType):
     aliases = ['0x8e']
     guids = ['E6D6D379-F507-44C2-A23C-238F2A3DF928', '79D3D6E6-07F5-C244-A23C-238F2A3DF928']
 
+    @dependencies.require(dependencies.lvm)
     def mount(self, volume):
         """Performs mount actions on a LVM. Scans for active volume groups from the loopback device, activates it
         and fills :attr:`volumes` with the logical volumes.
@@ -501,6 +504,7 @@ class RaidFileSystemType(FileSystemType):
             res.update({self: 0})
         return res
 
+    @dependencies.require(dependencies.mdadm)
     def mount(self, volume):
         """Add the volume to a RAID system. The RAID array is activated as soon as the array can be activated.
 

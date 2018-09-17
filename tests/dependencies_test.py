@@ -5,7 +5,8 @@ import sys
 import unittest
 
 from imagemounter.dependencies import (CommandDependency, Dependency,
-        DependencySection, MagicDependency, PythonModuleDependency)
+                                       DependencySection, MagicDependency, PythonModuleDependency, require)
+from imagemounter.exceptions import CommandNotFoundError
 
 
 class DependencyTest(unittest.TestCase):
@@ -28,10 +29,28 @@ class CommandDependencyTest(unittest.TestCase):
     def test_existing_dependency(self):
         dep = CommandDependency('ls')
         self.assertTrue(dep.is_available)
+        dep.require()
+
+    def test_existing_dependency_decorator(self):
+        dep = CommandDependency('ls')
+
+        @require(dep)
+        def test(x, y):
+            return x + y
+        self.assertEqual(test(1, 2), 3)
 
     def test_missing_dependency(self):
         dep = CommandDependency('lsxxxx')
         self.assertFalse(dep.is_available)
+        self.assertRaises(CommandNotFoundError, dep.require)
+
+    def test_missing_dependency_decorator(self):
+        dep = CommandDependency('lsxxxx')
+
+        @require(dep)
+        def test(x, y):
+            return x + y
+        self.assertRaises(CommandNotFoundError, test)
 
     @mock.patch('imagemounter.dependencies._util')
     def test_mocked_dependency(self, util):
