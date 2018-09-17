@@ -6,19 +6,16 @@ import collections
 import io
 import logging
 import os
-import random
 import subprocess
 import re
 import tempfile
 import threading
 import shutil
-import time
-from collections import defaultdict
 
 from imagemounter import _util, filesystems, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
 from imagemounter.exceptions import CommandNotFoundError, NoMountpointAvailableError, SubsystemError, \
-    NoLoopbackAvailableError, UnsupportedFilesystemError, NotMountedError, IncorrectFilesystemError, ArgumentError, \
-    ImageMounterError, KeyInvalidError
+    NoLoopbackAvailableError, NotMountedError, \
+    ImageMounterError
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
@@ -621,15 +618,6 @@ class Volume(object):
         try:
             fstype.mount(self)
 
-            # try:
-            #     size = self.size // self.disk.block_size
-            # except TypeError:
-            #     size = self.size
-            #
-            # logger.warning("Unsupported filesystem {0} (type: {1}, block offset: {2}, length: {3})"
-            #                .format(self, fstype, self.offset // self.disk.block_size, size))
-            # raise UnsupportedFilesystemError(fstype)
-
             self.was_mounted = True
             self.is_mounted = True
             self.fstype = fstype
@@ -669,234 +657,6 @@ class Volume(object):
         except Exception as e:
             logger.exception("Error bind mounting {0}.".format(self))
             raise SubsystemError(e)
-
-    def _open_luks_container(self):
-        """Command that is an alternative to the :func:`mount` command that opens a LUKS container. The opened volume is
-        added to the subvolume set of this volume. Requires the user to enter the key manually.
-
-        TODO: add support for :attr:`keys`
-
-        :return: the Volume contained in the LUKS container, or None on failure.
-        :raises NoLoopbackAvailableError: when no free loopback could be found
-        :raises IncorrectFilesystemError: when this is not a LUKS volume
-        :raises SubsystemError: when the underlying command fails
-        """
-
-        # Open a loopback device
-        self._find_loopback()
-
-        # Check if this is a LUKS device
-        # noinspection PyBroadException
-        try:
-            _util.check_call_(["cryptsetup", "isLuks", self.loopback], stderr=subprocess.STDOUT)
-            # ret = 0 if isLuks
-        except Exception:
-            logger.warning("Not a LUKS volume")
-            # clean the loopback device, we want this method to be clean as possible
-            # noinspection PyBroadException
-            try:
-                self._free_loopback()
-            except Exception:
-                pass
-            raise IncorrectFilesystemError()
-
-        try:
-            extra_args = []
-            key = None
-            if self.key:
-                t, v = self.key.split(':', 1)
-                if t == 'p':  # passphrase
-                    key = v
-                elif t == 'f':  # key-file
-                    extra_args = ['--key-file', v]
-                elif t == 'm':  # master-key-file
-                    extra_args = ['--master-key-file', v]
-            else:
-                logger.warning("No key material provided for %s", self)
-        except ValueError:
-            logger.exception("Invalid key material provided (%s) for %s. Expecting [arg]:[value]", self.key, self)
-            self._free_loopback()
-            raise ArgumentError()
-
-        # Open the LUKS container
-        self._paths['luks'] = 'image_mounter_luks_' + str(random.randint(10000, 99999))
-
-        # noinspection PyBroadException
-        try:
-            cmd = ["cryptsetup", "luksOpen", self.loopback, self._paths['luks']]
-            cmd.extend(extra_args)
-            if not self.disk.read_write:
-                cmd.insert(1, '-r')
-
-            if key is not None:
-                logger.debug('$ {0}'.format(' '.join(cmd)))
-                # for py 3.2+, we could have used input=, but that doesn't exist in py2.7.
-                p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                p.communicate(key.encode("utf-8"))
-                p.wait()
-                retcode = p.poll()
-                if retcode:
-                    raise KeyInvalidError()
-            else:
-                _util.check_call_(cmd)
-        except ImageMounterError:
-            del self._paths['luks']
-            self._free_loopback()
-            raise
-        except Exception as e:
-            del self._paths['luks']
-            self._free_loopback()
-            raise SubsystemError(e)
-
-        size = None
-        # noinspection PyBroadException
-        try:
-            result = _util.check_output_(["cryptsetup", "status", self._paths['luks']])
-            for l in result.splitlines():
-                if "size:" in l and "key" not in l:
-                    size = int(l.replace("size:", "").replace("sectors", "").strip()) * self.disk.block_size
-        except Exception:
-            pass
-
-        container = self.volumes._make_single_subvolume(flag='alloc', offset=0, size=size)
-        container.info['fsdescription'] = 'LUKS Volume'
-
-        return container
-
-    def _open_bde_container(self):
-        """Mounts a BDE container. Uses key material provided by the :attr:`keys` attribute. The key material should be
-        provided in the same format as to :cmd:`bdemount`, used as follows:
-
-        k:full volume encryption and tweak key
-        p:passphrase
-        r:recovery password
-        s:file to startup key (.bek)
-
-        :return: the Volume contained in the BDE container
-        :raises ArgumentError: if the keys argument is invalid
-        :raises SubsystemError: when the underlying command fails
-        """
-
-        self._paths['bde'] = tempfile.mkdtemp(prefix='image_mounter_bde_')
-
-        try:
-            if self.key:
-                t, v = self.key.split(':', 1)
-                key = ['-' + t, v]
-            else:
-                logger.warning("No key material provided for %s", self)
-                key = []
-        except ValueError:
-            logger.exception("Invalid key material provided (%s) for %s. Expecting [arg]:[value]", self.key, self)
-            raise ArgumentError()
-
-        # noinspection PyBroadException
-        try:
-            cmd = ["bdemount", self.get_raw_path(), self._paths['bde'], '-o', str(self.offset)]
-            cmd.extend(key)
-            _util.check_call_(cmd)
-        except Exception as e:
-            del self._paths['bde']
-            logger.exception("Failed mounting BDE volume %s.", self)
-            raise SubsystemError(e)
-
-        container = self.volumes._make_single_subvolume(flag='alloc', offset=0, size=self.size)
-        container.info['fsdescription'] = 'BDE Volume'
-
-        return container
-
-    def _open_jffs2(self):
-        """Perform specific operations to mount a JFFS2 image. This kind of image is sometimes used for things like
-        bios images. so external tools are required but given this method you don't have to memorize anything and it
-        works fast and easy.
-
-        Note that this module might not yet work while mounting multiple images at the same time.
-        """
-        # we have to make a ram-device to store the image, we keep 20% overhead
-        size_in_kb = int((self.size / 1024) * 1.2)
-        _util.check_call_(['modprobe', '-v', 'mtd'])
-        _util.check_call_(['modprobe', '-v', 'jffs2'])
-        _util.check_call_(['modprobe', '-v', 'mtdram', 'total_size={}'.format(size_in_kb), 'erase_size=256'])
-        _util.check_call_(['modprobe', '-v', 'mtdblock'])
-        _util.check_call_(['dd', 'if=' + self.get_raw_path(), 'of=/dev/mtd0'])
-        _util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', self.mountpoint])
-
-    def _open_lvm(self):
-        """Performs mount actions on a LVM. Scans for active volume groups from the loopback device, activates it
-        and fills :attr:`volumes` with the logical volumes.
-
-        :raises NoLoopbackAvailableError: when no loopback was available
-        :raises IncorrectFilesystemError: when the volume is not a volume group
-        """
-        os.environ['LVM_SUPPRESS_FD_WARNINGS'] = '1'
-
-        # find free loopback device
-        self._find_loopback()
-        time.sleep(0.2)
-
-        try:
-            # Scan for new lvm volumes
-            result = _util.check_output_(["lvm", "pvscan"])
-            for l in result.splitlines():
-                if self.loopback in l or (self.offset == 0 and self.get_raw_path() in l):
-                    for vg in re.findall(r'VG (\S+)', l):
-                        self.info['volume_group'] = vg
-
-            if not self.info.get('volume_group'):
-                logger.warning("Volume is not a volume group. (Searching for %s)", self.loopback)
-                raise IncorrectFilesystemError()
-
-            # Enable lvm volumes
-            _util.check_call_(["lvm", "vgchange", "-a", "y", self.info['volume_group']], stdout=subprocess.PIPE)
-        except Exception:
-            self._free_loopback()
-            raise
-
-    def _open_raid_volume(self):
-        """Add the volume to a RAID system. The RAID array is activated as soon as the array can be activated.
-
-        :raises NoLoopbackAvailableError: if no loopback device was found
-        """
-
-        self._find_loopback()
-
-        raid_status = None
-        try:
-            # use mdadm to mount the loopback to a md device
-            # incremental and run as soon as available
-            output = _util.check_output_(['mdadm', '-IR', self.loopback], stderr=subprocess.STDOUT)
-
-            match = re.findall(r"attached to ([^ ,]+)", output)
-            if match:
-                self._paths['md'] = os.path.realpath(match[0])
-                if 'which is already active' in output:
-                    logger.info("RAID is already active in other volume, using %s", self._paths['md'])
-                    raid_status = 'active'
-                elif 'not enough to start' in output:
-                    self._paths['md'] = self._paths['md'].replace("/dev/md/", "/dev/md")
-                    logger.info("RAID volume added, but not enough to start %s", self._paths['md'])
-                    raid_status = 'waiting'
-                else:
-                    logger.info("RAID started at {0}".format(self._paths['md']))
-                    raid_status = 'active'
-        except Exception as e:
-            logger.exception("Failed mounting RAID.")
-            self._free_loopback()
-            raise SubsystemError(e)
-
-        # search for the RAID volume
-        for v in self.disk.parser.get_volumes():
-            if v._paths.get("md") == self._paths['md'] and v.volumes:
-                logger.debug("Adding existing volume %s to volume %s", v.volumes[0], self)
-                v.volumes[0].info['raid_status'] = raid_status
-                self.volumes.volumes.append(v.volumes[0])
-                return v.volumes[0]
-        else:
-            logger.debug("Creating RAID volume for %s", self)
-            container = self.volumes._make_single_subvolume(flag='alloc', offset=0, size=self.size)
-            container.info['fsdescription'] = 'RAID Volume'
-            container.info['raid_status'] = raid_status
-            return container
 
     def get_volumes(self):
         """Recursively gets a list of all subvolumes and the current volume."""

@@ -34,6 +34,24 @@ class FileSystemType(object):
         return self.type
 
     def detect(self, source, description):
+        """Detects the type of a volume based on the provided information. It returns the plausibility for all
+        file system types as a dict. Although it is only responsible for returning its own plausibility, it is possible
+        that one type of filesystem is more likely than another, e.g. when NTFS detects it is likely to be NTFS, it
+        can also update the plausibility of exFAT to indicate it is less likely.
+
+        All scores a cumulative. When multiple sources are used, it is also cumulative. For instance, if run 1 is 25
+        certain, and run 2 is 25 certain as well, it will become 50 certain.
+
+        :meth:`Volume.detect_fs_type` will return immediately if the score is higher than 50 and there is only 1
+        FS type with the highest score. Otherwise, it will continue with the next run. If at the end of all runs no
+        viable FS type was found, it will return the highest scoring FS type (if it is > 0), otherwise it will return
+        the FS type fallback.
+
+        :param source: The source of the description
+        :param description: The description to detect with
+        :return: Dict with mapping of FsType() objects to scores
+        """
+
         if source == "guid" and description in self.guids:
             return {self: 100}
 
