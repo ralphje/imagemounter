@@ -498,6 +498,13 @@ class Volume(object):
                 setattr(self, var_name, t)
             return t
 
+    def _clear_mountpoint(self):
+        """Clears a created mountpoint. Does not unmount it, merely deletes it."""
+
+        if self.mountpoint:
+            os.rmdir(self.mountpoint)
+            self.mountpoint = ""
+
     def _find_loopback(self, use_loopback=True, var_name='loopback'):
         """Finds a free loopback device that can be used. The loopback is stored in :attr:`loopback`. If *use_loopback*
         is True, the loopback will also be used directly.
@@ -609,7 +616,6 @@ class Volume(object):
         if not self.parent.is_mounted:
             raise NotMountedError(self.parent)
 
-        raw_path = self.get_raw_path()
         if fstype is None:
             fstype = self.determine_fs_type()
         self._load_fsstat_data()
@@ -624,15 +630,6 @@ class Volume(object):
 
         except Exception as e:
             logger.exception("Execution failed due to {} {}".format(type(e), e), exc_info=True)
-            try:
-                if self.mountpoint:
-                    os.rmdir(self.mountpoint)
-                    self.mountpoint = ""
-                if self.loopback:
-                    self.loopback = ""
-            except Exception:
-                logger.exception("Clean-up failed", exc_info=True)
-
             if not isinstance(e, ImageMounterError):
                 raise SubsystemError(e)
             else:

@@ -73,7 +73,12 @@ class FileSystemType(object):
         """
 
         volume._make_mountpoint()
-        self._call_mount(volume, volume.mountpoint, self._mount_type or self.type, self._mount_opts)
+        try:
+            self._call_mount(volume, volume.mountpoint, self._mount_type or self.type, self._mount_opts)
+        except Exception:
+            # undo the creation of the mountpoint
+            volume._clear_mountpoint()
+            raise
 
     def _call_mount(self, volume, mountpoint, type=None, opts=""):
         """Calls the mount command, specifying the mount type and mount options."""
@@ -260,7 +265,12 @@ class VmfsFileSystemType(FileSystemType):
     def mount(self, volume):
         volume._make_mountpoint()
         volume._find_loopback()
-        _util.check_call_(['vmfs-fuse', volume.loopback, volume.mountpoint], stdout=subprocess.PIPE)
+        try:
+            _util.check_call_(['vmfs-fuse', volume.loopback, volume.mountpoint], stdout=subprocess.PIPE)
+        except Exception:
+            volume._free_loopback()
+            volume._clear_mountpoint()
+            raise
 
 
 class Jffs2FileSystemType(FileSystemType):
