@@ -166,14 +166,12 @@ class FsTypeTest(unittest.TestCase):
         ]
 
         for definition in definitions:
-            with self.subTest(definition=definition):
-                print(definition)
-                volume = Volume(disk=Disk(ImageParser(), "..."))
-                volume._get_blkid_type = mock.Mock(return_value=definition.get("blkid"))
-                volume._get_magic_type = mock.Mock(return_value=definition.get("magic"))
-                volume.info = definition
-                volume.determine_fs_type()
-                self.assertEqual(FILE_SYSTEM_TYPES[definition[_]], volume.fstype)
+            volume = Volume(disk=Disk(ImageParser(), "..."))
+            volume._get_blkid_type = mock.Mock(return_value=definition.get("blkid"))
+            volume._get_magic_type = mock.Mock(return_value=definition.get("magic"))
+            volume.info = definition
+            volume.determine_fs_type()
+            self.assertEqual(FILE_SYSTEM_TYPES[definition[_]], volume.fstype)
 
     def test_no_clue_fstype(self):
         volume = Volume(disk=Disk(ImageParser(), "..."))
