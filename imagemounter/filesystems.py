@@ -110,7 +110,7 @@ class FallbackFileSystemType(FileSystemType):
         super(FallbackFileSystemType, self).__init__(*args, **kwargs)
 
     def __str__(self):
-        return "?" + self.type
+        return "?" + str(self.fallback)
 
 
 class UnknownFileSystemType(FileSystemType):

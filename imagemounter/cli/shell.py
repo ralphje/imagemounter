@@ -348,12 +348,12 @@ class ImageMounterShell(ArgumentParsedShell):
                 level += 1
                 for i, v in enumerate(volumes):
                     level_str = "  " * level + ("└ " if i == len(volumes) - 1 else "├ ")
-                    tp = v.volumes.vstype if v.fstype == 'volumesystem' else v.fstype if v.flag == 'alloc' else v.flag
+                    tp = v.volumes.vstype if v.fstype.type == 'volumesystem' else v.fstype if v.flag == 'alloc' else v.flag
 
                     print("{level_str}{index}  {type} {size:<10}  {description}".format(
                         level_str=level_str,
                         index=col("{:<5}".format(v.index), 'green' if v.is_mounted else None, attrs=['bold']),
-                        type=col("{:<10}".format(tp), attrs=['dark']),
+                        type=col("{:<10}".format(str(tp)), attrs=['dark']),
                         description=v.get_description(with_index=False, with_size=False)[:30],
                         size=v.get_formatted_size()
                     ))
