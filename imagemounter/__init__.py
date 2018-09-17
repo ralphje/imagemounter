@@ -7,11 +7,9 @@ __version__ = '3.1.0'
 BLOCK_SIZE = 512
 DISK_MOUNTERS = ('xmount', 'affuse', 'ewfmount', 'vmware-mount', 'avfs', 'qemu-nbd', 'auto', 'dummy')
 VOLUME_SYSTEM_TYPES = ('detect', 'dos', 'bsd', 'sun', 'mac', 'gpt')
-FILE_SYSTEM_TYPES = ('ext', 'ufs', 'ntfs', 'exfat', 'hfs', 'hfs+', 'xfs', 'iso', 'udf', 'fat',
-                     'vmfs', 'squashfs', 'jffs2', 'cramfs', 'minix',
-                     'luks', 'bde', 'lvm', 'raid',
-                     'dir', 'volumesystem', 'unknown')
 
+
+from imagemounter.filesystems import FILE_SYSTEM_TYPES  # NOQA
 from imagemounter.parser import ImageParser  # NOQA
 from imagemounter.disk import Disk  # NOQA
 from imagemounter.volume import Volume  # NOQA
