@@ -5,6 +5,33 @@ We try to reduce backwards compatibility breakage only to major version releases
 
 Release history
 ~~~~~~~~~~~~~~~
+4.0.0 (unreleased)
+------------------
+This release contains some major improvements in the API of imagemounter, making large if-statements obsolete and
+obtaining more 'Pythonic' code where possible. It is a continuation of the efforts in version 3.0 and includes fixes
+from many contributors.
+
+New features:
+
+* Allowed programmatic access to dependency checks (contributed by gtback). This enables you to write code that checks
+  whether certain dependencies are satisfied.
+* Changed the way file system types work. Large if-statements in the code have been replaced by class-based
+  filesystem types. **Backwards incompatible**: the ``fstype`` property is no longer a string, but a class instead.
+
+  .. note::
+
+     This change may result in file systems that were previously correctly detected suddenly not being identified
+     correctly. If you encounter such an error, please submit a bug report stating the outputs of the different
+     identifiers, the actual result and the expected result. You can obtain this information using ``-vvvv`` on the
+     command line.
+
+* Add support for VBox disk images (vdi) (contributed by ruzzle)
+
+Bugfixes:
+
+* Renamed nbd to qemu-nbd (contributed by Jarmo van Lenthe)
+* Support for segmented filenames higher than 999 (contributed by jdossett)
+* Fixed ``xmount`` command order (contributed by Jarmo van Lenthe)
 
 3.1.0 (2017-08-06)
 ------------------
