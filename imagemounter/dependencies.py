@@ -5,12 +5,15 @@ from imagemounter.exceptions import PrerequisiteFailedError, CommandNotFoundErro
 import functools
 
 
-def require(*requirements, none_on_failure=False):
+def require(*requirements, **kwargs):
     """Decorator that can be used to require requirements.
 
     :param requirements: List of requirements that should be verified
     :param none_on_failure: If true, does not raise a PrerequisiteFailedError, but instead returns None
     """
+    # TODO: require(*requirements, none_on_failure=False) is not supported by Python 2
+    none_on_failure = kwargs.get('none_on_failure', False)
+
     def inner(f):
         @functools.wraps(f)
         def wrapper(*args, **kwargs):
