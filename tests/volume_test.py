@@ -4,10 +4,12 @@ import unittest
 import mock
 import time
 
+from imagemounter import FILE_SYSTEM_TYPES
 from imagemounter._util import check_output_
+from imagemounter.filesystems import UnknownFileSystemType
 from imagemounter.parser import ImageParser
 from imagemounter.disk import Disk
-from imagemounter.volume import Volume, FILE_SYSTEM_GUIDS
+from imagemounter.volume import Volume
 
 
 class InitializationTest(unittest.TestCase):
@@ -22,17 +24,15 @@ class InitializationTest(unittest.TestCase):
 
 class FsTypeTest(unittest.TestCase):
     def test_valid_fstype(self):
-        volume = Volume(disk=Disk(ImageParser(), "..."))
-        volume.fstype = 'ext'
+        volume = Volume(disk=Disk(ImageParser(), "..."), fstype='ext')
         volume.determine_fs_type()
-        self.assertEqual("ext", volume.fstype)
+        self.assertEqual(FILE_SYSTEM_TYPES['ext'], volume.fstype)
 
     def test_valid_vstype(self):
-        volume = Volume(disk=Disk(ImageParser(), "..."))
-        volume.fstype = 'dos'
+        volume = Volume(disk=Disk(ImageParser(), "..."), fstype="dos")
         volume.determine_fs_type()
         self.assertEqual("dos", volume.volumes.vstype)
-        self.assertEqual("volumesystem", volume.fstype)
+        self.assertEqual(FILE_SYSTEM_TYPES["volumesystem"], volume.fstype)
 
     def test_fsdescription(self):
         # Add names in here that are shown in the wild for output of mmls / gparted
@@ -59,16 +59,28 @@ class FsTypeTest(unittest.TestCase):
             self.fstype = ""  # prevent fallback to unknown by default
             volume.info['fsdescription'] = description
             volume.determine_fs_type()
-            self.assertEqual(fstype, volume.fstype)
+            self.assertEqual(FILE_SYSTEM_TYPES[fstype], volume.fstype)
 
     def test_guid(self):
+
+        FILE_SYSTEM_GUIDS = {
+            '2AE031AA-0F40-DB11-9590-000C2911D1B8': 'vmfs',
+            #'8053279D-AD40-DB11-BF97-000C2911D1B8': 'vmkcore-diagnostics',
+            #'6A898CC3-1DD2-11B2-99A6-080020736631': 'zfs-member',
+            #'C38C896A-D21D-B211-99A6-080020736631': 'zfs-member',
+            #'0FC63DAF-8483-4772-8E79-3D69D8477DE4': 'linux',
+            'E6D6D379-F507-44C2-A23C-238F2A3DF928': 'lvm',
+            '79D3D6E6-07F5-C244-A23C-238F2A3DF928': 'lvm',
+            'CA7D7CCB-63ED-4C53-861C-1742536059CC': 'luks'
+        }
+
         for description, fstype in FILE_SYSTEM_GUIDS.items():
             volume = Volume(disk=Disk(ImageParser(), "..."))
             volume._get_blkid_type = mock.Mock(return_value=None)
             volume._get_magic_type = mock.Mock(return_value=None)
             volume.info['guid'] = description
             volume.determine_fs_type()
-            self.assertEqual(fstype, volume.fstype)
+            self.assertEqual(FILE_SYSTEM_TYPES[fstype], volume.fstype)
 
     def test_blkid(self):
         # Add values here that are shown in the wild for blkid
@@ -93,7 +105,7 @@ class FsTypeTest(unittest.TestCase):
             volume._get_blkid_type = mock.Mock(return_value=description)
             volume._get_magic_type = mock.Mock(return_value=None)
             volume.determine_fs_type()
-            self.assertEqual(fstype, volume.fstype)
+            self.assertEqual(FILE_SYSTEM_TYPES[fstype], volume.fstype)
 
     def test_magic(self):
         # Add values here that are shown in the wild for file magic output
@@ -125,7 +137,7 @@ class FsTypeTest(unittest.TestCase):
             volume._get_blkid_type = mock.Mock(return_value=None)
             volume._get_magic_type = mock.Mock(return_value=description)
             volume.determine_fs_type()
-            self.assertEqual(fstype, volume.fstype)
+            self.assertEqual(FILE_SYSTEM_TYPES[fstype], volume.fstype)
 
     def test_combination(self):
         # Add values here to test full combinations of specific filesystem types
@@ -154,34 +166,36 @@ class FsTypeTest(unittest.TestCase):
         ]
 
         for definition in definitions:
-            volume = Volume(disk=Disk(ImageParser(), "..."))
-            volume._get_blkid_type = mock.Mock(return_value=definition.get("blkid"))
-            volume._get_magic_type = mock.Mock(return_value=definition.get("magic"))
-            volume.info = definition
-            volume.determine_fs_type()
-            self.assertEqual(definition[_], volume.fstype)
+            with self.subTest(definition=definition):
+                print(definition)
+                volume = Volume(disk=Disk(ImageParser(), "..."))
+                volume._get_blkid_type = mock.Mock(return_value=definition.get("blkid"))
+                volume._get_magic_type = mock.Mock(return_value=definition.get("magic"))
+                volume.info = definition
+                volume.determine_fs_type()
+                self.assertEqual(FILE_SYSTEM_TYPES[definition[_]], volume.fstype)
 
     def test_no_clue_fstype(self):
         volume = Volume(disk=Disk(ImageParser(), "..."))
         volume._get_blkid_type = mock.Mock(return_value=None)
         volume._get_magic_type = mock.Mock(return_value=None)
         volume.determine_fs_type()
-        self.assertEqual("unknown", volume.fstype)
+        self.assertEqual(UnknownFileSystemType(), volume.fstype)
 
     def test_little_clue_fstype(self):
         volume = Volume(disk=Disk(ImageParser(), "..."))
         volume._get_blkid_type = mock.Mock(return_value="-")
         volume._get_magic_type = mock.Mock(return_value="-")
         volume.determine_fs_type()
-        self.assertEqual("unknown", volume.fstype)
+        self.assertEqual(UnknownFileSystemType(), volume.fstype)
 
     def test_fstype_fallback(self):
         volume = Volume(disk=Disk(ImageParser(), "..."))
-        volume.fstype = "?bsd"
         volume._get_blkid_type = mock.Mock(return_value=None)
         volume._get_magic_type = mock.Mock(return_value=None)
+        volume._get_fstype_from_parser('?ufs')
         volume.determine_fs_type()
-        self.assertEqual("bsd", volume.fstype)
+        self.assertEqual(FILE_SYSTEM_TYPES["ufs"], volume.fstype)
 
     def test_fstype_fallback_unknown(self):
         volume = Volume(disk=Disk(ImageParser(), "..."))
@@ -190,14 +204,14 @@ class FsTypeTest(unittest.TestCase):
         volume.info['fsdescription'] = "Linux (0x83)"
 
         # If something more specific is set, we use that
-        volume.fstype = "?bsd"
+        volume._get_fstype_from_parser('?ufs')
         volume.determine_fs_type()
-        self.assertEqual("bsd", volume.fstype)
+        self.assertEqual(FILE_SYSTEM_TYPES["ufs"], volume.fstype)
 
         # Otherwise we fallback to unknown if Linux (0x83) is set
-        volume.fstype = ""
+        volume._get_fstype_from_parser('')
         volume.determine_fs_type()
-        self.assertEqual("unknown", volume.fstype)
+        self.assertEqual(UnknownFileSystemType(), volume.fstype)
 
 
 class FileMagicTest(unittest.TestCase):

@@ -2,6 +2,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
 
+import collections
 import io
 import logging
 import os
@@ -12,8 +13,9 @@ import tempfile
 import threading
 import shutil
 import time
+from collections import defaultdict
 
-from imagemounter import _util, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
+from imagemounter import _util, filesystems, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES
 from imagemounter.exceptions import CommandNotFoundError, NoMountpointAvailableError, SubsystemError, \
     NoLoopbackAvailableError, UnsupportedFilesystemError, NotMountedError, IncorrectFilesystemError, ArgumentError, \
     ImageMounterError, KeyInvalidError
@@ -22,25 +24,13 @@ from imagemounter.volume_system import VolumeSystem
 logger = logging.getLogger(__name__)
 
 
-FILE_SYSTEM_GUIDS = {
-    '2AE031AA-0F40-DB11-9590-000C2911D1B8': 'vmfs',
-    '8053279D-AD40-DB11-BF97-000C2911D1B8': 'vmkcore-diagnostics',
-    '6A898CC3-1DD2-11B2-99A6-080020736631': 'zfs-member',
-    'C38C896A-D21D-B211-99A6-080020736631': 'zfs-member',
-    '0FC63DAF-8483-4772-8E79-3D69D8477DE4': 'linux',
-    'E6D6D379-F507-44C2-A23C-238F2A3DF928': 'lvm',
-    '79D3D6E6-07F5-C244-A23C-238F2A3DF928': 'lvm',
-    'CA7D7CCB-63ED-4C53-861C-1742536059CC': 'luks'
-}
-
-
 class Volume(object):
     """Information about a volume. Note that every detected volume gets their own Volume object, though it may or may
     not be mounted. This can be seen through the :attr:`mountpoint` attribute -- if it is not set, perhaps the
     :attr:`exception` attribute is set with an exception.
     """
 
-    def __init__(self, disk, parent=None, index="0", size=0, offset=0, flag='alloc', slot=0, fstype="", key="",
+    def __init__(self, disk, parent=None, index="0", size=0, offset=0, flag='alloc', slot=0, fstype=None, key="",
                  vstype='', volume_detector='auto'):
         """Creates a Volume object that is not mounted yet.
 
@@ -54,8 +44,8 @@ class Volume(object):
         :param int offset: the volume offset, see the attribute documentation.
         :param str flag: the volume flag, see the attribute documentation.
         :param int slot: the volume slot, see the attribute documentation.
-        :param str fstype: the fstype you wish to use for this Volume. May be ?<fstype> as a fallback value. If not
-                           specified, will be retrieved from the ImageParser instance instead.
+        :param FileSystemType fstype: the fstype you wish to use for this Volume.
+            If not specified, will be retrieved from the ImageParser instance instead.
         :param str key: the key to use for this Volume.
         :param str vstype: the volume system type to use.
         :param str volume_detector: the volume system detection method to use
@@ -74,7 +64,6 @@ class Volume(object):
 
         self.volumes = VolumeSystem(parent=self, vstype=vstype, volume_detector=volume_detector)
 
-        self.fstype = fstype
         self._get_fstype_from_parser(fstype)
 
         if key:
@@ -126,6 +115,14 @@ class Volume(object):
         if self.fstype in VOLUME_SYSTEM_TYPES:
             self.volumes.vstype = self.fstype
             self.fstype = 'volumesystem'
+
+        # convert fstype from string to a FileSystemType object
+        if not isinstance(self.fstype, filesystems.FileSystemType):
+            if self.fstype.startswith("?"):
+                fallback = FILE_SYSTEM_TYPES[self.fstype[1:]]
+                self.fstype = filesystems.FallbackFileSystemType(fallback)
+            else:
+                self.fstype = FILE_SYSTEM_TYPES[self.fstype]
 
     def get_description(self, with_size=True, with_index=True):
         """Obtains a generic description of the volume, containing the file system type, index, label and NTFS version.
@@ -545,126 +542,57 @@ class Volume(object):
         Note: does not do anything if fstype is already set to something sensible.
         """
 
-        fstype_fallback = self.fstype[1:] if self.fstype and self.fstype.startswith("?") else ""
+        fstype_fallback = None
+        if isinstance(self.fstype, filesystems.FallbackFileSystemType):
+            fstype_fallback = self.fstype.fallback
+        elif isinstance(self.fstype, filesystems.FileSystemType):
+            return self.fstype
 
-        # Determine fs type. If forced, always use provided type.
-        if self.fstype in FILE_SYSTEM_TYPES:
-            pass  # already correctly set
-        elif self.fstype in VOLUME_SYSTEM_TYPES:
-            self.volumes.vstype = self.fstype
-            self.fstype = 'volumesystem'
-        else:
-            last_resort = None  # use this if we can't determine the FS type more reliably
-            # we have two possible sources for determining the FS type: the description given to us by the detection
-            # method, and the type given to us by the stat function
-            for fsdesc in (self.info.get('fsdescription'), self.info.get('guid'),
-                           self._get_blkid_type, self._get_magic_type):
-                # For efficiency reasons, not all functions are called instantly.
-                if callable(fsdesc):
-                    fsdesc = fsdesc()
-                logger.debug("Trying to determine fs type from '{}'".format(fsdesc))
-                if not fsdesc:
-                    continue
-                fsdesc = fsdesc.lower()
+        result = collections.Counter()
 
-                # for the purposes of this function, logical volume is nothing, and 'primary' is rather useless info
-                if fsdesc in ('logical volume', 'luks volume', 'bde volume', 'raid volume',
-                              'primary', 'basic data partition', 'vss store'):
-                    continue
+        for source, description in (('fsdescription', self.info.get('fsdescription')),
+                                    ('guid', self.info.get('guid')),
+                                    ('blikid', self._get_blkid_type),
+                                    ('magic', self._get_magic_type)):
+            # For efficiency reasons, not all functions are called instantly.
+            if callable(description):
+                description = description()
 
-                if fsdesc == 'directory':
-                    self.fstype = 'dir'  # dummy fs type
-                elif re.search(r'\bext[0-9]*\b', fsdesc):
-                    self.fstype = 'ext'
-                elif '4.2bsd' in fsdesc or 'ufs 2' in fsdesc:
-                    self.fstype = 'ufs'
-                elif 'bsd' in fsdesc:
-                    self.fstype = 'volumesystem'
-                    self.volumes.fstype = 'bsd'
-                elif 'ntfs / exfat' in fsdesc:
-                    last_resort = 'ntfs'
-                    continue
-                elif 'ntfs' in fsdesc:
-                    self.fstype = 'ntfs'
-                elif 'exfat' in fsdesc:
-                    self.fstype = 'exfat'
-                elif '0x8e' in fsdesc or 'lvm' in fsdesc:
-                    self.fstype = 'lvm'
-                elif 'squashfs' in fsdesc:  # before hfs
-                    self.fstype = 'squashfs'
-                elif 'hfs+' in fsdesc:
-                    self.fstype = 'hfs+'
-                elif 'hfs' in fsdesc:
-                    self.fstype = 'hfs'
-                elif 'luks' in fsdesc:
-                    self.fstype = 'luks'
-                elif 'fat' in fsdesc or 'efi system partition' in fsdesc:
-                    # based on http://en.wikipedia.org/wiki/EFI_System_partition, efi is always fat.
-                    self.fstype = 'fat'
-                elif 'iso 9660' in fsdesc or 'iso9660' in fsdesc:
-                    self.fstype = 'iso'
-                elif 'linux compressed rom file system' in fsdesc or 'cramfs' in fsdesc:
-                    self.fstype = 'cramfs'
-                elif fsdesc.startswith("sgi xfs") or re.search(r'\bxfs\b', fsdesc):
-                    self.fstype = "xfs"
-                elif 'swap file' in fsdesc or 'linux swap' in fsdesc or 'linux-swap' in fsdesc or 'swap (0x01)' in fsdesc:
-                    self.fstype = 'swap'
-                elif "jffs2" in fsdesc:
-                    self.fstype = 'jffs2'
-                elif "minix filesystem" in fsdesc:
-                    self.fstype = 'minix'
-                elif 'vmfs_volume_member' in fsdesc:
-                    self.fstype = 'vmfs'
-                elif 'linux_raid_member' in fsdesc or 'linux software raid' in fsdesc:
-                    self.fstype = 'raid'
-                # dos/mbr boot sector is shown for a lot of types, not just for volume system, so we ignore this for now
-                # elif "dos/mbr boot sector" in fsdesc:
-                #     self.fstype = 'volumesystem'
-                #     self.volumes.vstype = 'detect'
-                elif fsdesc in FILE_SYSTEM_TYPES:
-                    # fallback for stupid cases where we can not determine 'ufs' from the fsdesc 'ufs'
-                    self.fstype = fsdesc
-                elif fsdesc in VOLUME_SYSTEM_TYPES:
-                    self.fstype = 'volumesystem'
-                    self.volumes.vstype = fsdesc
-                elif fsdesc.upper() in FILE_SYSTEM_GUIDS:
-                    # this is a bit of a workaround for the fill_guid method
-                    self.fstype = FILE_SYSTEM_GUIDS[fsdesc.upper()]
-                elif '0x83' in fsdesc:
-                    # this is a linux mount, but we can't figure out which one.
-                    # we hand it off to the OS, maybe it can try something.
-                    # if we use last_resort for more enhanced stuff, we may need to check if we are not setting
-                    # it to something less specific here
-                    last_resort = 'unknown'
-                    continue
-                else:
-                    continue  # this loop failed
+            logger.debug("Trying to determine fs type from {} '{}'".format(source, description))
+            if not description:
+                continue
 
-                logger.info("Detected {0} as {1}".format(fsdesc, self.fstype))
+            # Iterate over all results and update the certainty of all FS types
+            for type in FILE_SYSTEM_TYPES.values():
+                result.update(type.detect(source, description))
 
-                if isinstance(self.parent, Volume) and \
-                        self.parent.offset == self.offset and \
-                        self.size == self.parent.size and \
-                        self.fstype == self.parent.fstype and \
-                        self.volumes.vstype == self.parent.volumes.vstype and \
-                        self.get_raw_path() == self.parent.get_raw_path():
-                    logger.warning("Detected volume type is identical to the parent. This makes little sense. "
-                                   "Assuming detection was wrong.")
-                    continue
+            # Now sort the results by their certainty
+            logger.debug("Current certainty levels: {}".format(result))
 
-                break  # we found something
-            else:  # we found nothing
-                # if last_resort is something more sensible than unknown, we use that
-                # if we have specified a fsfallback which is not set to None, we use that
-                # if last_resort is unknown or the fallback is not None, we use unknown
-                if last_resort and last_resort != 'unknown':
-                    self.fstype = last_resort
-                elif fstype_fallback:
-                    self.fstype = fstype_fallback
-                elif last_resort == 'unknown' or not fstype_fallback:
-                    self.fstype = 'unknown'
+            # If we have not found any candidates, we continue
+            if not result:
+                continue
 
-        return self.fstype
+            # If we have candidates of which we are not entirely certain, we just continue
+            max_res = result.most_common(1)[0][1]
+            if max_res < 50:
+                logger.debug("Highest certainty item is lower than 50, continuing...")
+            # If we have multiple candidates with the same score, we just continue
+            elif len([True for type, certainty in result.items() if certainty == max_res]) > 1:
+                logger.debug("Multiple items with highest certainty level, so continuing...")
+            else:
+                self.fstype = result.most_common(1)[0][0]
+                return self.fstype
+
+        # Now be more lax with the fallback:
+        if result:
+            max_res = result.most_common(1)[0][1]
+            if max_res > 0:
+                self.fstype = result.most_common(1)[0][0]
+                return self.fstype
+        if fstype_fallback:
+            self.fstype = fstype_fallback
+            return self.fstype
 
     def mount(self, fstype=None):
         """Based on the file system type as determined by :func:`determine_fs_type`, the proper mount command is executed
@@ -689,93 +617,23 @@ class Volume(object):
             fstype = self.determine_fs_type()
         self._load_fsstat_data()
 
-        # we need a mountpoint if it is not a lvm or luks volume
-        if fstype not in ('luks', 'lvm', 'bde', 'raid', 'volumesystem') and \
-                fstype in FILE_SYSTEM_TYPES:
-            self._make_mountpoint()
-
         # Prepare mount command
         try:
-            def call_mount(type, opts):
-                cmd = ['mount', raw_path, self.mountpoint, '-t', type, '-o', opts]
-                if not self.disk.read_write:
-                    cmd[-1] += ',ro'
+            fstype.mount(self)
 
-                _util.check_output_(cmd, stderr=subprocess.STDOUT)
-
-            if fstype == 'ext':
-                call_mount('ext4', 'noexec,noload,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
-
-            elif fstype == 'ufs':
-                # TODO: support for other ufstypes
-                call_mount('ufs', 'ufstype=ufs2,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
-
-            elif fstype == 'ntfs':
-                call_mount('ntfs', 'show_sys_files,noexec,force,loop,streams_interface=windows,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
-
-            elif fstype == 'exfat':
-                call_mount('exfat', 'noexec,force,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
-
-            elif fstype == 'xfs':
-                call_mount('xfs', 'norecovery,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
-
-            elif fstype == 'hfs+':
-                call_mount('hfsplus', 'force,loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
-
-            elif fstype in ('iso', 'udf', 'squashfs', 'cramfs', 'minix', 'fat', 'hfs'):
-                mnt_type = {'iso': 'iso9660', 'fat': 'vfat'}.get(fstype, fstype)
-                call_mount(mnt_type, 'loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size))
-
-            elif fstype == 'vmfs':
-                self._find_loopback()
-                _util.check_call_(['vmfs-fuse', self.loopback, self.mountpoint], stdout=subprocess.PIPE)
-
-            elif fstype == 'unknown':  # mounts without specifying the filesystem type
-                cmd = ['mount', raw_path, self.mountpoint, '-o', 'loop,offset=' + str(self.offset) + ',sizelimit=' + str(self.size)]
-                if not self.disk.read_write:
-                    cmd[-1] += ',ro'
-
-                _util.check_call_(cmd, stdout=subprocess.PIPE)
-
-            elif fstype == 'jffs2':
-                self._open_jffs2()
-
-            elif fstype == 'luks':
-                self._open_luks_container()
-
-            elif fstype == 'bde':
-                self._open_bde_container()
-
-            elif fstype == 'lvm':
-                self._open_lvm()
-                self.volumes.vstype = 'lvm'
-                for _ in self.volumes.detect_volumes('lvm'):
-                    pass
-
-            elif fstype == 'raid':
-                self._open_raid_volume()
-
-            elif fstype == 'dir':
-                os.rmdir(self.mountpoint)
-                os.symlink(raw_path, self.mountpoint)
-
-            elif fstype == 'volumesystem':
-                for _ in self.volumes.detect_volumes():
-                    pass
-
-            else:
-                try:
-                    size = self.size // self.disk.block_size
-                except TypeError:
-                    size = self.size
-
-                logger.warning("Unsupported filesystem {0} (type: {1}, block offset: {2}, length: {3})"
-                               .format(self, fstype, self.offset // self.disk.block_size, size))
-                raise UnsupportedFilesystemError(fstype)
+            # try:
+            #     size = self.size // self.disk.block_size
+            # except TypeError:
+            #     size = self.size
+            #
+            # logger.warning("Unsupported filesystem {0} (type: {1}, block offset: {2}, length: {3})"
+            #                .format(self, fstype, self.offset // self.disk.block_size, size))
+            # raise UnsupportedFilesystemError(fstype)
 
             self.was_mounted = True
             self.is_mounted = True
             self.fstype = fstype
+
         except Exception as e:
             logger.exception("Execution failed due to {} {}".format(type(e), e), exc_info=True)
             try:
