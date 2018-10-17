@@ -9,6 +9,7 @@ import glob
 import os
 import sys
 import locale
+import json
 
 from imagemounter.exceptions import SubsystemError, CleanupError, NoNetworkBlockAvailableError
 
@@ -55,24 +56,22 @@ def clean_unmount(cmd, mountpoint, tries=5, rmdir=True):
         raise CleanupError()
 
 
-def is_encase(path):
-    return re.match(r'^.*\.[Ee][Xx]?\d\d$', path)
-
-
-def is_compressed(path):
-    return re.match(r'^.*\.((zip)|(rar)|((t(ar\.)?)?gz))$', path)
-
-
-def is_vmware(path):
-    return re.match(r'^.*\.vmdk', path)
-
-
-def is_qcow2(path):
-    return re.match(r'.*\.qcow2', path)
-
-
-def is_vbox(path):
-    return re.match(r'.*\.vdi', path)
+def get_disk_type(path):
+    if re.match(r'^.*\.[Ee][Xx]?\d\d$', path):
+        return 'encase'
+    elif re.match(r'^.*\.((zip)|(rar)|((t(ar\.)?)?gz))$', path):
+        return 'compressed'
+    elif re.match(r'^.*\.vmdk', path):
+        return 'vmdk'
+    elif re.match(r'^.*\.vdi', path):
+        return 'vdi'
+    elif re.match(r'^.*\.qcow2', path):
+        return 'qcow2'
+    if command_exists('qemu-img'):
+        qemuImgInfo = json.loads(check_output_(['qemu-img', 'info', '--output=json', path]))
+        if qemuImgInfo['format'] != 'raw':
+            return qemuImgInfo['format']
+    return 'dd'
 
 
 def expand_path(path):
@@ -83,7 +82,7 @@ def expand_path(path):
     and if path is '/path/to/image.001' then the result of this method will be
     '/path/to/image.[0-9][0-9]?'
     """
-    if is_encase(path):
+    if get_disk_type(path) == 'encase':
         return glob.glob(path[:-2] + '??') or [path]
     ext_match = re.match(r'^.*\.(\d{2,})$', path)
     if ext_match is not None:

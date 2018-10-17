@@ -73,18 +73,7 @@ class Disk(object):
         return self.volumes[item]
 
     def get_disk_type(self):
-        if _util.is_encase(self.paths[0]):
-            return 'encase'
-        elif _util.is_vmware(self.paths[0]):
-            return 'vmdk'
-        elif _util.is_compressed(self.paths[0]):
-            return 'compressed'
-        elif _util.is_qcow2(self.paths[0]):
-            return 'qcow2'
-        elif _util.is_vbox(self.paths[0]):
-            return 'vdi'
-        else:
-            return 'dd'
+        return _util.get_disk_type(self.paths[0])
 
     def _get_mount_methods(self, disk_type):
         """Finds which mount methods are suitable for the specified disk type. Returns a list of all suitable mount
@@ -110,9 +99,7 @@ class Disk(object):
                     add_method_if_exists('affuse')
                 elif disk_type == 'compressed':
                     add_method_if_exists('avfs')
-                elif disk_type == 'qcow2':
-                    add_method_if_exists('qemu-nbd')
-                elif disk_type == 'vdi':
+                elif disk_type in ('qcow2', 'vdi', 'parallels'):
                     add_method_if_exists('qemu-nbd')
                 add_method_if_exists('xmount')
         else:
