@@ -658,7 +658,7 @@ class LvmFileSystem(LoopbackFileSystemMixin, FileSystem):
         self.volume.info['volume_group'] = self.vgname
         self.volume.volumes.vstype = 'lvm'
         # fills it up.
-        for _ in self.volume.volumes.detect_volumes('lvm'):
+        for _ in self.volume.volumes.detect_volumes('lvm', 'lvm'):
             pass
 
     def unmount(self, allow_lazy=False):
