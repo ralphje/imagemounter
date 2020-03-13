@@ -490,7 +490,7 @@ class LvmFileSystemType(FileSystemType):
 
         volume.volumes.vstype = 'lvm'
         # fills it up.
-        for _ in volume.volumes.detect_volumes('lvm'):
+        for _ in volume.volumes.detect_volumes('lvm', 'lvm'):
             pass
 
 
