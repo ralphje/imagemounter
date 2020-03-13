@@ -384,9 +384,16 @@ class ImageMounterShell(ArgumentParsedShell):
                     print(col("Invalid value provided for {}".format(args.name), 'red'))
                 else:
                     print(col("Updated value for {}".format(args.name), 'green'))
-            elif args.name in ['slot', 'flag', 'fstype', 'key']:
+            elif args.name in ['slot', 'flag', 'key']:
                 setattr(volume, args.name, args.value)
                 print(col("Updated value for {}".format(args.name), 'green'))
+            elif args.name == 'fstype':
+                try:
+                    setattr(volume, args.name, FILE_SYSTEM_TYPES[args.value])
+                except KeyError:
+                    print(col("No file system type for {}".format(args.value)))
+                else:
+                    print(col("Updated value for {}".format(args.name), 'green'))
             else:
                 print(col("Property {} can't be set for a volume".format(args.name), 'red'))
 
