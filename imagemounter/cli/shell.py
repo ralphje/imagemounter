@@ -391,7 +391,7 @@ class ImageMounterShell(ArgumentParsedShell):
                 try:
                     setattr(volume, args.name, FILE_SYSTEM_TYPES[args.value])
                 except KeyError:
-                    print(col("No file system type for {}".format(args.value)))
+                    print(col("No file system type for {}".format(args.value), 'red'))
                 else:
                     print(col("Updated value for {}".format(args.name), 'green'))
             else:
