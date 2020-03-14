@@ -503,6 +503,7 @@ class VhdFileSystemType(FileSystemType):
             res.update({self: 1})
         return res
 
+    @dependencies.require(dependencies.qemu_nbd)
     def mount(self, volume):
         """Performs mount actions on a VHD. Scans for volumes and fills :attr:`volumes` with the logical volumes."""
         volume._find_nbd()
