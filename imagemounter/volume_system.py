@@ -551,6 +551,21 @@ class LvmVolumeDetector(VolumeDetector):
         return volume_system.volumes
 
 
+class NbdVolumeDetector(VolumeDetector):
+    type = 'nbd'
+    special = True
+
+    @dependencies.require(dependencies.qemu_nbd)
+    def detect(self, volume_system, vstype='detect'):
+        result = _util.check_output_(['find', '/dev', '-wholename', '{}p*'.format(volume_system.parent.nbd)])
+        for l in result.splitlines():
+            index = self._format_index(volume_system, len(volume_system))
+            current = volume_system._make_subvolume(index=index, flag='alloc', offset=0)
+            current._paths['nbd'] = l
+            current._load_fsstat_data()
+        return volume_system.volumes
+
+
 # Populate the VOLUME_SYSTEM_DETECTORS
 VOLUME_SYSTEM_DETECTORS = {}
 ALL_VOLUME_SYSTEM_DETECTORS = {}

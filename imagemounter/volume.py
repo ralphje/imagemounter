@@ -15,7 +15,7 @@ import shutil
 from imagemounter import _util, filesystems, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES, dependencies
 from imagemounter.exceptions import NoMountpointAvailableError, SubsystemError, \
     NoLoopbackAvailableError, NotMountedError, \
-    ImageMounterError
+    ImageMounterError, NoNetworkBlockAvailableError
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
@@ -77,6 +77,7 @@ class Volume(object):
 
         self.mountpoint = ""
         self.loopback = ""
+        self.nbd = ""
         self.was_mounted = False
         self.is_mounted = False
 
@@ -242,11 +243,13 @@ class Volume(object):
 
         v = self
         if not include_self:
-            # lv / vss_store are exceptions, as it covers the volume itself, not the child volume
+            # lv / vss_store / nbd are exceptions, as it covers the volume itself, not the child volume
             if v._paths.get('lv'):
                 return v._paths['lv']
             elif v._paths.get('vss_store'):
                 return v._paths['vss_store']
+            elif v._paths.get('nbd'):
+                return v._paths['nbd']
             elif v.parent and v.parent != self.disk:
                 v = v.parent
             else:
@@ -534,6 +537,39 @@ class Volume(object):
         if getattr(self, var_name):
             _util.check_call_(['losetup', '-d', getattr(self, var_name)], wrap_error=True)
             setattr(self, var_name, "")
+
+    def _find_nbd(self, use_nbd=True, var_name='nbd'):
+        """Finds a free Network Block Device (nbd, from qemu-nbd) that can be used. The nbd is stored in :attr:`nbd`. If 
+        *use_nbd* is True, the nbd will also be used directly.
+
+        :returns: the nbd address
+        :raises NoNetworkBlockAvailableError: if no nbd could be found
+        """
+
+        # noinspection PyBroadException
+        try:
+            _util.check_call_(['modprobe', 'nbd', 'max_part=63'])  # Load nbd driver
+            nbd = _util.get_free_nbd_device()  # Get free nbd device
+            setattr(self, var_name, nbd)
+        except NoNetworkBlockAvailableError:
+            logger.warning("No free network block device found.", exc_info=True)
+            raise
+        
+        if use_nbd:
+            try:
+                cmd = ['qemu-nbd', '-c', nbd, self.get_raw_path()]
+                if not self.disk.read_write:
+                    cmd.insert(1, '--read-only')
+                _util.check_call_(cmd, stdout=subprocess.PIPE)
+            except Exception:
+                logger.exception("Network Block Device could not be mounted.")
+                raise NoNetworkBlockAvailableError()
+        return nbd
+
+    def _free_nbd(self, var_name='nbd'):
+        if getattr(self, var_name):
+            _util.check_call_(['qemu-nbd', '-d', getattr(self, var_name)], wrap_error=True)
+            setattr(self, var_name, '')
 
     def determine_fs_type(self):
         """Determines the FS type for this partition. This function is used internally to determine which mount system
@@ -850,5 +886,9 @@ class Volume(object):
                 raise SubsystemError(e)
             else:
                 del self._paths['carve']
+
+        if self.nbd:
+            _util.check_call_(['qemu-nbd', '-d', self.nbd], wrap_error=True, stdout=subprocess.PIPE)
+            self.nbd = ''
 
         self.is_mounted = False

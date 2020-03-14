@@ -494,6 +494,24 @@ class LvmFileSystemType(FileSystemType):
             pass
 
 
+class VhdFileSystemType(FileSystemType):
+    type = 'vhd'
+
+    def detect(self, source, description):
+        res = super(VhdFileSystemType, self).detect(source, description)
+        if description == 'Logical Volume':
+            res.update({self: 1})
+        return res
+
+    def mount(self, volume):
+        """Performs mount actions on a VHD. Scans for volumes and fills :attr:`volumes` with the logical volumes."""
+        volume._find_nbd()
+        time.sleep(0.2)
+
+        for _ in volume.volumes.detect_volumes('nbd', 'nbd'):
+            pass
+
+
 class RaidFileSystemType(FileSystemType):
     type = 'raid'
     aliases = ['linux_raid_member', 'linux software raid']
