@@ -256,7 +256,7 @@ mdadm = CommandDependency("mdadm", "mdadm", "RAID volumes")
 cryptsetup = CommandDependency("cryptsetup", "cryptsetup", "LUKS containers")
 bdemount = CommandDependency("bdemount", "libbde-utils", "Bitlocker Drive Encryption volumes")
 vshadowmount = CommandDependency("vshadowmount", "libvshadow-utils", "NTFS volume shadow copies")
-photorec = CommandDependency("photorec", "photorec", "carving free space")
+photorec = CommandDependency("photorec", "testdisk", "carving free space")
 
 mount_images = DependencySection(name="Mounting base disk images",
                                  description="at least one required, first three recommended",
