@@ -539,7 +539,7 @@ class Volume(object):
             setattr(self, var_name, "")
 
     def _find_nbd(self, use_nbd=True, var_name='nbd'):
-        """Finds a free Network Block Device (nbd, from qemu-nbd) that can be used. The nbd is stored in :attr:`nbd`. If 
+        """Finds a free Network Block Device (nbd, from qemu-nbd) that can be used. The nbd is stored in :attr:`nbd`. If
         *use_nbd* is True, the nbd will also be used directly.
 
         :returns: the nbd address
@@ -554,7 +554,7 @@ class Volume(object):
         except NoNetworkBlockAvailableError:
             logger.warning("No free network block device found.", exc_info=True)
             raise
-        
+
         if use_nbd:
             try:
                 cmd = ['qemu-nbd', '-c', nbd, self.get_raw_path()]
