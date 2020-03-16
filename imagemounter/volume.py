@@ -205,7 +205,7 @@ class Volume(object):
             if hasattr(magic, 'from_buffer'):
                 # using https://github.com/ahupp/python-magic
                 logger.debug("Using python-magic Python package for file type magic")
-                result = magic.from_buffer(fheader).decode()
+                result = magic.from_buffer(fheader)
                 self.info['magic_data'] = result
                 return result
 
