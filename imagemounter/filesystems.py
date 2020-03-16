@@ -499,8 +499,6 @@ class VhdFileSystemType(FileSystemType):
 
     def detect(self, source, description):
         res = super(VhdFileSystemType, self).detect(source, description)
-        if description == 'Logical Volume':
-            res.update({self: 1})
         return res
 
     @dependencies.require(dependencies.qemu_nbd)
