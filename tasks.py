@@ -25,7 +25,7 @@ def test(ctx):
 
 @task
 def test_flake(ctx):
-    run('flake8 --ignore=W801,E128,E501,W402 imagemounter')
+    run('flake8 --ignore=W801,E128,E501,W402,W503 imagemounter')
 
 
 @task

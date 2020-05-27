@@ -1,7 +1,6 @@
 import argparse
 import io
 import unittest
-import mock
 import time
 
 from imagemounter.cli import AppendDictAction

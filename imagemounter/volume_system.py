@@ -524,21 +524,21 @@ class LvmVolumeDetector(VolumeDetector):
 
         result = _util.check_output_(["lvm", "lvdisplay", volume_group])
         cur_v = None
-        for l in result.splitlines():
-            if "--- Logical volume ---" in l:
+        for line in result.splitlines():
+            if "--- Logical volume ---" in line:
                 cur_v = volume_system._make_subvolume(
                     index=self._format_index(volume_system, len(volume_system)),
                     flag='alloc'
                 )
                 cur_v.info['fsdescription'] = 'Logical Volume'
-            if "LV Name" in l:
-                cur_v.info['label'] = l.replace("LV Name", "").strip()
-            if "LV Size" in l:
-                size, unit = l.replace("LV Size", "").strip().split(" ", 1)
+            if "LV Name" in line:
+                cur_v.info['label'] = line.replace("LV Name", "").strip()
+            if "LV Size" in line:
+                size, unit = line.replace("LV Size", "").strip().split(" ", 1)
                 cur_v.size = int(float(size.replace(',', '.')) * {'KiB': 1024, 'MiB': 1024 ** 2,
                                                                   'GiB': 1024 ** 3, 'TiB': 1024 ** 4}.get(unit, 1))
-            if "LV Path" in l:
-                cur_v._paths['lv'] = l.replace("LV Path", "").strip()
+            if "LV Path" in line:
+                cur_v._paths['lv'] = line.replace("LV Path", "").strip()
                 cur_v.offset = 0
 
         logger.info("{0} volumes found".format(len(volume_system)))

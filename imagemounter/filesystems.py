@@ -386,9 +386,9 @@ class LuksFileSystemType(FileSystemType):
         # noinspection PyBroadException
         try:
             result = _util.check_output_(["cryptsetup", "status", volume._paths['luks']])
-            for l in result.splitlines():
-                if "size:" in l and "key" not in l:
-                    size = int(l.replace("size:", "").replace("sectors", "").strip()) * volume.disk.block_size
+            for line in result.splitlines():
+                if "size:" in line and "key" not in line:
+                    size = int(line.replace("size:", "").replace("sectors", "").strip()) * volume.disk.block_size
         except Exception:
             pass
 
@@ -473,9 +473,9 @@ class LvmFileSystemType(FileSystemType):
         try:
             # Scan for new lvm volumes
             result = _util.check_output_(["lvm", "pvscan"])
-            for l in result.splitlines():
-                if volume.loopback in l or (volume.offset == 0 and volume.get_raw_path() in l):
-                    for vg in re.findall(r'VG (\S+)', l):
+            for line in result.splitlines():
+                if volume.loopback in line or (volume.offset == 0 and volume.get_raw_path() in line):
+                    for vg in re.findall(r'VG (\S+)', line):
                         volume.info['volume_group'] = vg
 
             if not volume.info.get('volume_group'):

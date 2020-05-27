@@ -124,8 +124,8 @@ class Unmounter(object):
         """
 
         for mountpoint, (orig, fs, opts) in self.mountpoints.items():
-            if 'bind' not in opts and (re.match(self.orig_re_pattern, orig) or
-                                       (self.be_greedy and re.match(self.re_pattern, mountpoint))):
+            if 'bind' not in opts and (re.match(self.orig_re_pattern, orig)
+                                       or (self.be_greedy and re.match(self.re_pattern, mountpoint))):
                 yield mountpoint
 
     def find_base_images(self):

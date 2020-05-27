@@ -1,5 +1,5 @@
 import unittest
-import mock
+import unittest.mock as mock
 
 from imagemounter._util import check_output_
 from imagemounter.parser import ImageParser
