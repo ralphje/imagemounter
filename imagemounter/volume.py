@@ -298,7 +298,7 @@ class Volume(object):
         :raises NoLoopbackAvailableError: if there is no loopback available (only when volume has no slot number)
         """
 
-        self._make_mountpoint(var_name='carve', suffix="carve", in_paths=True)
+        self._paths['carve'] = self._make_mountpoint(suffix="carve")
 
         # if no slot, we need to make a loopback that we can use to carve the volume
         loopback_was_created_for_carving = False
@@ -348,7 +348,7 @@ class Volume(object):
         :raises NoMountpointAvailableError: if there is no mountpoint available
         """
 
-        self._make_mountpoint(var_name='vss', suffix="vss", in_paths=True)
+        self._paths['vss'] = self._make_mountpoint(suffix="vss")
 
         try:
             _util.check_call_(["vshadowmount", "-o", str(self.offset), self.get_raw_path(), self._paths['vss']])
@@ -434,10 +434,8 @@ class Volume(object):
 
         return True
 
-    def _make_mountpoint(self, casename=None, var_name='mountpoint', suffix='', in_paths=False):
-        """Creates a directory that can be used as a mountpoint. The directory is stored in :attr:`mountpoint`,
-        or the varname as specified by the argument. If in_paths is True, the path is stored in the :attr:`_paths`
-        attribute instead.
+    def _make_mountpoint(self, casename=None, suffix=''):
+        """Creates a directory that can be used as a mountpoint.
 
         :returns: the mountpoint path
         :raises NoMountpointAvailableError: if no mountpoint could be made
@@ -476,10 +474,6 @@ class Volume(object):
             # noinspection PyBroadException
             try:
                 os.mkdir(path, 777)
-                if in_paths:
-                    self._paths[var_name] = path
-                else:
-                    setattr(self, var_name, path)
                 return path
             except Exception:
                 logger.exception("Could not create mountdir.")
@@ -488,10 +482,6 @@ class Volume(object):
             t = tempfile.mkdtemp(prefix='im_' + self.index + '_',
                                  suffix='_' + self.get_safe_label() + ("_" + suffix if suffix else ""),
                                  dir=parser.mountdir)
-            if in_paths:
-                self._paths[var_name] = t
-            else:
-                setattr(self, var_name, t)
             return t
 
     def _clear_mountpoint(self):
@@ -784,41 +774,6 @@ class Volume(object):
         if self.is_mounted:
             logger.info("Unmounting volume %s", self)
 
-        if self.loopback and self.info.get('volume_group'):
-            _util.check_call_(["lvm", 'vgchange', '-a', 'n', self.info['volume_group']],
-                              wrap_error=True, stdout=subprocess.PIPE)
-            self.info['volume_group'] = ""
-
-        if self.loopback and self._paths.get('luks'):
-            _util.check_call_(['cryptsetup', 'luksClose', self._paths['luks']], wrap_error=True, stdout=subprocess.PIPE)
-            del self._paths['luks']
-
-        if self._paths.get('bde'):
-            try:
-                _util.clean_unmount(['fusermount', '-u'], self._paths['bde'])
-            except SubsystemError:
-                if not allow_lazy:
-                    raise
-                _util.clean_unmount(['fusermount', '-uz'], self._paths['bde'])
-            del self._paths['bde']
-
-        if self._paths.get('md'):
-            md_path = self._paths['md']
-            del self._paths['md']  # removing it here to ensure we do not enter an infinite loop, will add it back later
-
-            # MD arrays are a bit complicated, we also check all other volumes that are part of this array and
-            # unmount them as well.
-            logger.debug("All other volumes that use %s as well will also be unmounted", md_path)
-            for v in self.disk.get_volumes():
-                if v != self and v._paths.get('md') == md_path:
-                    v.unmount(allow_lazy=allow_lazy)
-
-            try:
-                _util.check_output_(["mdadm", '--stop', md_path], stderr=subprocess.STDOUT)
-            except Exception as e:
-                self._paths['md'] = md_path
-                raise SubsystemError(e)
-
         if self._paths.get('vss'):
             try:
                 _util.clean_unmount(['fusermount', '-u'], self._paths['vss'])
@@ -828,18 +783,10 @@ class Volume(object):
                 _util.clean_unmount(['fusermount', '-uz'], self._paths['vss'])
             del self._paths['vss']
 
-        if self.loopback:
-            _util.check_call_(['losetup', '-d', self.loopback], wrap_error=True)
-            self.loopback = ""
-
         if self._paths.get('bindmounts'):
             for mp in self._paths['bindmounts']:
                 _util.clean_unmount(['umount'], mp, rmdir=False)
             del self._paths['bindmounts']
-
-        if self.mountpoint:
-            _util.clean_unmount(['umount'], self.mountpoint)
-            self.mountpoint = ""
 
         if self._paths.get('carve'):
             try:
@@ -848,5 +795,7 @@ class Volume(object):
                 raise SubsystemError(e)
             else:
                 del self._paths['carve']
+
+        self.filesystem.unmount(allow_lazy=allow_lazy)
 
         self.is_mounted = False

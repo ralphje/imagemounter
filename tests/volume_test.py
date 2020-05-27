@@ -317,13 +317,21 @@ Volume ID: 2697f5b0479b15b1b4c81994387cdba"""
 
 class LuksTest(unittest.TestCase):
     @mock.patch("imagemounter.volume._util.check_call_")
-    @mock.patch("imagemounter.volume.Volume._find_loopback")
-    def test_luks_key_communication(self, _, check_call):
+    @mock.patch("imagemounter.volume._util.check_output_")
+    def test_luks_key_communication(self, check_call, check_output):
         def modified_check_call(cmd, *args, **kwargs):
             if cmd[0:2] == ['cryptsetup', 'isLuks']:
                 return True
+            if cmd[0:1] == ['losetup']:
+                return "/dev/loop0"
             return mock.DEFAULT
         check_call.side_effect = modified_check_call
+
+        def modified_check_output(cmd, *args, **kwargs):
+            if cmd[0:1] == ['losetup']:
+                return "/dev/loop0"
+            return mock.DEFAULT
+        check_output.side_effect = modified_check_output
 
         original_popen = subprocess.Popen
         def modified_popen(cmd, *args, **kwargs):

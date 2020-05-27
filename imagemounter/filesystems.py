@@ -10,21 +10,97 @@ import time
 
 from imagemounter import _util, VOLUME_SYSTEM_TYPES, dependencies
 from imagemounter.exceptions import UnsupportedFilesystemError, IncorrectFilesystemError, ArgumentError, \
-    KeyInvalidError, ImageMounterError, SubsystemError
+    KeyInvalidError, ImageMounterError, SubsystemError, NoLoopbackAvailableError, NoMountpointAvailableError
 
 logger = logging.getLogger(__name__)
 
 
-class FileSystem(object):
+class MountpointFileSystemMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mountpoint = None
+
+    def _make_mountpoint(self, casename=None, suffix=''):
+        """Creates a directory that can be used as a mountpoint.
+
+        :returns: the mountpoint path
+        :raises NoMountpointAvailableError: if no mountpoint could be made
+        """
+        self.mountpoint = self.volume._make_mountpoint(casename, suffix)
+
+    def _clear_mountpoint(self):
+        """Clears a created mountpoint. Does not unmount it, merely deletes it."""
+
+        if self.mountpoint is not None:
+            os.rmdir(self.mountpoint)
+            self.mountpoint = None
+
+    def unmount(self, allow_lazy=False):
+        """Unmounts the given volume."""
+        super().unmount(allow_lazy=allow_lazy)
+
+        if self.mountpoint is not None:
+            _util.clean_unmount(['umount'], self.mountpoint)
+            self.mountpoint = None
+
+
+class LoopbackFileSystemMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.loopback = None
+
+    def _find_loopback(self):
+        """Finds a free loopback device that can be used. The loopback is stored in :attr:`loopback`. If *use_loopback*
+        is True, the loopback will also be used directly.
+
+        :returns: the loopback address
+        :raises NoLoopbackAvailableError: if no loopback could be found
+        """
+
+        # noinspection PyBroadException
+        try:
+            self.loopback = _util.check_output_(['losetup', '-f']).strip()
+        except Exception as e:
+            logger.warning("No free loopback device found.", exc_info=True)
+            raise NoLoopbackAvailableError()
+
+        # noinspection PyBroadException
+        try:
+            cmd = ['losetup', '-o', str(self.volume.offset), '--sizelimit', str(self.volume.size),
+                   self.loopback, self.volume.get_raw_path()]
+            if not self.volume.disk.read_write:
+                cmd.insert(1, '-r')
+            _util.check_call_(cmd, stdout=subprocess.PIPE)
+        except Exception:
+            logger.exception("Loopback device could not be mounted.")
+            self._free_loopback()
+            raise NoLoopbackAvailableError()
+
+    def _free_loopback(self):
+        if self.loopback is not None:
+            try:
+                _util.check_call_(['losetup', '-d', self.loopback], wrap_error=True)
+            except Exception:
+                pass  # TODO
+
+    def unmount(self, allow_lazy=False):
+        super().unmount(allow_lazy=allow_lazy)
+
+        if self.loopback is not None:
+            _util.check_call_(['losetup', '-d', self.loopback], wrap_error=True)
+            self.loopback = None
+
+
+class FileSystem:
     type = None
     aliases = []
     guids = []
 
-    _needs_mountpoint = True
     _mount_type = None
     _mount_opts = ""
 
     def __init__(self, volume):
+        super().__init__()
         self.volume = volume
 
     def __str__(self):
@@ -63,17 +139,33 @@ class FileSystem(object):
         return {}
 
     def mount(self):
-        """Mounts the given volume on the provided mountpoint. The default implementation simply calls mount.
+        """Mounts the filesystem. Must be implemented by subclasses.
 
         :raises UnsupportedFilesystemError: when the volume system type can not be mounted.
         """
 
-        self.volume._make_mountpoint()
+        raise NotImplementedError()
+
+    def unmount(self, allow_lazy=False):
+        """Unmounts the filesystem. Default implementation is to do nothing.
+        """
+
+        return
+
+
+class MountFileSystem(MountpointFileSystemMixin, FileSystem):
+    def mount(self):
+        """Mounts the given volume. The default implementation simply calls mount.
+
+        :raises UnsupportedFilesystemError: when the volume system type can not be mounted.
+        """
+
+        self._make_mountpoint()
         try:
-            self._call_mount(self.volume, self.volume.mountpoint, self._mount_type or self.type, self._mount_opts)
+            self._call_mount(self.volume, self.mountpoint, self._mount_type or self.type, self._mount_opts)
         except Exception:
             # undo the creation of the mountpoint
-            self.volume._clear_mountpoint()
+            self._clear_mountpoint()
             raise
 
     def _call_mount(self, volume, mountpoint, type=None, opts=""):
@@ -109,13 +201,18 @@ class FallbackFileSystem(FileSystem):
         return "?" + str(self.fallback)
 
 
-class UnknownFileSystem(FileSystem):
+class UnknownFileSystem(MountFileSystem):
     type = 'unknown'
 
     def mount(self):
         # explicitly not specifying any type
-        self.volume._make_mountpoint()
-        self._call_mount(self.volume, self.volume.mountpoint)
+        self._make_mountpoint()
+        try:
+            self._call_mount(self.volume, self.mountpoint)
+        except Exception:
+            # undo the creation of the mountpoint
+            self._clear_mountpoint()
+            raise
 
 
 class VolumeSystemFileSystem(FileSystem):
@@ -136,14 +233,21 @@ class VolumeSystemFileSystem(FileSystem):
         for _ in self.volume.volumes.detect_volumes():
             pass
 
+    def unmount(self, allow_lazy=False):
+        for volume in self.volume.volumes:
+            try:
+                volume.unmount(allow_lazy=allow_lazy)
+            except ImageMounterError:
+                pass
 
-class DirectoryFileSystem(FileSystem):
+
+class DirectoryFileSystem(MountpointFileSystemMixin, FileSystem):
     type = 'dir'
 
     def mount(self):
-        self.volume._make_mountpoint()
-        os.rmdir(self.volume.mountpoint)
-        os.symlink(self.volume.get_raw_path(), self.volume.mountpoint)
+        self._make_mountpoint()
+        os.rmdir(self.mountpoint)
+        os.symlink(self.volume.get_raw_path(), self.mountpoint)
 
 
 class UnsupportedFileSystem(FileSystem):
@@ -164,14 +268,14 @@ class SwapFileSystemType(UnsupportedFileSystem):
     type = 'swap'
 
 
-class ExtFileSystem(FileSystem):
+class ExtFileSystem(MountFileSystem):
     type = 'ext'
     aliases = ['ext1', 'ext2', 'ext3', 'ext4']
     _mount_type = 'ext4'
     _mount_opts = 'noexec,noload'
 
 
-class UfsFileSystem(FileSystem):
+class UfsFileSystem(MountFileSystem):
     type = 'ufs'
     aliases = ['4.2bsd', 'ufs2', 'ufs 2']
     # TODO: support for other ufstypes
@@ -187,7 +291,7 @@ class UfsFileSystem(FileSystem):
         return res
 
 
-class NtfsFileSystem(FileSystem):
+class NtfsFileSystem(MountFileSystem):
     type = 'ntfs'
     _mount_opts = 'show_sys_files,noexec,force,streams_interface=windows'
 
@@ -200,34 +304,34 @@ class NtfsFileSystem(FileSystem):
         return res
 
 
-class ExfatFileSystem(FileSystem):
+class ExfatFileSystem(MountFileSystem):
     type = 'exfat'
     _mount_opts = 'noexec,force'
 
 
-class XfsFileSystem(FileSystem):
+class XfsFileSystem(MountFileSystem):
     type = 'xfs'
     _mount_opts = 'norecovery'
 
 
-class HfsFileSystem(FileSystem):
+class HfsFileSystem(MountFileSystem):
     type = 'hfs'
 
 
-class HfsPlusFileSystem(FileSystem):
+class HfsPlusFileSystem(MountFileSystem):
     type = 'hfs+'
     aliases = ['hfsplus']
     _mount_type = 'hfsplus'
     _mount_opts = 'force'
 
 
-class IsoFileSystem(FileSystem):
+class IsoFileSystem(MountFileSystem):
     type = 'iso'
     aliases = ['iso 9660', 'iso9660']
     _mount_type = 'iso9660'
 
 
-class FatFileSystem(FileSystem):
+class FatFileSystem(MountFileSystem):
     type = 'fat'
     aliases = ['efi system partition', 'vfat', 'fat12', 'fat16']
     _mount_type = 'vfat'
@@ -240,40 +344,40 @@ class FatFileSystem(FileSystem):
         return res
 
 
-class UdfFileSystem(FileSystem):
+class UdfFileSystem(MountFileSystem):
     type = 'udf'
 
 
-class SquashfsFileSystem(FileSystem):
+class SquashfsFileSystem(MountFileSystem):
     type = 'squashfs'
 
 
-class CramfsFileSystem(FileSystem):
+class CramfsFileSystem(MountFileSystem):
     type = 'cramfs'
     aliases = ['linux compressed rom file system']
 
 
-class MinixFileSystem(FileSystem):
+class MinixFileSystem(MountFileSystem):
     type = 'minix'
 
 
-class VmfsFileSystem(FileSystem):
+class VmfsFileSystem(LoopbackFileSystemMixin, MountFileSystem):
     type = 'vmfs'
     aliases = ['vmfs_volume_member']
     guids = ['2AE031AA-0F40-DB11-9590-000C2911D1B8']
 
     def mount(self):
-        self.volume._make_mountpoint()
-        self.volume._find_loopback()
+        self._make_mountpoint()
+        self._find_loopback()
         try:
-            _util.check_call_(['vmfs-fuse', self.volume.loopback, self.volume.mountpoint], stdout=subprocess.PIPE)
+            _util.check_call_(['vmfs-fuse', self.loopback, self.mountpoint], stdout=subprocess.PIPE)
         except Exception:
-            self.volume._free_loopback()
-            self.volume._clear_mountpoint()
+            self._free_loopback()
+            self._clear_mountpoint()
             raise
 
 
-class Jffs2FileSystem(FileSystem):
+class Jffs2FileSystem(MountFileSystem):
     type = 'jffs2'
 
     def mount(self):
@@ -290,12 +394,18 @@ class Jffs2FileSystem(FileSystem):
         _util.check_call_(['modprobe', '-v', 'mtdram', 'total_size={}'.format(size_in_kb), 'erase_size=256'])
         _util.check_call_(['modprobe', '-v', 'mtdblock'])
         _util.check_call_(['dd', 'if=' + self.volume.get_raw_path(), 'of=/dev/mtd0'])
-        _util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', self.volume.mountpoint])
+
+        self._make_mountpoint()
+        _util.check_call_(['mount', '-t', 'jffs2', '/dev/mtdblock0', self.mountpoint])
 
 
-class LuksFileSystem(FileSystem):
+class LuksFileSystem(LoopbackFileSystemMixin, FileSystem):
     type = 'luks'
     guids = ['CA7D7CCB-63ED-4C53-861C-1742536059CC']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.luks_name = None
 
     @classmethod
     def detect(cls, source, description):
@@ -318,21 +428,17 @@ class LuksFileSystem(FileSystem):
         """
 
         # Open a loopback device
-        self.volume._find_loopback()
+        self._find_loopback()
 
         # Check if this is a LUKS device
         # noinspection PyBroadException
         try:
-            _util.check_call_(["cryptsetup", "isLuks", self.volume.loopback], stderr=subprocess.STDOUT)
+            _util.check_call_(["cryptsetup", "isLuks", self.loopback], stderr=subprocess.STDOUT)
             # ret = 0 if isLuks
         except Exception:
             logger.warning("Not a LUKS volume")
             # clean the loopback device, we want this method to be clean as possible
-            # noinspection PyBroadException
-            try:
-                self.volume._free_loopback()
-            except Exception:
-                pass
+            self._free_loopback()
             raise IncorrectFilesystemError()
 
         try:
@@ -351,15 +457,15 @@ class LuksFileSystem(FileSystem):
         except ValueError:
             logger.exception("Invalid key material provided (%s) for %s. Expecting [arg]:[value]",
                              self.volume.key, self.volume)
-            self.volume._free_loopback()
+            self._free_loopback()
             raise ArgumentError()
 
         # Open the LUKS container
-        self.volume._paths['luks'] = 'image_mounter_luks_' + str(random.randint(10000, 99999))
+        self.luks_name = 'image_mounter_luks_' + str(random.randint(10000, 99999))
 
         # noinspection PyBroadException
         try:
-            cmd = ["cryptsetup", "luksOpen", self.volume.loopback, self.volume._paths['luks']]
+            cmd = ["cryptsetup", "luksOpen", self.loopback, self.luks_name]
             cmd.extend(extra_args)
             if not self.volume.disk.read_write:
                 cmd.insert(1, '-r')
@@ -376,18 +482,18 @@ class LuksFileSystem(FileSystem):
             else:
                 _util.check_call_(cmd)
         except ImageMounterError:
-            del self.volume._paths['luks']
-            self.volume._free_loopback()
+            self.luks_name = None
+            self._free_loopback()
             raise
         except Exception as e:
-            del self.volume._paths['luks']
-            self.volume._free_loopback()
+            self.luks_name = None
+            self._free_loopback()
             raise SubsystemError(e)
 
         size = None
         # noinspection PyBroadException
         try:
-            result = _util.check_output_(["cryptsetup", "status", self.volume._paths['luks']])
+            result = _util.check_output_(["cryptsetup", "status", self.luks_name])
             for line in result.splitlines():
                 if "size:" in line and "key" not in line:
                     size = int(line.replace("size:", "").replace("sectors", "").strip()) * self.volume.disk.block_size
@@ -399,8 +505,14 @@ class LuksFileSystem(FileSystem):
 
         return container
 
+    def unmount(self, allow_lazy=False):
+        if self.luks_name is not None:
+            _util.check_call_(['cryptsetup', 'luksClose', self.luks_name], wrap_error=True, stdout=subprocess.PIPE)
+            self.luks_name = None
+        super().unmount(allow_lazy=allow_lazy)
 
-class BdeFileSystem(FileSystem):
+
+class BdeFileSystem(MountpointFileSystemMixin, FileSystem):
     type = 'bde'
 
     @classmethod
@@ -425,7 +537,7 @@ class BdeFileSystem(FileSystem):
         :raises SubsystemError: when the underlying command fails
         """
 
-        self.volume._paths['bde'] = tempfile.mkdtemp(prefix='image_mounter_bde_')
+        self._make_mountpoint()
 
         try:
             if self.volume.key:
@@ -440,11 +552,11 @@ class BdeFileSystem(FileSystem):
 
         # noinspection PyBroadException
         try:
-            cmd = ["bdemount", self.volume.get_raw_path(), self.volume._paths['bde'], '-o', str(self.volume.offset)]
+            cmd = ["bdemount", self.volume.get_raw_path(), self.mountpoint, '-o', str(self.volume.offset)]
             cmd.extend(key)
             _util.check_call_(cmd)
         except Exception as e:
-            del self.volume._paths['bde']
+            self._clear_mountpoint()
             logger.exception("Failed mounting BDE volume %s.", self.volume)
             raise SubsystemError(e)
 
@@ -454,10 +566,15 @@ class BdeFileSystem(FileSystem):
         return container
 
 
-class LvmFileSystem(FileSystem):
+class LvmFileSystem(LoopbackFileSystemMixin, FileSystem):
     type = 'lvm'
     aliases = ['0x8e']
     guids = ['E6D6D379-F507-44C2-A23C-238F2A3DF928', '79D3D6E6-07F5-C244-A23C-238F2A3DF928']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.vgname = None
 
     @dependencies.require(dependencies.lvm)
     def mount(self):
@@ -470,36 +587,48 @@ class LvmFileSystem(FileSystem):
         os.environ['LVM_SUPPRESS_FD_WARNINGS'] = '1'
 
         # find free loopback device
-        self.volume._find_loopback()
+        self._find_loopback()
         time.sleep(0.2)
 
         try:
             # Scan for new lvm volumes
             result = _util.check_output_(["lvm", "pvscan"])
             for line in result.splitlines():
-                if self.volume.loopback in line or (self.volume.offset == 0 and self.volume.get_raw_path() in line):
+                if self.loopback in line or (self.volume.offset == 0 and self.volume.get_raw_path() in line):
                     for vg in re.findall(r'VG (\S+)', line):
-                        self.volume.info['volume_group'] = vg
+                        self.vgname = vg
 
-            if not self.volume.info.get('volume_group'):
+            if not self.vgname:
                 logger.warning("Volume is not a volume group. (Searching for %s)", self.volume.loopback)
                 raise IncorrectFilesystemError()
 
             # Enable lvm volumes
             _util.check_call_(["lvm", "vgchange", "-a", "y", self.volume.info['volume_group']], stdout=subprocess.PIPE)
         except Exception:
-            self.volume._free_loopback()
+            self._free_loopback()
+            self.vgname = None
             raise
 
+        self.volume.info['volume_group'] = self.vgname
         self.volume.volumes.vstype = 'lvm'
         # fills it up.
         for _ in self.volume.volumes.detect_volumes('lvm'):
             pass
 
+    def unmount(self, allow_lazy=False):
+        if self.vgname:
+            _util.check_call_(["lvm", 'vgchange', '-a', 'n', self.vgname], wrap_error=True, stdout=subprocess.PIPE)
+            self.vgname = None
 
-class RaidFileSystem(FileSystem):
+
+class RaidFileSystem(LoopbackFileSystemMixin, FileSystem):
     type = 'raid'
     aliases = ['linux_raid_member', 'linux software raid']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.mdpath = None
 
     @classmethod
     def detect(cls, source, description):
@@ -508,6 +637,11 @@ class RaidFileSystem(FileSystem):
             res.update({cls: 0})
         return res
 
+    def _iter_same_md_volumes(self):
+        for v in self.volume.disk.parser.get_volumes():
+            if v != self.volume and v.filesystem.type == self.type and v.filesystem.mdpath == self.mdpath:
+                yield v
+
     @dependencies.require(dependencies.mdadm)
     def mount(self):
         """Add the volume to a RAID system. The RAID array is activated as soon as the array can be activated.
@@ -515,35 +649,35 @@ class RaidFileSystem(FileSystem):
         :raises NoLoopbackAvailableError: if no loopback device was found
         """
 
-        self.volume._find_loopback()
+        self._find_loopback()
 
         raid_status = None
         try:
             # use mdadm to mount the loopback to a md device
             # incremental and run as soon as available
-            output = _util.check_output_(['mdadm', '-IR', self.volume.loopback], stderr=subprocess.STDOUT)
+            output = _util.check_output_(['mdadm', '-IR', self.loopback], stderr=subprocess.STDOUT)
 
             match = re.findall(r"attached to ([^ ,]+)", output)
             if match:
-                self.volume._paths['md'] = os.path.realpath(match[0])
+                self.mdpath = os.path.realpath(match[0])
                 if 'which is already active' in output:
-                    logger.info("RAID is already active in other volume, using %s", self.volume._paths['md'])
+                    logger.info("RAID is already active in other volume, using %s", self.mdpath)
                     raid_status = 'active'
                 elif 'not enough to start' in output:
-                    self.volume._paths['md'] = self.volume._paths['md'].replace("/dev/md/", "/dev/md")
-                    logger.info("RAID volume added, but not enough to start %s", self.volume._paths['md'])
+                    self.mdpath = self.mdpath.replace("/dev/md/", "/dev/md")
+                    logger.info("RAID volume added, but not enough to start %s", self.mdpath)
                     raid_status = 'waiting'
                 else:
-                    logger.info("RAID started at {0}".format(self.volume._paths['md']))
+                    logger.info("RAID started at {0}".format(self.mdpath))
                     raid_status = 'active'
         except Exception as e:
             logger.exception("Failed mounting RAID.")
-            self.volume._free_loopback()
+            self._free_loopback()
             raise SubsystemError(e)
 
         # search for the RAID volume
-        for v in self.volume.disk.parser.get_volumes():
-            if v._paths.get("md") == self.volume._paths['md'] and v.volumes:
+        for v in self._iter_same_md_volumes():
+            if v.volumes:
                 logger.debug("Adding existing volume %s to volume %s", v.volumes[0], self.volume)
                 v.volumes[0].info['raid_status'] = raid_status
                 self.volume.volumes.volumes.append(v.volumes[0])
@@ -554,6 +688,24 @@ class RaidFileSystem(FileSystem):
             container.info['fsdescription'] = 'RAID Volume'
             container.info['raid_status'] = raid_status
             return container
+
+    def unmount(self, allow_lazy=False):
+        if self.mdpath is not None:
+            # MD arrays are a bit complicated, we also check all other volumes that are part of this array and
+            # unmount them as well.
+            logger.debug("All other volumes that use %s as well will also be unmounted", self.mdpath)
+
+            for v in self._iter_same_md_volumes():
+                v.unmount(allow_lazy=allow_lazy)
+
+            try:
+                _util.check_output_(["mdadm", '--stop', self.mdpath], stderr=subprocess.STDOUT)
+            except Exception as e:
+                raise SubsystemError(e)
+
+            self.mdpath = None
+
+        super().unmount(allow_lazy=allow_lazy)
 
 
 # Populate the FILE_SYSTEM_TYPES
