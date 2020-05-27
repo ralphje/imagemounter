@@ -110,12 +110,12 @@ class Volume(object):
             self.fstype = 'volumesystem'
 
         # convert fstype from string to a FileSystemType object
-        if not isinstance(self.fstype, filesystems.FileSystemType):
+        if not isinstance(self.fstype, filesystems.FileSystem):
             if self.fstype.startswith("?"):
-                fallback = FILE_SYSTEM_TYPES[self.fstype[1:]]
-                self.fstype = filesystems.FallbackFileSystemType(fallback)
+                fallback = FILE_SYSTEM_TYPES[self.fstype[1:]](self)
+                self.fstype = filesystems.FallbackFileSystem(self, fallback)
             else:
-                self.fstype = FILE_SYSTEM_TYPES[self.fstype]
+                self.fstype = FILE_SYSTEM_TYPES[self.fstype](self)
 
     def get_description(self, with_size=True, with_index=True):
         """Obtains a generic description of the volume, containing the file system type, index, label and NTFS version.
@@ -538,9 +538,9 @@ class Volume(object):
         """
 
         fstype_fallback = None
-        if isinstance(self.fstype, filesystems.FallbackFileSystemType):
+        if isinstance(self.fstype, filesystems.FallbackFileSystem):
             fstype_fallback = self.fstype.fallback
-        elif isinstance(self.fstype, filesystems.FileSystemType):
+        elif isinstance(self.fstype, filesystems.FileSystem):
             return self.fstype
 
         result = collections.Counter()
@@ -576,14 +576,14 @@ class Volume(object):
             elif len([True for type, certainty in result.items() if certainty == max_res]) > 1:
                 logger.debug("Multiple items with highest certainty level, so continuing...")
             else:
-                self.fstype = result.most_common(1)[0][0]
+                self.fstype = result.most_common(1)[0][0](self)
                 return self.fstype
 
         # Now be more lax with the fallback:
         if result:
             max_res = result.most_common(1)[0][1]
             if max_res > 0:
-                self.fstype = result.most_common(1)[0][0]
+                self.fstype = result.most_common(1)[0][0](self)
                 return self.fstype
         if fstype_fallback:
             self.fstype = fstype_fallback
@@ -613,7 +613,7 @@ class Volume(object):
 
         # Prepare mount command
         try:
-            fstype.mount(self)
+            fstype.mount()
 
             self.was_mounted = True
             self.is_mounted = True
