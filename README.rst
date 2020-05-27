@@ -19,7 +19,7 @@ In its default mode, imagemounter will try to start mounting the base image on a
 detect the volume system and then mount each volume seperately. If it fails finding a volume system,
 it will try to mount the entire image as a whole if it succeeds in detecting what it actually is.
 
-This package supports Python 2.7 and Python 3.3+.
+This package supports Python 3.5+.
 
 Example
 =======
@@ -48,8 +48,8 @@ use this package for volume detection.
 
 Just perform the following commands for a basic installation::
 
-    apt-get install python-setuptools xmount ewf-tools afflib-tools sleuthkit
-    pip install imagemounter
+    apt-get install xmount ewf-tools afflib-tools sleuthkit
+    pip3 install imagemounter
     imount --check
 
 Use ``imount --check`` to verify which packages are (not) installed. Install additional packages as needed.

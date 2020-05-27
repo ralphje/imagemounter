@@ -9,8 +9,6 @@ functions.
 Note that it doesn't unmount.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
 import os
 import sys
 
@@ -121,6 +119,7 @@ def main():
                         print('[+] Volume shadow copy available at {0}.'.format(colored(v.mountpoint, 'green', attrs=['bold'])))
         else:
             continue  # we do not need the unmounting sequence
+
 
 if __name__ == '__main__':
     main()
