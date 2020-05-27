@@ -26,7 +26,7 @@ class CramFSDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
         self.assertEqual(len(volumes), 1)
 
     def validate_types(self, volumes):
-        self.assertEqual(volumes[0].fstype.type, "cramfs")
+        self.assertEqual(volumes[0].filesystem.type, "cramfs")
 
 
 class ExtDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
@@ -37,7 +37,9 @@ class ExtDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
         self.assertEqual(len(volumes), 1)
 
     def validate_types(self, volumes):
-        self.assertEqual(volumes[0].fstype.type, "ext")
+        print("xxxxxxxxxxxxxxxxxxxxxxxxxxx")
+        print(volumes[0].filesystem)
+        self.assertEqual(volumes[0].filesystem.type, "ext")
 
 
 class Fat12DirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
@@ -48,7 +50,7 @@ class Fat12DirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
         self.assertEqual(len(volumes), 1)
 
     def validate_types(self, volumes):
-        self.assertEqual(volumes[0].fstype.type, "fat")
+        self.assertEqual(volumes[0].filesystem.type, "fat")
 
 
 class IsoDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
@@ -59,7 +61,7 @@ class IsoDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
         self.assertEqual(len(volumes), 1)
 
     def validate_types(self, volumes):
-        self.assertEqual(volumes[0].fstype.type, "iso")
+        self.assertEqual(volumes[0].filesystem.type, "iso")
 
 
 class MbrDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
@@ -72,17 +74,17 @@ class MbrDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
     def validate_types(self, volumes):
         self.assertEqual(volumes[0].flag, "meta")
         self.assertEqual(volumes[1].flag, "unalloc")
-        self.assertEqual(volumes[2].fstype.type, "fat")
-        self.assertEqual(volumes[3].fstype.type, "ext")
-        self.assertEqual(volumes[4].fstype.type, "unknown")
+        self.assertEqual(volumes[2].filesystem.type, "fat")
+        self.assertEqual(volumes[3].filesystem.type, "ext")
+        self.assertEqual(volumes[4].filesystem.type, "unknown")
         self.assertEqual(volumes[5].flag, "meta")
         self.assertEqual(volumes[6].flag, "meta")
         self.assertEqual(volumes[7].flag, "unalloc")
-        self.assertEqual(volumes[8].fstype.type, "ext")
+        self.assertEqual(volumes[8].filesystem.type, "ext")
         self.assertEqual(volumes[9].flag, "meta")
         self.assertEqual(volumes[10].flag, "meta")
         self.assertEqual(volumes[11].flag, "unalloc")
-        self.assertEqual(volumes[12].fstype.type, "fat")
+        self.assertEqual(volumes[12].filesystem.type, "fat")
 
 
 class MinixDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
@@ -93,7 +95,7 @@ class MinixDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
         self.assertEqual(len(volumes), 1)
 
     def validate_types(self, volumes):
-        self.assertEqual(volumes[0].fstype.type, "minix")
+        self.assertEqual(volumes[0].filesystem.type, "minix")
 
 
 class NtfsDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
@@ -104,7 +106,7 @@ class NtfsDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
         self.assertEqual(len(volumes), 1)
 
     def validate_types(self, volumes):
-        self.assertEqual(volumes[0].fstype.type, "ntfs")
+        self.assertEqual(volumes[0].filesystem.type, "ntfs")
 
 
 class SquashDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
@@ -115,7 +117,7 @@ class SquashDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
         self.assertEqual(len(volumes), 1)
 
     def validate_types(self, volumes):
-        self.assertEqual(volumes[0].fstype.type, "squashfs")
+        self.assertEqual(volumes[0].filesystem.type, "squashfs")
 
 
 class ZipDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
@@ -130,4 +132,4 @@ class ZipDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
         self.assertEqual(len(volumes), 1)
 
     def validate_types(self, volumes):
-        self.assertEqual(volumes[0].fstype.type, "iso")
+        self.assertEqual(volumes[0].filesystem.type, "iso")

@@ -284,7 +284,7 @@ def main():
                             if args.wait:
                                 input(col('>>> Press [enter] to continue... ', attrs=['dark']))
 
-                        elif isinstance(volume.exception, UnsupportedFilesystemError) and volume.fstype == 'swap':
+                        elif isinstance(volume.exception, UnsupportedFilesystemError) and volume.filesystem.type == 'swap':
                             print(col('[-] Exception while mounting swap volume {0}'.format(volume.get_description()),
                                       'yellow'))
                             if args.wait:
@@ -342,7 +342,7 @@ def main():
                             else:
                                 print('[+] Carved data is available at {0}.'.format(col(path, 'green', attrs=['bold'])))
 
-                        if args.vshadow and volume.fstype == 'ntfs':
+                        if args.vshadow and volume.filesystem.type == 'ntfs':
                             sys.stdout.write("[+] Mounting volume shadow copies...\r")
                             sys.stdout.flush()
                             try:

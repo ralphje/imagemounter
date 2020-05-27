@@ -7,6 +7,7 @@ import re
 import tempfile
 import threading
 import shutil
+import warnings
 
 from imagemounter import _util, filesystems, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES, dependencies
 from imagemounter.exceptions import NoMountpointAvailableError, SubsystemError, \
@@ -37,7 +38,7 @@ class Volume(object):
         :param int offset: the volume offset, see the attribute documentation.
         :param str flag: the volume flag, see the attribute documentation.
         :param int slot: the volume slot, see the attribute documentation.
-        :param FileSystemType fstype: the fstype you wish to use for this Volume.
+        :param FileSystem fstype: the fstype you wish to use for this Volume.
             If not specified, will be retrieved from the ImageParser instance instead.
         :param str key: the key to use for this Volume.
         :param str vstype: the volume system type to use.
@@ -92,30 +93,33 @@ class Volume(object):
         except ValueError:
             return ()
 
+    @property
+    def fstype(self):
+        warnings.warn("fstype is deprecated in favor of filesystem", DeprecationWarning)
+        return self.filesystem
+
     def _get_fstype_from_parser(self, fstype=None):
         """Load fstype information from the parser instance."""
-        if fstype:
-            self.fstype = fstype
-        elif self.index in self.disk.parser.fstypes:
-            self.fstype = self.disk.parser.fstypes[self.index]
-        elif '*' in self.disk.parser.fstypes:
-            self.fstype = self.disk.parser.fstypes['*']
-        elif '?' in self.disk.parser.fstypes and self.disk.parser.fstypes['?'] is not None:
-            self.fstype = "?" + self.disk.parser.fstypes['?']
-        else:
-            self.fstype = ""
-
-        if self.fstype in VOLUME_SYSTEM_TYPES:
-            self.volumes.vstype = self.fstype
-            self.fstype = 'volumesystem'
-
-        # convert fstype from string to a FileSystemType object
-        if not isinstance(self.fstype, filesystems.FileSystem):
-            if self.fstype.startswith("?"):
-                fallback = FILE_SYSTEM_TYPES[self.fstype[1:]](self)
-                self.fstype = filesystems.FallbackFileSystem(self, fallback)
+        if not fstype:
+            if self.index in self.disk.parser.fstypes:
+                fstype = self.disk.parser.fstypes[self.index]
+            elif '*' in self.disk.parser.fstypes:
+                fstype = self.disk.parser.fstypes['*']
+            elif '?' in self.disk.parser.fstypes and self.disk.parser.fstypes['?'] is not None:
+                fstype = "?" + self.disk.parser.fstypes['?']
             else:
-                self.fstype = FILE_SYSTEM_TYPES[self.fstype](self)
+                fstype = ""
+
+        if not fstype:
+            self.filesystem = None
+        elif fstype in VOLUME_SYSTEM_TYPES:
+            self.volumes.vstype = fstype
+            self.filesystem = FILE_SYSTEM_TYPES["volumesystem"](self)
+        elif fstype.startswith("?"):
+            fallback = FILE_SYSTEM_TYPES[fstype[1:]](self)
+            self.filesystem = filesystems.FallbackFileSystem(self, fallback)
+        else:
+            self.filesystem = FILE_SYSTEM_TYPES[fstype](self)
 
     def get_description(self, with_size=True, with_index=True):
         """Obtains a generic description of the volume, containing the file system type, index, label and NTFS version.
@@ -403,7 +407,7 @@ class Volume(object):
             for v in self.volumes:
                 yield from v.init(only_mount, skip_mount, swallow_exceptions)
 
-    def init_volume(self, fstype=None):
+    def init_volume(self):
         """Initializes a single volume. You should use this method instead of :func:`mount` if you want some sane checks
         before mounting.
         """
@@ -425,7 +429,7 @@ class Volume(object):
             return False
 
         logger.info("Mounting volume {0}".format(self))
-        self.mount(fstype=fstype)
+        self.mount()
         self.detect_mountpoint()
 
         return True
@@ -449,11 +453,12 @@ class Volume(object):
                 ".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]) or \
                 os.path.basename(self.disk.paths[0])
 
+            fstype = self.filesystem.type if self.filesystem is not None else None
             if self.disk.parser.casename == case_name:  # the casename is already in the path in this case
-                pretty_label = "{0}-{1}".format(self.index, self.get_safe_label() or self.fstype or 'volume')
+                pretty_label = "{0}-{1}".format(self.index, self.get_safe_label() or fstype or 'volume')
             else:
                 pretty_label = "{0}-{1}-{2}".format(case_name, self.index,
-                                                    self.get_safe_label() or self.fstype or 'volume')
+                                                    self.get_safe_label() or fstype or 'volume')
             if suffix:
                 pretty_label += "-" + suffix
             path = os.path.join(md, pretty_label)
@@ -538,10 +543,10 @@ class Volume(object):
         """
 
         fstype_fallback = None
-        if isinstance(self.fstype, filesystems.FallbackFileSystem):
-            fstype_fallback = self.fstype.fallback
-        elif isinstance(self.fstype, filesystems.FileSystem):
-            return self.fstype
+        if isinstance(self.filesystem, filesystems.FallbackFileSystem):
+            fstype_fallback = self.filesystem.fallback
+        elif isinstance(self.filesystem, filesystems.FileSystem):
+            return self.filesystem
 
         result = collections.Counter()
 
@@ -576,20 +581,20 @@ class Volume(object):
             elif len([True for type, certainty in result.items() if certainty == max_res]) > 1:
                 logger.debug("Multiple items with highest certainty level, so continuing...")
             else:
-                self.fstype = result.most_common(1)[0][0](self)
-                return self.fstype
+                self.filesystem = result.most_common(1)[0][0](self)
+                return self.filesystem
 
         # Now be more lax with the fallback:
         if result:
             max_res = result.most_common(1)[0][1]
             if max_res > 0:
-                self.fstype = result.most_common(1)[0][0](self)
-                return self.fstype
+                self.filesystem = result.most_common(1)[0][0](self)
+                return self.filesystem
         if fstype_fallback:
-            self.fstype = fstype_fallback
-            return self.fstype
+            self.filesystem = fstype_fallback
+            return self.filesystem
 
-    def mount(self, fstype=None):
+    def mount(self):
         """Based on the file system type as determined by :func:`determine_fs_type`, the proper mount command is executed
         for this volume. The volume is mounted in a temporary path (or a pretty path if :attr:`pretty` is enabled) in
         the mountpoint as specified by :attr:`mountpoint`.
@@ -607,17 +612,15 @@ class Volume(object):
         if not self.parent.is_mounted:
             raise NotMountedError(self.parent)
 
-        if fstype is None:
-            fstype = self.determine_fs_type()
+        self.filesystem = self.determine_fs_type()
         self._load_fsstat_data()
 
         # Prepare mount command
         try:
-            fstype.mount()
+            self.filesystem.mount()
 
             self.was_mounted = True
             self.is_mounted = True
-            self.fstype = fstype
 
         except Exception as e:
             logger.exception("Execution failed due to {} {}".format(type(e), e), exc_info=True)
@@ -671,7 +674,7 @@ class Volume(object):
                 fstype = {
                     "ntfs": "ntfs", "fat": "fat", "ext": "ext", "iso": "iso9660", "hfs+": "hfs",
                     "ufs": "ufs", "swap": "swap", "exfat": "exfat",
-                }.get(self.fstype, None)
+                }.get(self.filesystem.type, None)
                 if fstype:
                     cmd.extend(["-f", fstype])
 

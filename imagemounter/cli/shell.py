@@ -213,7 +213,8 @@ class ImageMounterShell(ArgumentParsedShell):
                     try:
                         if args.key is not None:
                             volume.key = args.key
-                        volume.init_volume(fstype=args.fstype)
+                        # TODO: do something with args.fstype
+                        volume.init_volume()
                         if volume.is_mounted:
                             if volume.mountpoint:
                                 print("Mounted volume {index} at {path}"
@@ -345,7 +346,7 @@ class ImageMounterShell(ArgumentParsedShell):
                 level += 1
                 for i, v in enumerate(volumes):
                     level_str = "  " * level + ("└ " if i == len(volumes) - 1 else "├ ")
-                    tp = v.volumes.vstype if v.fstype.type == 'volumesystem' else v.fstype if v.flag == 'alloc' else v.flag
+                    tp = v.volumes.vstype if v.filesystem.type == 'volumesystem' else v.filesystem.type if v.flag == 'alloc' else v.flag
 
                     print("{level_str}{index}  {type} {size:<10}  {description}".format(
                         level_str=level_str,
