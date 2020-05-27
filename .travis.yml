@@ -13,12 +13,12 @@ before_install:
   - sudo modprobe fuse
 
 install:
-  - sudo pip install -r requirements.txt
-  - sudo pip install -r tests/requirements.txt
-  - sudo pip install codecov
+  - pip install -r requirements.txt
+  - pip install -r tests/requirements.txt
+  - pip install codecov
 
 script:
-  - sudo invoke test
+  - sudo -E invoke test
 
 after_success:
   - codecov
