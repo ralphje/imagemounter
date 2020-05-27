@@ -1,7 +1,7 @@
 import io
 import subprocess
 import unittest
-import mock
+import unittest.mock as mock
 import time
 
 from imagemounter import FILE_SYSTEM_TYPES

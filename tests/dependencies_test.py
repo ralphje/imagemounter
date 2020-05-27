@@ -1,8 +1,8 @@
-import mock
 import os
 import subprocess
 import sys
 import unittest
+import unittest.mock as mock
 
 from imagemounter.dependencies import (CommandDependency, Dependency,
                                        DependencySection, MagicDependency, PythonModuleDependency, require)

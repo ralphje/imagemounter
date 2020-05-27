@@ -1,6 +1,5 @@
 import unittest
-
-import mock
+import unittest.mock as mock
 
 from imagemounter.exceptions import NoRootFoundError
 from imagemounter.parser import ImageParser

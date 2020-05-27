@@ -357,14 +357,14 @@ class Volume(object):
     def _should_mount(self, only_mount=None, skip_mount=None):
         """Indicates whether this volume should be mounted. Internal method, used by imount.py"""
 
-        om = only_mount is None or \
-            self.index in only_mount or \
-            self.info.get('lastmountpoint') in only_mount or \
-            self.info.get('label') in only_mount
-        sm = skip_mount is None or \
-            (self.index not in skip_mount and
-             self.info.get('lastmountpoint') not in skip_mount and
-             self.info.get('label') not in skip_mount)
+        om = only_mount is None \
+            or self.index in only_mount \
+            or self.info.get('lastmountpoint') in only_mount \
+            or self.info.get('label') in only_mount
+        sm = skip_mount is None \
+            or (self.index not in skip_mount
+             and self.info.get('lastmountpoint') not in skip_mount
+             and self.info.get('label') not in skip_mount)
         return om and sm
 
     def init(self, only_mount=None, skip_mount=None, swallow_exceptions=True):

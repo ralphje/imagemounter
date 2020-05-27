@@ -88,8 +88,8 @@ def main():
     parser.add_argument('--fstypes', action=AppendDictAction, default={'?': 'unknown'},
                         help="allows the specification of the file system type per volume number; format: 0.1=lvm,...; "
                              "use volume number ? for all undetected file system types and * for all file systems; "
-                             "accepted file systems types are {}".format(", ".join(FILE_SYSTEM_TYPES)) +
-                             ", and none only for the ? volume (defaults to unknown)")
+                             "accepted file systems types are {}".format(", ".join(FILE_SYSTEM_TYPES))
+                             + ", and none only for the ? volume (defaults to unknown)")
     parser.add_argument('--keys', action=AppendDictAction, default={},
                         help="allows the specification of key material per volume number; format: 0.1=p:pass,...; "
                              "exact format depends on volume type", allow_commas=False)

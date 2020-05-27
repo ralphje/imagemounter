@@ -204,7 +204,7 @@ class ImageMounterShell(ArgumentParsedShell):
                 if not disk.is_mounted:
                     try:
                         disk.mount()
-                    except Exception as e:
+                    except Exception:
                         pass
                 else:
                     print(col("Disk {} is already mounted.".format(disk.index), 'red'))
@@ -238,7 +238,7 @@ class ImageMounterShell(ArgumentParsedShell):
                 if not disk.is_mounted:
                     try:
                         disk.mount()
-                    except Exception as e:
+                    except Exception:
                         pass
                 it = disk.init_volumes
             else:
