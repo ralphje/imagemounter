@@ -18,7 +18,7 @@ install:
   - pip install codecov
 
 script:
-  - sudo -E invoke test
+  - sudo -E $(which invoke) test
 
 after_success:
   - codecov
