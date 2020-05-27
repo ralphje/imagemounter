@@ -1,6 +1,3 @@
-from __future__ import print_function
-from __future__ import unicode_literals
-
 import logging
 import os
 import tempfile
@@ -103,8 +100,7 @@ class ImageParser(object):
         :rtype: generator
         """
         for d in self.disks:
-            for v in d.init(single, swallow_exceptions=swallow_exceptions):
-                yield v
+            yield from d.init(single, swallow_exceptions=swallow_exceptions)
 
     def mount_disks(self):
         """Mounts all disks in the parser, i.e. calling :func:`Disk.mount` on all underlying disks. You probably want to
@@ -135,8 +131,7 @@ class ImageParser(object):
 
         for disk in self.disks:
             logger.info("Mounting volumes in {0}".format(disk))
-            for volume in disk.init_volumes(single, only_mount, skip_mount, swallow_exceptions=swallow_exceptions):
-                yield volume
+            yield from disk.init_volumes(single, only_mount, skip_mount, swallow_exceptions=swallow_exceptions)
 
     def get_by_index(self, index):
         """Returns a Volume or Disk by its index."""

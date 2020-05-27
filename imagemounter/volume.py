@@ -1,7 +1,3 @@
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
-
 import collections
 import io
 import logging
@@ -405,8 +401,7 @@ class Volume(object):
             yield self
         else:
             for v in self.volumes:
-                for s in v.init(only_mount, skip_mount, swallow_exceptions):
-                    yield s
+                yield from v.init(only_mount, skip_mount, swallow_exceptions)
 
     def init_volume(self, fstype=None):
         """Initializes a single volume. You should use this method instead of :func:`mount` if you want some sane checks

@@ -1,6 +1,3 @@
-from __future__ import print_function
-from __future__ import unicode_literals
-
 import inspect
 import logging
 import os
@@ -52,8 +49,7 @@ class VolumeSystem(object):
         self._disktype = defaultdict(dict)
 
     def __iter__(self):
-        for v in self.volumes:
-            yield v
+        yield from self.volumes
 
     def __len__(self):
         return len(self.volumes)
@@ -111,8 +107,7 @@ class VolumeSystem(object):
             method = VolumeSystem._determine_auto_detection_method()
 
         if method in ALL_VOLUME_SYSTEM_DETECTORS:
-            for v in ALL_VOLUME_SYSTEM_DETECTORS[method].detect(self, vstype):
-                yield v
+            yield from ALL_VOLUME_SYSTEM_DETECTORS[method].detect(self, vstype)
         else:
             logger.error("No viable detection method found")
             raise ArgumentError("No viable detection method found")

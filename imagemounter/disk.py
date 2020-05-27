@@ -1,5 +1,3 @@
-from __future__ import print_function
-from __future__ import unicode_literals
 from collections import defaultdict
 
 import glob
@@ -290,12 +288,10 @@ class Disk(object):
         """
         # prevent adding the same volumes twice
         if self.volumes.has_detected:
-            for v in self.volumes:
-                yield v
+            yield from self.volumes
 
         elif single:
-            for v in self.volumes.detect_volumes(method='single'):
-                yield v
+            yield from self.volumes.detect_volumes(method='single')
 
         else:
             # if single == False or single == None, loop over all volumes
@@ -310,8 +306,7 @@ class Disk(object):
             # if single == None and no volumes were mounted, use single_volume
             if single is None and amount == 0:
                 logger.info("Detecting as single volume instead")
-                for v in self.volumes.detect_volumes(method='single', force=True):
-                    yield v
+                yield from self.volumes.detect_volumes(method='single', force=True)
 
     def init(self, single=None, only_mount=None, skip_mount=None, swallow_exceptions=True):
         """Calls several methods required to perform a full initialisation: :func:`mount`, and
@@ -328,9 +323,8 @@ class Disk(object):
         self.mount()
         self.volumes.preload_volume_data()
 
-        for v in self.init_volumes(single, only_mount=only_mount, skip_mount=skip_mount,
-                                   swallow_exceptions=swallow_exceptions):
-            yield v
+        yield from self.init_volumes(single, only_mount=only_mount, skip_mount=skip_mount,
+                                     swallow_exceptions=swallow_exceptions)
 
     def init_volumes(self, single=None, only_mount=None, skip_mount=None, swallow_exceptions=True):
         """Generator that detects and mounts all volumes in the disk.
@@ -345,9 +339,8 @@ class Disk(object):
         """
 
         for volume in self.detect_volumes(single=single):
-            for vol in volume.init(only_mount=only_mount, skip_mount=skip_mount,
-                                   swallow_exceptions=swallow_exceptions):
-                yield vol
+            yield from volume.init(only_mount=only_mount, skip_mount=skip_mount,
+                                   swallow_exceptions=swallow_exceptions)
 
     def get_volumes(self):
         """Gets a list of all volumes in this disk, including volumes that are contained in other volumes."""

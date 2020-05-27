@@ -3,9 +3,6 @@
 # This CLI is a total mess. If you want a simple example, please refer to simple_cli.py
 #
 
-from __future__ import print_function
-from __future__ import unicode_literals
-
 import argparse
 import glob
 import logging
@@ -16,12 +13,6 @@ from imagemounter import _util, ImageParser, Unmounter, __version__, FILE_SYSTEM
     DISK_MOUNTERS
 from imagemounter.cli import CheckAction, get_coloring_func, AppendDictAction, ImageMounterStreamHandler
 from imagemounter.exceptions import NoRootFoundError, ImageMounterError, UnsupportedFilesystemError
-
-# Python 2 compatibility
-try:
-    input = raw_input
-except NameError:
-    pass
 
 
 def main():
