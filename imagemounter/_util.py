@@ -133,6 +133,7 @@ def check_output_(cmd, *args, **kwargs):
             logger.debug('< {0}'.format(result))
         return result
     except subprocess.CalledProcessError as e:
+        logger.debug("< return code {}".format(e.returncode))
         if e.output:
             result = e.output.decode(encoding)
             logger.debug('< {0}'.format(result))
