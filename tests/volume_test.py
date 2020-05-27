@@ -1,5 +1,6 @@
 import io
 import subprocess
+import sys
 import unittest
 import unittest.mock as mock
 import time
@@ -223,6 +224,7 @@ class FileMagicTest(unittest.TestCase):
 
 
 class FsstatTest(unittest.TestCase):
+    @unittest.skipIf(sys.version_info < (3, 6), "This test uses assert_called() which is not present before Py3.6")
     def test_ext4(self):
         # Removed some items from this output as we don't use it in its entirety anyway
         result = b"""FILE SYSTEM INFORMATION
@@ -297,6 +299,7 @@ Volume ID: 2697f5b0479b15b1b4c81994387cdba"""
             self.assertEqual(volume.info['statfstype'], 'Ext4')
             self.assertEqual(volume.info['label'], u'\u0420\u043e\u0441\u0441\u0438\u0438')
 
+    @unittest.skipIf(sys.version_info < (3, 6), "This test uses assert_called() which is not present before Py3.6")
     def test_killed_after_timeout(self):
         def mock_side_effect(*args, **kwargs):
             time.sleep(0.2)
@@ -326,7 +329,7 @@ class LuksTest(unittest.TestCase):
         def modified_popen(cmd, *args, **kwargs):
             if cmd[0:3] == ['cryptsetup', '-r', 'luksOpen']:
                 # A command that requests user input
-                x = original_popen(["python2", "-c", "print(raw_input(''))"],
+                x = original_popen([sys.executable, "-c", "print(input(''))"],
                                    *args, **kwargs)
                 return x
             return mock.DEFAULT
