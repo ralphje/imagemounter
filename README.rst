@@ -2,8 +2,8 @@
 imagemounter
 ============
 
-.. image:: https://travis-ci.org/ralphje/imagemounter.svg?branch=master
-    :target: https://travis-ci.org/ralphje/imagemounter
+.. image:: https://travis-ci.com/ralphje/imagemounter.svg?branch=master
+    :target: https://travis-ci.com/ralphje/imagemounter
 .. image:: https://codecov.io/gh/ralphje/imagemounter/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/ralphje/imagemounter
 .. image:: https://readthedocs.org/projects/imagemounter/badge/?version=latest
