@@ -4,15 +4,13 @@ import logging
 import os
 import subprocess
 import re
-import tempfile
 import threading
 import shutil
 import warnings
 
 from imagemounter import _util, filesystems, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES, dependencies
-from imagemounter.exceptions import NoMountpointAvailableError, SubsystemError, \
-    NoLoopbackAvailableError, NotMountedError, \
-    ImageMounterError
+from imagemounter.exceptions import SubsystemError, NotMountedError, ImageMounterError
+from imagemounter.filesystems import FileSystem
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
@@ -120,6 +118,8 @@ class Volume(object):
 
         if not fstype:
             self.filesystem = None
+        elif isinstance(fstype, FileSystem):
+            self.filesystem = fstype
         elif fstype in VOLUME_SYSTEM_TYPES:
             self.volumes.vstype = fstype
             self.filesystem = FILE_SYSTEM_TYPES["volumesystem"](self)
@@ -306,45 +306,10 @@ class Volume(object):
         :raises NoLoopbackAvailableError: if there is no loopback available (only when volume has no slot number)
         """
 
-        self._paths['carve'] = self._make_mountpoint(suffix="carve")
-
-        # if no slot, we need to make a loopback that we can use to carve the volume
-        loopback_was_created_for_carving = False
-        if not self.slot:
-            if not self.loopback:
-                self._find_loopback()
-                # Can't carve if volume has no slot number and can't be mounted on loopback.
-                loopback_was_created_for_carving = True
-
-            # noinspection PyBroadException
-            try:
-                _util.check_call_(["photorec", "/d", self._paths['carve'] + os.sep, "/cmd", self.loopback,
-                                  ("freespace," if freespace else "") + "search"])
-
-                # clean out the loop device if we created it specifically for carving
-                if loopback_was_created_for_carving:
-                    # noinspection PyBroadException
-                    try:
-                        _util.check_call_(['losetup', '-d', self.loopback])
-                    except Exception:
-                        pass
-                    else:
-                        self.loopback = ""
-
-                return self._paths['carve']
-            except Exception as e:
-                logger.exception("Failed carving the volume.")
-                raise SubsystemError(e)
-        else:
-            # noinspection PyBroadException
-            try:
-                _util.check_call_(["photorec", "/d", self._paths['carve'] + os.sep, "/cmd", self.get_raw_path(),
-                                  str(self.slot) + (",freespace" if freespace else "") + ",search"])
-                return self._paths['carve']
-
-            except Exception as e:
-                logger.exception("Failed carving the volume.")
-                raise SubsystemError(e)
+        from imagemounter.filesystems import CarveFileSystem
+        volume = self.volumes._make_subvolume(flag='alloc', offset=0, fstype='carve')
+        volume.mount()
+        return volume.filesystem.mountpoint
 
     @dependencies.require(dependencies.vshadowmount)
     def detect_volume_shadow_copies(self):
@@ -356,15 +321,10 @@ class Volume(object):
         :raises NoMountpointAvailableError: if there is no mountpoint available
         """
 
-        self._paths['vss'] = self._make_mountpoint(suffix="vss")
-
-        try:
-            _util.check_call_(["vshadowmount", "-o", str(self.offset), self.get_raw_path(), self._paths['vss']])
-        except Exception as e:
-            logger.exception("Failed mounting the volume shadow copies.")
-            raise SubsystemError(e)
-        else:
-            return self.volumes.detect_volumes(vstype='vss')
+        from imagemounter.filesystems import VolumeShadowCopyFileSystem
+        volume = self.volumes._make_subvolume(flag='alloc', offset=0, fstype='vss-volume')
+        volume.mount()
+        return volume.volumes
 
     def _should_mount(self, only_mount=None, skip_mount=None):
         """Indicates whether this volume should be mounted. Internal method, used by imount.py"""
@@ -441,97 +401,6 @@ class Volume(object):
         self.detect_mountpoint()
 
         return True
-
-    def _make_mountpoint(self, casename=None, suffix=''):
-        """Creates a directory that can be used as a mountpoint.
-
-        :returns: the mountpoint path
-        :raises NoMountpointAvailableError: if no mountpoint could be made
-        """
-        parser = self.disk.parser
-
-        if parser.mountdir and not os.path.exists(parser.mountdir):
-            os.makedirs(parser.mountdir)
-
-        if parser.pretty:
-            md = parser.mountdir or tempfile.gettempdir()
-            case_name = casename or self.disk.parser.casename or \
-                ".".join(os.path.basename(self.disk.paths[0]).split('.')[0:-1]) or \
-                os.path.basename(self.disk.paths[0])
-
-            fstype = self.filesystem.type if self.filesystem is not None else None
-            if self.disk.parser.casename == case_name:  # the casename is already in the path in this case
-                pretty_label = "{0}-{1}".format(self.index, self.get_safe_label() or fstype or 'volume')
-            else:
-                pretty_label = "{0}-{1}-{2}".format(case_name, self.index,
-                                                    self.get_safe_label() or fstype or 'volume')
-            if suffix:
-                pretty_label += "-" + suffix
-            path = os.path.join(md, pretty_label)
-
-            # check if path already exists, otherwise try to find another nice path
-            if os.path.exists(path):
-                for i in range(2, 100):
-                    path = os.path.join(md, pretty_label + "-" + str(i))
-                    if not os.path.exists(path):
-                        break
-                else:
-                    logger.error("Could not find free mountdir.")
-                    raise NoMountpointAvailableError()
-
-            # noinspection PyBroadException
-            try:
-                os.mkdir(path, 777)
-                return path
-            except Exception:
-                logger.exception("Could not create mountdir.")
-                raise NoMountpointAvailableError()
-        else:
-            t = tempfile.mkdtemp(prefix='im_' + self.index + '_',
-                                 suffix='_' + self.get_safe_label() + ("_" + suffix if suffix else ""),
-                                 dir=parser.mountdir)
-            return t
-
-    def _clear_mountpoint(self):
-        """Clears a created mountpoint. Does not unmount it, merely deletes it."""
-
-        if self.mountpoint:
-            os.rmdir(self.mountpoint)
-            self.mountpoint = ""
-
-    def _find_loopback(self, use_loopback=True, var_name='loopback'):
-        """Finds a free loopback device that can be used. The loopback is stored in :attr:`loopback`. If *use_loopback*
-        is True, the loopback will also be used directly.
-
-        :returns: the loopback address
-        :raises NoLoopbackAvailableError: if no loopback could be found
-        """
-
-        # noinspection PyBroadException
-        try:
-            loopback = _util.check_output_(['losetup', '-f']).strip()
-            setattr(self, var_name, loopback)
-        except Exception:
-            logger.warning("No free loopback device found.", exc_info=True)
-            raise NoLoopbackAvailableError()
-
-        # noinspection PyBroadException
-        if use_loopback:
-            try:
-                cmd = ['losetup', '-o', str(self.offset), '--sizelimit', str(self.size),
-                       loopback, self.get_raw_path()]
-                if not self.disk.read_write:
-                    cmd.insert(1, '-r')
-                _util.check_call_(cmd, stdout=subprocess.PIPE)
-            except Exception:
-                logger.exception("Loopback device could not be mounted.")
-                raise NoLoopbackAvailableError()
-        return loopback
-
-    def _free_loopback(self, var_name='loopback'):
-        if getattr(self, var_name):
-            _util.check_call_(['losetup', '-d', getattr(self, var_name)], wrap_error=True)
-            setattr(self, var_name, "")
 
     def determine_fs_type(self):
         """Determines the FS type for this partition. This function is used internally to determine which mount system

@@ -102,7 +102,7 @@ def main():
             else:
                 print('[+] Carved data is available at {0}.'.format(colored(path, 'green', attrs=['bold'])))
 
-        if args.vshadow and volume.fstype == 'ntfs':
+        if args.vshadow and volume.fstype.type == 'ntfs':
             sys.stdout.write("[+] Mounting volume shadow copies...\r")
             sys.stdout.flush()
             try:

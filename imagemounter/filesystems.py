@@ -3,13 +3,15 @@ import logging
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 from imagemounter import _util, VOLUME_SYSTEM_TYPES, dependencies
 from imagemounter.exceptions import UnsupportedFilesystemError, IncorrectFilesystemError, ArgumentError, \
-    KeyInvalidError, ImageMounterError, SubsystemError, NoLoopbackAvailableError
+    KeyInvalidError, ImageMounterError, SubsystemError, NoLoopbackAvailableError, NoMountpointAvailableError
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,49 @@ class MountpointFileSystemMixin:
         :returns: the mountpoint path
         :raises NoMountpointAvailableError: if no mountpoint could be made
         """
-        self.mountpoint = self.volume._make_mountpoint(casename, suffix)
+        parser = self.volume.disk.parser
+
+        if parser.mountdir and not os.path.exists(parser.mountdir):
+            os.makedirs(parser.mountdir)
+
+        if parser.pretty:
+            md = parser.mountdir or tempfile.gettempdir()
+            case_name = casename or self.volume.disk.parser.casename or \
+                ".".join(os.path.basename(self.volume.disk.paths[0]).split('.')[0:-1]) or \
+                os.path.basename(self.volume.disk.paths[0])
+
+            fstype = self.volume.filesystem.type if self.volume.filesystem is not None else None
+            if self.volume.disk.parser.casename == case_name:  # the casename is already in the path in this case
+                pretty_label = "{0}-{1}".format(self.volume.index, self.volume.get_safe_label() or fstype or 'volume')
+            else:
+                pretty_label = "{0}-{1}-{2}".format(case_name, self.volume.index,
+                                                    self.volume.get_safe_label() or fstype or 'volume')
+            if suffix:
+                pretty_label += "-" + suffix
+            path = os.path.join(md, pretty_label)
+
+            # check if path already exists, otherwise try to find another nice path
+            if os.path.exists(path):
+                for i in range(2, 100):
+                    path = os.path.join(md, pretty_label + "-" + str(i))
+                    if not os.path.exists(path):
+                        break
+                else:
+                    logger.error("Could not find free mountdir.")
+                    raise NoMountpointAvailableError()
+
+            # noinspection PyBroadException
+            try:
+                os.mkdir(path, 777)
+                self.mountpoint = path
+            except Exception:
+                logger.exception("Could not create mountdir.")
+                raise NoMountpointAvailableError()
+        else:
+            t = tempfile.mkdtemp(prefix='im_' + self.volume.index + '_',
+                                 suffix='_' + self.volume.get_safe_label() + ("_" + suffix if suffix else ""),
+                                 dir=parser.mountdir)
+            self.mountpoint = t
 
     def _clear_mountpoint(self):
         """Clears a created mountpoint. Does not unmount it, merely deletes it."""
@@ -705,6 +749,93 @@ class RaidFileSystem(LoopbackFileSystemMixin, FileSystem):
             self.mdpath = None
 
         super().unmount(allow_lazy=allow_lazy)
+
+
+class CarveFileSystem(MountpointFileSystemMixin, LoopbackFileSystemMixin, FileSystem):
+    type = 'carve'
+
+    def __init__(self, volume, freespace=True):
+        """
+        :param freespace: indicates whether the entire volume should be carved (False) or only the free space (True)
+        :type freespace: bool
+        """
+        super().__init__(volume)
+        self.freespace = freespace
+
+    @dependencies.require(dependencies.photorec)
+    def mount(self):
+        """Call this method to carve the free space of the volume for (deleted) files. Note that photorec has its
+        own interface that temporarily takes over the shell.
+
+        Note that this is only a 'fake' mount, but helps creating the illusion of a filesystem.
+
+        :raises CommandNotFoundError: if the underlying command does not exist
+        :raises SubsystemError: if the underlying command fails
+        :raises NoMountpointAvailableError: if there is no mountpoint available
+        :raises NoLoopbackAvailableError: if there is no loopback available (only when volume has no slot number)
+        """
+        self._make_mountpoint(suffix='carve')
+
+        if not self.volume.slot:
+            loopback = self.volume.loopback
+            if loopback is None:
+                self._find_loopback()
+                loopback = self.loopback
+
+            try:
+                _util.check_call_(["photorec", "/d", self.mountpoint + os.sep, "/cmd", loopback,
+                                   ("freespace," if self.freespace else "") + "search"])
+
+            except Exception as e:
+                logger.exception("Failed carving the volume.")
+                self._clear_mountpoint()
+                raise SubsystemError(e)
+        else:
+            # noinspection PyBroadException
+            try:
+                _util.check_call_(["photorec", "/d", self.mountpoint + os.sep, "/cmd", self.volume.get_raw_path(),
+                                   str(self.volume.slot) + (",freespace" if self.freespace else "") + ",search"])
+
+            except Exception as e:
+                logger.exception("Failed carving the volume.")
+                self._clear_mountpoint()
+                raise SubsystemError(e)
+
+    def unmount(self, allow_lazy=False):
+        """Unmounts the given volume."""
+        if self.mountpoint is not None:
+            logger.debug("Clearing out {}".format(self.mountpoint))
+            shutil.rmtree(self.mountpoint)
+            self.mountpoint = None
+
+        super().unmount(allow_lazy)
+
+
+class VolumeShadowCopyFileSystem(MountpointFileSystemMixin, FileSystem):
+    type = 'vss-volume'
+
+    @dependencies.require(dependencies.vshadowmount)
+    def mount(self):
+        """Method to call vshadowmount and mount NTFS volume shadow copies.
+
+        :return: iterable with the :class:`Volume` objects of the VSS
+        :raises CommandNotFoundError: if the underlying command does not exist
+        :raises SubSystemError: if the underlying command fails
+        :raises NoMountpointAvailableError: if there is no mountpoint available
+        """
+
+        self._make_mountpoint(suffix="vss")
+
+        try:
+            _util.check_call_(["vshadowmount", "-o", str(self.volume.offset), self.volume.get_raw_path(),
+                               self.mountpoint])
+        except Exception as e:
+            logger.exception("Failed mounting the volume shadow copies.")
+            self._clear_mountpoint()
+            raise SubsystemError(e)
+        else:
+            self.volume._paths['vss_store'] = self.mountpoint
+            return list(self.volume.volumes.detect_volumes(vstype='vss', method='vss'))
 
 
 # Populate the FILE_SYSTEM_TYPES
