@@ -40,10 +40,13 @@ def clean_unmount(cmd, mountpoint, tries=5, rmdir=True):
     for _ in range(tries):
         if not os.path.ismount(mountpoint):
             # Unmount was successful, remove mountpoint
-            if os.path.islink(mountpoint):
-                os.unlink(mountpoint)
-            else:
-                os.rmdir(mountpoint)
+            try:
+                if os.path.islink(mountpoint):
+                    os.unlink(mountpoint)
+                else:
+                    os.rmdir(mountpoint)
+            except FileNotFoundError:
+                pass  # this is what we are looking for!
             break
         else:
             time.sleep(1)

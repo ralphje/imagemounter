@@ -6,7 +6,6 @@ import unittest.mock as mock
 import time
 
 from imagemounter import FILE_SYSTEM_TYPES
-from imagemounter._util import check_output_
 from imagemounter.filesystems import UnknownFileSystem
 from imagemounter.parser import ImageParser
 from imagemounter.disk import Disk
