@@ -1,11 +1,23 @@
 import os
 import unittest
-from imagemounter import ImageParser
+from imagemounter import ImageParser, _util
+
+try:
+    _util.check_output_(['losetup', '-f']).strip()
+except Exception:
+    loop_supported = False
+else:
+    loop_supported = True
+
+
+with open("/proc/filesystems", "r") as f:
+    supported_filesystems = [l.split()[-1] for l in f]
 
 
 class FilesystemDirectMountTestBase(object):
     ignored_volumes = []
 
+    @unittest.skipUnless(loop_supported, "loopback devices not supported")
     def test_mount(self):
         volumes = []
         self.filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), self.filename)
@@ -21,6 +33,7 @@ class FilesystemDirectMountTestBase(object):
         self.validate_types(volumes)
 
 
+@unittest.skipUnless("cramfs" in supported_filesystems, "cramfs unsupported")
 class CramFSDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
     def setUp(self):
         self.filename = 'images/test.cramfs'
@@ -90,6 +103,7 @@ class MbrDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
         self.assertEqual(volumes[12].filesystem.type, "fat")
 
 
+@unittest.skipUnless("minix" in supported_filesystems, "minix unsupported")
 class MinixDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
     def setUp(self):
         self.filename = 'images/test.minix'
@@ -112,6 +126,7 @@ class NtfsDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
         self.assertEqual(volumes[0].filesystem.type, "ntfs")
 
 
+@unittest.skipUnless("squashfs" in supported_filesystems, "squashfs unsupported")
 class SquashDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
     def setUp(self):
         self.filename = 'images/test.sqsh'
