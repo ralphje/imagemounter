@@ -72,8 +72,6 @@ class Volume(object):
         self.info = {}
         self._paths = {}
 
-        self.mountpoint = ""
-        self.loopback = ""
         self.was_mounted = False
         self.is_mounted = False
 
@@ -97,6 +95,16 @@ class Volume(object):
     def fstype(self):
         warnings.warn("fstype is deprecated in favor of filesystem", DeprecationWarning)
         return self.filesystem
+
+    @property
+    def mountpoint(self):
+        warnings.warn("you should now access the device is mounted on through volume.filesystem", DeprecationWarning)
+        return getattr(self.filesystem, 'mountpoint', None)
+
+    @property
+    def loopback(self):
+        warnings.warn("you should now access the device is mounted on through volume.filesystem", DeprecationWarning)
+        return getattr(self.filesystem, 'loopback', None)
 
     def _get_fstype_from_parser(self, fstype=None):
         """Load fstype information from the parser instance."""
