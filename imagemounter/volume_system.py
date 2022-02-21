@@ -485,11 +485,11 @@ class VssVolumeDetector(VolumeDetector):
     def detect(self, volume_system, vstype='detect'):
         """Detect volume shadow copy volumes in the specified path."""
 
-        path = volume_system.parent._paths['vss']
+        path = volume_system.parent.get_raw_path()
 
         try:
             volume_info = _util.check_output_(["vshadowinfo", "-o", str(volume_system.parent.offset),
-                                               volume_system.parent.get_raw_path()])
+                                               volume_system.parent.parent.get_raw_path()])
         except Exception as e:
             logger.exception("Failed obtaining info from the volume shadow copies.")
             raise SubsystemError(e)
@@ -505,7 +505,8 @@ class VssVolumeDetector(VolumeDetector):
                 current_store._paths['vss_store'] = os.path.join(path, 'vss' + idx)
                 current_store.info['fsdescription'] = 'VSS Store'
             elif line.startswith("Volume size"):
-                current_store.size = int(line.split(":")[-1].strip().split()[0])
+                match = re.match(r"Volume size.*?(\d+) bytes.*", line)
+                current_store.size = int(match.group(1))
             elif line.startswith("Creation time"):
                 current_store.info['creation_time'] = line.split(":")[-1].strip()
 
