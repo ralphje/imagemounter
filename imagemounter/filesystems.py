@@ -5,12 +5,11 @@ import random
 import re
 import subprocess
 import sys
-import tempfile
 import time
 
 from imagemounter import _util, VOLUME_SYSTEM_TYPES, dependencies
 from imagemounter.exceptions import UnsupportedFilesystemError, IncorrectFilesystemError, ArgumentError, \
-    KeyInvalidError, ImageMounterError, SubsystemError, NoLoopbackAvailableError, NoMountpointAvailableError
+    KeyInvalidError, ImageMounterError, SubsystemError, NoLoopbackAvailableError
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +59,7 @@ class LoopbackFileSystemMixin:
         # noinspection PyBroadException
         try:
             self.loopback = _util.check_output_(['losetup', '-f']).strip()
-        except Exception as e:
+        except Exception:
             logger.warning("No free loopback device found.", exc_info=True)
             raise NoLoopbackAvailableError()
 
