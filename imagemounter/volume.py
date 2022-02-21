@@ -5,7 +5,6 @@ import os
 import subprocess
 import re
 import threading
-import shutil
 import warnings
 
 from imagemounter import _util, filesystems, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES, dependencies
