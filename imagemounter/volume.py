@@ -306,7 +306,6 @@ class Volume(object):
         :raises NoLoopbackAvailableError: if there is no loopback available (only when volume has no slot number)
         """
 
-        from imagemounter.filesystems import CarveFileSystem
         volume = self.volumes._make_subvolume(flag='alloc', offset=0, fstype='carve')
         volume.mount()
         return volume.filesystem.mountpoint
@@ -321,8 +320,7 @@ class Volume(object):
         :raises NoMountpointAvailableError: if there is no mountpoint available
         """
 
-        from imagemounter.filesystems import VolumeShadowCopyFileSystem
-        volume = self.volumes._make_subvolume(flag='alloc', offset=0, fstype='vss-volume')
+        volume = self.volumes._make_subvolume(flag='alloc', offset=0, fstype='vss-container')
         volume.mount()
         return volume.volumes
 
@@ -651,27 +649,10 @@ class Volume(object):
         if self.is_mounted:
             logger.info("Unmounting volume %s", self)
 
-        if self._paths.get('vss'):
-            try:
-                _util.clean_unmount(['fusermount', '-u'], self._paths['vss'])
-            except SubsystemError:
-                if not allow_lazy:
-                    raise
-                _util.clean_unmount(['fusermount', '-uz'], self._paths['vss'])
-            del self._paths['vss']
-
         if self._paths.get('bindmounts'):
             for mp in self._paths['bindmounts']:
                 _util.clean_unmount(['umount'], mp, rmdir=False)
             del self._paths['bindmounts']
-
-        if self._paths.get('carve'):
-            try:
-                shutil.rmtree(self._paths['carve'])
-            except OSError as e:
-                raise SubsystemError(e)
-            else:
-                del self._paths['carve']
 
         self.filesystem.unmount(allow_lazy=allow_lazy)
 

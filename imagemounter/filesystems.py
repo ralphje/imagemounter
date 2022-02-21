@@ -812,7 +812,7 @@ class CarveFileSystem(MountpointFileSystemMixin, LoopbackFileSystemMixin, FileSy
 
 
 class VolumeShadowCopyFileSystem(MountpointFileSystemMixin, FileSystem):
-    type = 'vss-volume'
+    type = 'vss-container'
 
     @dependencies.require(dependencies.vshadowmount)
     def mount(self):
@@ -836,6 +836,18 @@ class VolumeShadowCopyFileSystem(MountpointFileSystemMixin, FileSystem):
         else:
             self.volume._paths['vss_store'] = self.mountpoint
             return list(self.volume.volumes.detect_volumes(vstype='vss', method='vss'))
+
+    def unmount(self, allow_lazy=False):
+        if self.mountpoint:
+            try:
+                _util.clean_unmount(['fusermount', '-u'], self.mountpoint)
+            except SubsystemError:
+                if not allow_lazy:
+                    raise
+                _util.clean_unmount(['fusermount', '-uz'], self.mountpoint)
+            self.mountpoint = None
+
+        super().unmount(allow_lazy)
 
 
 # Populate the FILE_SYSTEM_TYPES
