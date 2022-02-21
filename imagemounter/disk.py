@@ -369,7 +369,7 @@ class Disk(object):
                 logger.warning("Error unmounting volume {0}".format(m.mountpoint))
 
         if self._paths.get('nbd'):
-            _util.clean_unmount(['qemu-nbd', '-d'], self._paths['nbd'], rmdir=False)
+            _util.check_call_(['qemu-nbd', '-d', self._paths['nbd']])
 
         if self.mountpoint:
             try:
