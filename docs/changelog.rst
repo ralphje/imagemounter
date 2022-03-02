@@ -13,7 +13,7 @@ from many contributors.
 
 New features:
 
-* Drop support for Python 2, bump version requirement for Python to 3.5.
+* Drop support for Python 2, bump version requirement for Python to 3.6.
 * Allowed programmatic access to dependency checks (contributed by gtback). This enables you to write code that checks
   whether certain dependencies are satisfied.
 * Changed the way file system types work. Large if-statements in the code have been replaced by class-based

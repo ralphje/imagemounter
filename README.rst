@@ -2,8 +2,8 @@
 imagemounter
 ============
 
-.. image:: https://app.travis-ci.com/ralphje/imagemounter.svg?branch=master
-    :target: https://app.travis-ci.com/ralphje/imagemounter
+.. image:: https://github.com/ralphje/imagemounter/actions/workflows/test.yml/badge.svg?branch=master&event=push
+    :target: https://github.com/ralphje/imagemounter/actions/workflows/test.yml
 .. image:: https://codecov.io/gh/ralphje/imagemounter/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/ralphje/imagemounter
 .. image:: https://readthedocs.org/projects/imagemounter/badge/?version=latest
@@ -19,7 +19,7 @@ In its default mode, imagemounter will try to start mounting the base image on a
 detect the volume system and then mount each volume seperately. If it fails finding a volume system,
 it will try to mount the entire image as a whole if it succeeds in detecting what it actually is.
 
-This package supports Python 3.5+.
+This package supports Python 3.6+.
 
 Example
 =======

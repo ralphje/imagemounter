@@ -1,8 +1,3 @@
-.. imagemounter documentation master file, created by
-   sphinx-quickstart on Mon May 19 14:34:55 2014.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 imagemounter
 ============
 imagemounter is a command-line utility and Python package to ease the mounting and unmounting of EnCase, Affuse, vmdk
