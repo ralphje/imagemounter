@@ -132,16 +132,13 @@ class VolumeSystem(object):
 
         self._load_disktype_data()
 
+    @dependencies.require(dependencies.disktype, none_on_failure=True)
     def _load_disktype_data(self):
         """Calls the :command:`disktype` command and obtains the disk GUID from GPT volume systems. As we
         are running the tool anyway, the label is also extracted from the tool if it is not yet set.
 
         The disktype data is only loaded and not assigned to volumes yet.
         """
-
-        if not _util.command_exists('disktype'):
-            logger.warning("disktype not installed, could not detect volume type")
-            return None
 
         disktype = _util.check_output_(['disktype', self.parent.get_raw_path()]).strip()
 

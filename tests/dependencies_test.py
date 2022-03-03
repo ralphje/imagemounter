@@ -1,195 +1,196 @@
-import os
-import subprocess
 import sys
-import unittest
-import unittest.mock as mock
 
-from imagemounter.dependencies import (CommandDependency, Dependency,
-                                       DependencySection, MagicDependency, PythonModuleDependency, require)
-from imagemounter.exceptions import CommandNotFoundError
+import pytest
 
-
-class DependencyTest(unittest.TestCase):
-
-    @unittest.skip("depends on previous output of imount --check")
-    def test_imount_check_output(self):
-        # This test can be used to verify that the output of ``imount --check``
-        # hasn't changed. To use this, first run:
-        #    imount --check > ~/imount-check-results.txt
-        # Then make any code changes and run this test (remove @unittest.skip).
-        self.maxDiff = None
-        expected = open(os.path.expanduser("~/imount-check-results.txt")).read()
-        actual = subprocess.check_output(['imount', '--check']).decode("utf-8")
-
-        self.assertEqual(expected, actual)
+from imagemounter.dependencies import CommandDependency, DependencySection, MagicDependency, PythonModuleDependency, \
+    require, FileSystemTypeDependency
+from imagemounter.exceptions import CommandNotFoundError, ModuleNotFoundError, PrerequisiteFailedError
 
 
-class CommandDependencyTest(unittest.TestCase):
-
-    def test_existing_dependency(self):
-        dep = CommandDependency('ls')
-        self.assertTrue(dep.is_available)
-        dep.require()
-
-    def test_existing_dependency_decorator(self):
+class TestDependencyDecorator:
+    @pytest.mark.parametrize("none_on_failure", [True, False])
+    def test_existing_dependency(self, none_on_failure):
         dep = CommandDependency('ls')
 
-        @require(dep)
+        @require(dep, none_on_failure=none_on_failure)
         def test(x, y):
             return x + y
-        self.assertEqual(test(1, 2), 3)
+
+        assert test(1, 2) == 3
 
     def test_missing_dependency(self):
         dep = CommandDependency('lsxxxx')
-        self.assertFalse(dep.is_available)
-        self.assertRaises(CommandNotFoundError, dep.require)
-
-    def test_missing_dependency_decorator(self):
-        dep = CommandDependency('lsxxxx')
 
         @require(dep)
         def test(x, y):
             return x + y
-        self.assertRaises(CommandNotFoundError, test)
+
+        with pytest.raises(CommandNotFoundError):
+            test()
+
+    def test_missing_dependency_none_on_failure(self):
+        dep = CommandDependency('lsxxxx')
 
         @require(dep, none_on_failure=True)
         def test2(x, y):
             return x + y
-        self.assertEqual(None, test2(1, 2))
 
-    @mock.patch('imagemounter.dependencies._util')
-    def test_mocked_dependency(self, util):
-        util.command_exists.return_value = True
-        dep = CommandDependency('lsxxxx')
-        self.assertTrue(dep.is_available)
-        self.assertEqual(dep.printable_status, "INSTALLED lsxxxx")
+        assert test2(1, 2) is None
 
-    @mock.patch('imagemounter.dependencies._util')
-    def test_dependency_status_message(self, util):
-        util.command_exists.return_value = False
+
+class TestCommandDependency:
+    def test_existing_dependency(self):
         dep = CommandDependency('ls')
-        self.assertFalse(dep.is_available)
-        self.assertEqual(dep.printable_status.strip(), "MISSING   ls")
+        assert dep.is_available
+        dep.require()
 
-    @mock.patch('imagemounter.dependencies._util')
-    def test_dependency_status_message_package(self, util):
+    def test_missing_dependency(self):
+        dep = CommandDependency('lsxxxx')
+        assert not dep.is_available
+        with pytest.raises(CommandNotFoundError):
+            dep.require()
+
+    def test_status_message_existing(self, mocker):
+        util = mocker.patch('imagemounter.dependencies._util')
+        util.command_exists.return_value = True
+
+        dep = CommandDependency('lsxxxx')
+        assert dep.is_available
+        assert dep.printable_status == "INSTALLED lsxxxx"
+
+    @pytest.mark.parametrize("args,result", [
+        ({}, "MISSING   ls"),
+        (dict(package="core-utils"), "MISSING   ls                  part of the core-utils package"),
+        (dict(why="listing files"),  "MISSING   ls                  needed for listing files"),
+        (dict(package="core-utils", why="listing files"),
+         "MISSING   ls                  needed for listing files, part of the core-utils package"),
+    ])
+    def test_status_message_missing(self, mocker, args, result):
+        util = mocker.patch('imagemounter.dependencies._util')
         util.command_exists.return_value = False
-        dep = CommandDependency('ls', package="core-utils")
-        self.assertFalse(dep.is_available)
-        expected = "MISSING   ls                  part of the core-utils package"
-        self.assertEqual(dep.printable_status.strip(), expected)
 
-    @mock.patch('imagemounter.dependencies._util')
-    def test_dependency_status_message_why(self, util):
-        util.command_exists.return_value = False
-        dep = CommandDependency('ls', why="listing files")
-        self.assertFalse(dep.is_available)
-        expected = "MISSING   ls                  needed for listing files"
-        self.assertEqual(dep.printable_status.strip(), expected)
-
-    @mock.patch('imagemounter.dependencies._util')
-    def test_dependency_status_message_package_why(self, util):
-        util.command_exists.return_value = False
-        dep = CommandDependency('ls', package="core-utils", why="listing files")
-        self.assertFalse(dep.is_available)
-        expected = "MISSING   ls                  needed for listing files, part of the core-utils package"
-        self.assertEqual(dep.printable_status.strip(), expected)
+        dep = CommandDependency('ls', **args)
+        assert not dep.is_available
+        assert dep.printable_status.strip() == result
 
 
-class PythonModuleDependencyTest(unittest.TestCase):
+class TestFilesystemDependency:
+    def test_existing_dependency(self):
+        dep = FileSystemTypeDependency('tmpfs')
+        assert dep.is_available
+        dep.require()
 
+    def test_existing_unloaded_dependency(self, mocker):
+        # this assumes iso9660 is a kernel dependency available
+        dep = FileSystemTypeDependency('iso9660')
+        dep._is_loaded = mocker.Mock(return_value=False)
+        assert dep.is_available
+        dep.require()
+
+    def test_missing_dependency(self):
+        dep = CommandDependency('foobar')
+        assert not dep.is_available
+        with pytest.raises(PrerequisiteFailedError):
+            dep.require()
+
+
+class TestPythonModuleDependency:
     def test_existing_dependency(self):
         dep = PythonModuleDependency('sys')
-        self.assertTrue(dep.is_available)
+        assert dep.is_available
+        dep.require()
 
     def test_missing_dependency(self):
         dep = PythonModuleDependency('foobarnonexistent')
-        self.assertFalse(dep.is_available)
+        assert not dep.is_available
+        with pytest.raises(ModuleNotFoundError):
+            dep.require()
 
-    @mock.patch('imagemounter.dependencies._util')
-    def test_mocked_dependency(self, util):
+    def test_status_message_existing(self, mocker):
+        util = mocker.patch('imagemounter.dependencies._util')
         util.module_exists.return_value = True
+
         dep = PythonModuleDependency('requests2')
-        self.assertTrue(dep.is_available)
-        self.assertEqual(dep.printable_status, "INSTALLED requests2")
+        assert dep.is_available
+        assert dep.printable_status == "INSTALLED requests2"
 
-    @mock.patch('imagemounter.dependencies._util')
-    def test_mocked_status_message(self, util):
+    @pytest.mark.parametrize("args,result", [
+        ({}, "MISSING   sys                 install using pip"),
+        (dict(why="system functions"), "MISSING   sys                 needed for system functions, install using pip"),
+    ])
+    def test_status_message_missing(self, mocker, args, result):
+        util = mocker.patch('imagemounter.dependencies._util')
         util.module_exists.return_value = False
-        dep = PythonModuleDependency('sys')
-        self.assertFalse(dep.is_available)
-        expected = "MISSING   sys                 install using pip"
-        self.assertEqual(dep.printable_status, expected)
 
-    @mock.patch('imagemounter.dependencies._util')
-    def test_mocked_status_message_why(self, util):
+        dep = PythonModuleDependency('sys', **args)
+        assert not dep.is_available
+        assert dep.printable_status.strip() == result
+
+
+class TestMagicDependency:
+    @pytest.fixture
+    def magic_dep(self):
+        return MagicDependency("python-magic")
+
+    @pytest.fixture
+    def magic_pypi(self, mocker):
+        sys.modules['magic'] = mocker.Mock(['from_file'])
+        yield sys.modules['magic']
+        del sys.modules['magic']
+
+    @pytest.fixture
+    def magic_system(self, mocker):
+        sys.modules['magic'] = mocker.Mock(['open'])
+        yield sys.modules['magic']
+        del sys.modules['magic']
+
+    @pytest.fixture
+    def magic_unknown(self, mocker):
+        sys.modules['magic'] = mocker.Mock([])
+        yield sys.modules['magic']
+        del sys.modules['magic']
+
+    def test_not_exists(self, mocker, magic_dep):
+        util = mocker.patch('imagemounter.dependencies._util')
         util.module_exists.return_value = False
-        dep = PythonModuleDependency('sys', why="system functions")
-        self.assertFalse(dep.is_available)
-        expected = "MISSING   sys                 needed for system functions, install using pip"
-        self.assertEqual(dep.printable_status, expected)
+
+        assert not magic_dep.is_available
+        assert not magic_dep._importable
+        assert magic_dep.printable_status == "MISSING   python-magic        install using pip"
+
+    def test_exists_pypi(self, magic_dep, magic_pypi):
+        assert magic_dep.is_available
+        assert magic_dep.is_python_package
+        assert not magic_dep.is_system_package
+        assert magic_dep.printable_status == "INSTALLED python-magic        (Python package)"
+
+    def test_exists_system(self, magic_dep, magic_system):
+        assert magic_dep.is_available
+        assert not magic_dep.is_python_package
+        assert magic_dep.is_system_package
+        assert magic_dep.printable_status == "INSTALLED python-magic        (system package)"
+
+    def test_exists_unknown(self, magic_dep, magic_unknown):
+        assert magic_dep._importable
+        assert not magic_dep.is_available
+        assert not magic_dep.is_python_package
+        assert not magic_dep.is_system_package
+        assert magic_dep.printable_status \
+               == "ERROR     python-magic        expecting python-magic, found other module named magic"
 
 
-class MagicDependencyTest(unittest.TestCase):
-
-    def setUp(self):
-        self.magic = MagicDependency("python-magic")
-
-    def tearDown(self):
-        # After each test, remove the fake "magic" module we've created.
-        if 'magic' in sys.modules:
-            del sys.modules['magic']
-
-    @mock.patch('imagemounter.dependencies._util')
-    def test_not_exists(self, util):
-        util.module_exists.return_value = False
-        self.assertFalse(self.magic.is_available)
-        self.assertFalse(self.magic._importable)
-        expected = "MISSING   python-magic        install using pip"
-        self.assertEqual(self.magic.printable_status, expected)
-
-    def test_exists_pypi(self):
-        sys.modules['magic'] = mock.Mock(['from_file'])
-        self.assertTrue(self.magic.is_available)
-        self.assertTrue(self.magic.is_python_package)
-        self.assertFalse(self.magic.is_system_package)
-        expected = "INSTALLED python-magic        (Python package)"
-        self.assertEqual(self.magic.printable_status, expected)
-
-    def test_exists_system(self):
-        sys.modules['magic'] = mock.Mock(['open'])
-        self.assertTrue(self.magic.is_available)
-        self.assertFalse(self.magic.is_python_package)
-        self.assertTrue(self.magic.is_system_package)
-        expected = "INSTALLED python-magic        (system package)"
-        self.assertEqual(self.magic.printable_status, expected)
-
-    def test_exists_unknown(self):
-        sys.modules['magic'] = mock.Mock([])
-        self.assertTrue(self.magic._importable)
-        self.assertFalse(self.magic.is_available)
-        self.assertFalse(self.magic.is_python_package)
-        self.assertFalse(self.magic.is_system_package)
-        expected = "ERROR     python-magic        expecting python-magic, found other module named magic"
-        self.assertEqual(self.magic.printable_status, expected)
-
-
-class DependencySectionTest(unittest.TestCase):
-
+class TestDependencySection:
     def test_section_no_deps(self):
         section = DependencySection(name="empty section",
                                     description='not needed',
                                     deps=[])
+        assert section.printable_status == "-- empty section (not needed) --"
 
-        expected = "-- empty section (not needed) --"
-        self.assertEqual(expected, section.printable_status)
-
-    def test_section_printable_status(self):
-        mock_dependency = mock.Mock()
+    def test_section_printable_status(self, mocker):
+        mock_dependency = mocker.Mock()
         mock_dependency.printable_status = "I'm just a mock"
         section = DependencySection(name="fake section",
                                     description='needed for stuff',
                                     deps=[mock_dependency])
 
-        expected = "-- fake section (needed for stuff) --\n I'm just a mock"
-        self.assertEqual(expected, section.printable_status)
+        assert section.printable_status == "-- fake section (needed for stuff) --\n I'm just a mock"

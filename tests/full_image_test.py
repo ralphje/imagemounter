@@ -1,157 +1,64 @@
 import os
-import unittest
-from imagemounter import ImageParser, _util
 
-try:
-    _util.check_output_(['losetup', '-f']).strip()
-except Exception:
-    loop_supported = False
-else:
-    loop_supported = True
+import pytest
+
+from imagemounter import ImageParser, dependencies
 
 
-with open("/proc/filesystems", "r") as f:
-    supported_filesystems = [l.split()[-1] for l in f]
+def supportfs(fs):
+    return dependencies.FileSystemTypeDependency(fs).is_available
 
 
-class FilesystemDirectMountTestBase(object):
-    ignored_volumes = []
+@pytest.mark.parametrize("type,filename", [
+    pytest.param('cramfs', 'images/test.cramfs', marks=pytest.mark.skipif(not supportfs("cramfs"), reason="cramfs not supported")),
+    pytest.param('ext', 'images/test.ext3', marks=pytest.mark.skipif(not supportfs("ext3"), reason="ext3 not supported")),
+    pytest.param('fat', 'images/test.fat12', marks=pytest.mark.skipif(not supportfs("vfat"), reason="vfat not supported")),
+    pytest.param('iso', 'images/test.iso', marks=pytest.mark.skipif(not supportfs("iso9660"), reason="iso not supported")),
+    pytest.param('minix', 'images/test.minix', marks=pytest.mark.skipif(not supportfs("minix"), reason="minix not supported")),
+    pytest.param('ntfs', 'images/test.ntfs', marks=pytest.mark.skipif(not supportfs("ntfs"), reason="ntfs not supported")),
+    pytest.param('squashfs', 'images/test.sqsh', marks=[pytest.mark.xfail(reason="squashfs support is currently broken"),
+                                                        pytest.mark.skipif(not supportfs("squashfs"), reason="squashfs not supported")]),
+    pytest.param('iso', 'images/test.zip', marks=pytest.mark.skipif(not supportfs("iso9660"), reason="iso not supported")),
+])
+def test_direct_mount(type, filename):
+    volumes = []
+    filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), filename)
+    parser = ImageParser([filename], None, False)
+    for v in parser.init():
+        if v.flag == "alloc":
+            assert v.mountpoint is not None
+        volumes.append(v)
 
-    @unittest.skipUnless(loop_supported, "loopback devices not supported")
-    def test_mount(self):
-        volumes = []
-        self.filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), self.filename)
-        parser = ImageParser([self.filename], None, False)
-        for v in parser.init():
-            if v.flag == "alloc" and v.index not in self.ignored_volumes:
-                self.assertIsNotNone(v.mountpoint)
-            volumes.append(v)
+    parser.force_clean()
 
-        parser.force_clean()
+    assert len(volumes) == 1
+    assert volumes[0].filesystem.type == type
+    
 
-        self.validate_count(volumes)
-        self.validate_types(volumes)
+def test_filesystem_mount():
+    filename = 'images/test.mbr'
+    volumes = []
+    filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), filename)
+    parser = ImageParser([filename], None, False)
+    for v in parser.init():
+        if v.flag == "alloc" and v.index != "4":
+            assert v.mountpoint is not None
+        volumes.append(v)
 
+    parser.force_clean()
 
-@unittest.skipUnless("cramfs" in supported_filesystems, "cramfs unsupported")
-class CramFSDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
-    def setUp(self):
-        self.filename = 'images/test.cramfs'
+    assert len(volumes) == 13
 
-    def validate_count(self, volumes):
-        self.assertEqual(len(volumes), 1)
-
-    def validate_types(self, volumes):
-        self.assertEqual(volumes[0].filesystem.type, "cramfs")
-
-
-class ExtDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
-    def setUp(self):
-        self.filename = 'images/test.ext3'
-
-    def validate_count(self, volumes):
-        self.assertEqual(len(volumes), 1)
-
-    def validate_types(self, volumes):
-        self.assertEqual(volumes[0].filesystem.type, "ext")
-
-
-class Fat12DirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
-    def setUp(self):
-        self.filename = 'images/test.fat12'
-
-    def validate_count(self, volumes):
-        self.assertEqual(len(volumes), 1)
-
-    def validate_types(self, volumes):
-        self.assertEqual(volumes[0].filesystem.type, "fat")
-
-
-class IsoDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
-    def setUp(self):
-        self.filename = 'images/test.iso'
-
-    def validate_count(self, volumes):
-        self.assertEqual(len(volumes), 1)
-
-    def validate_types(self, volumes):
-        self.assertEqual(volumes[0].filesystem.type, "iso")
-
-
-class MbrDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
-    ignored_volumes = ["4"]
-
-    def setUp(self):
-        self.filename = 'images/test.mbr'
-
-    def validate_count(self, volumes):
-        self.assertEqual(len(volumes), 13)
-
-    def validate_types(self, volumes):
-        self.assertEqual(volumes[0].flag, "meta")
-        self.assertEqual(volumes[1].flag, "unalloc")
-        self.assertEqual(volumes[2].filesystem.type, "fat")
-        self.assertEqual(volumes[3].filesystem.type, "ext")
-        self.assertEqual(volumes[4].filesystem.type, "unknown")
-        self.assertEqual(volumes[5].flag, "meta")
-        self.assertEqual(volumes[6].flag, "meta")
-        self.assertEqual(volumes[7].flag, "unalloc")
-        self.assertEqual(volumes[8].filesystem.type, "ext")
-        self.assertEqual(volumes[9].flag, "meta")
-        self.assertEqual(volumes[10].flag, "meta")
-        self.assertEqual(volumes[11].flag, "unalloc")
-        self.assertEqual(volumes[12].filesystem.type, "fat")
-
-
-@unittest.skipUnless("minix" in supported_filesystems, "minix unsupported")
-class MinixDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
-    def setUp(self):
-        self.filename = 'images/test.minix'
-
-    def validate_count(self, volumes):
-        self.assertEqual(len(volumes), 1)
-
-    def validate_types(self, volumes):
-        self.assertEqual(volumes[0].filesystem.type, "minix")
-
-
-class NtfsDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
-    def setUp(self):
-        self.filename = 'images/test.ntfs'
-
-    def validate_count(self, volumes):
-        self.assertEqual(len(volumes), 1)
-
-    def validate_types(self, volumes):
-        self.assertEqual(volumes[0].filesystem.type, "ntfs")
-
-
-@unittest.skipUnless("squashfs" in supported_filesystems, "squashfs unsupported")
-class SquashDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
-    def setUp(self):
-        self.filename = 'images/test.sqsh'
-
-    @unittest.skip("temporary disable test")
-    def test_mount(self):
-        super().test_mount()
-
-    def validate_count(self, volumes):
-        self.assertEqual(len(volumes), 1)
-
-    def validate_types(self, volumes):
-        self.assertEqual(volumes[0].filesystem.type, "squashfs")
-
-
-class ZipDirectMountTest(FilesystemDirectMountTestBase, unittest.TestCase):
-    def setUp(self):
-        self.filename = 'images/test.zip'
-
-    @unittest.skipIf(os.geteuid(), "requires root")
-    def test_mount(self):
-        super(ZipDirectMountTest, self).test_mount()
-
-    def validate_count(self, volumes):
-        self.assertEqual(len(volumes), 1)
-
-    def validate_types(self, volumes):
-        self.assertEqual(volumes[0].filesystem.type, "iso")
+    assert volumes[0].flag == "meta"
+    assert volumes[1].flag == "unalloc"
+    assert volumes[2].filesystem.type == "fat"
+    assert volumes[3].filesystem.type == "ext"
+    assert volumes[4].filesystem.type == "unknown"
+    assert volumes[5].flag == "meta"
+    assert volumes[6].flag == "meta"
+    assert volumes[7].flag == "unalloc"
+    assert volumes[8].filesystem.type == "ext"
+    assert volumes[9].flag == "meta"
+    assert volumes[10].flag == "meta"
+    assert volumes[11].flag == "unalloc"
+    assert volumes[12].filesystem.type == "fat"

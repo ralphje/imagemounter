@@ -1,4 +1,6 @@
 """Dependencies (optional and required) for the imagemounter package."""
+import subprocess
+from builtins import NotImplementedError
 
 from imagemounter import _util
 from imagemounter.exceptions import PrerequisiteFailedError, CommandNotFoundError, ModuleNotFoundError
@@ -17,39 +19,24 @@ def require(*requirements, none_on_failure=False):
         def wrapper(*args, **kwargs):
             for req in requirements:
                 if none_on_failure:
-                    if not getattr(req, 'is_available'):
+                    if not req.is_available:
                         return None
                 else:
-                    getattr(req, 'require')()
+                    req.require()
             return f(*args, **kwargs)
         return wrapper
     return inner
 
 
-class Dependency(object):
+class Dependency:
     """An abstract class representing external tools imagemounter depends on.
 
-    Subclasses of this class should define the following two properties:
+    Subclasses of this class should define :attr:`is_available` and :attr:`status_message`.
 
-    - ``is_available``: returns True or False depending on whether the dependency is available.
-        "Available" generally means that the system has this dependency installed and configured correctly to be used.
-
-    - ``status_message``: returns a string indicating the status of the dependency.
-       This message may specify it is installed or not, how and why to
-       install it, etc.. The string may contain format specifiers; the
-       ``printable_status`` property interpolates the current dependency object
-       as ``{0}``.
-
-    :param name: name for the dependency; used in status messages and as
-        the ``__str__()`` representation.
-    :type name: str
-    :param package: the package that can be installed to provide this
-        dependency.
-    :type package: str
-    :param why: description of why this dependency is useful; used in
-        status messages to help user decide if they need to install the
-        dependency package.
-    :type why: str
+    :param str name: name for the dependency; used in status messages and as the ``__str__()`` representation.
+    :param str package: the package that can be installed to provide this dependency.
+    :param str why: description of why this dependency is useful; used in status messages to help user decide if they
+        need to install the dependency package.
     """
 
     def __init__(self, name, package="", why=""):
@@ -59,6 +46,38 @@ class Dependency(object):
 
     def __str__(self):
         return self.name
+
+    @property
+    def is_available(self):
+        """Returns whether the dependency is available on the system.
+
+        "Available" generally means that the system has this dependency installed and configured correctly to be used.
+
+        :rtype: bool
+        """
+        raise NotImplementedError()
+
+    @property
+    def status_message(self):
+        """Detailed message about whether the dependency is installed.
+
+        This message may specify it is installed or not, how and why to install it, etc.
+
+        The string may contain format specifiers; the ``printable_status`` property interpolates the current
+        dependency object as ``{0}``.
+
+        :rtype: str
+        """
+        if self.is_available:
+            return "INSTALLED {0!s}"
+        elif self.why and self.package:
+            return "MISSING   {0!s:<20}needed for {0.why}, part of the {0.package} package"
+        elif self.why:
+            return "MISSING   {0!s:<20}needed for {0.why}"
+        elif self.package:
+            return "MISSING   {0!s:<20}part of the {0.package} package"
+        else:
+            return "MISSING   {0!s:<20}"
 
     def require(self, *a, **kw):
         """Raises an error when the specified requirement is not available.
@@ -85,28 +104,38 @@ class CommandDependency(Dependency):
 
     @property
     def is_available(self):
-        """Whether the command is available on the system.
-
-        :rtype: bool
-        """
         return _util.command_exists(self.name)
 
-    @property
-    def status_message(self):
-        """Detailed message about whether the dependency is installed.
 
-        :rtype: str
-        """
-        if self.is_available:
-            return "INSTALLED {0!s}"
-        elif self.why and self.package:
-            return "MISSING   {0!s:<20}needed for {0.why}, part of the {0.package} package"
-        elif self.why:
-            return "MISSING   {0!s:<20}needed for {0.why}"
-        elif self.package:
-            return "MISSING   {0!s:<20}part of the {0.package} package"
+class FileSystemTypeDependency(Dependency):
+    """A dependency on the fact that an entry is available in /proc/filesystems or the fact that a kernel module exists
+    that can be dynamically loaded to support this. In other words, ``mount -t xxx`` should work.
+    """
+
+    def _is_loaded(self):
+        """check the filesystem is loaded directly"""
+        with open("/proc/filesystems", "r") as f:
+            for l in f:
+                if l.split()[-1] == self.name:
+                    return True
+        return False
+
+    def _is_module(self):
+        """check the kernel module exists by executing modinfo and checking for an exception"""
+        try:
+            _util.check_call_(['modinfo', "fs-" + self.name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            return False
         else:
-            return "MISSING   {0!s:<20}"
+            return True
+
+    def _is_helper(self):
+        """check a helper exists for this mount type"""
+        return _util.command_exists('mount.' + self.name)
+
+    @property
+    def is_available(self):
+        return any((x() for x in (self._is_loaded, self._is_module, self._is_helper)))
 
 
 class PythonModuleDependency(Dependency):
@@ -116,18 +145,10 @@ class PythonModuleDependency(Dependency):
 
     @property
     def is_available(self):
-        """Whether the Python module is available on the system.
-
-        :rtype: bool
-        """
         return _util.module_exists(self.name)
 
     @property
     def status_message(self):
-        """Detailed message about whether the dependency is installed.
-
-        :rtype: str
-        """
         if self.is_available:
             return "INSTALLED {0!s}"
         elif self.why:
@@ -187,10 +208,6 @@ class MagicDependency(PythonModuleDependency):
 
     @property
     def status_message(self):
-        """Detailed message about whether the dependency is installed.
-
-        :rtype: str
-        """
         if self.is_python_package:
             return "INSTALLED {0!s:<20}(Python package)"
         elif self.is_system_package:
@@ -201,15 +218,12 @@ class MagicDependency(PythonModuleDependency):
             return "MISSING   {0!s:<20}install using pip"
 
 
-class DependencySection(object):
+class DependencySection:
     """Group of dependencies that are displayed together in ``imount --check``.
 
-    :param name: name for the group
-    :type name: str
-    :param description: explanation of which dependencies in the group are needed.
-    :type description: str
-    :param deps: dependencies that are part of this group.
-    :type deps: list of ``Dependency``
+    :param str name: name for the group
+    :param str description: explanation of which dependencies in the group are needed.
+    :param list[Dependency] deps: dependencies that are part of this group.
     """
 
     def __init__(self, name, description, deps):
@@ -244,12 +258,12 @@ blkid = CommandDependency("blkid")
 magic = MagicDependency('python-magic')
 disktype = CommandDependency("disktype", "disktype")
 
-mount_xfs = CommandDependency("mount.xfs", "xfsprogs", "XFS volumes")
-mount_ntfs = CommandDependency("mount.ntfs", "ntfs-3g", "NTFS volumes")
+mount_xfs = FileSystemTypeDependency("xfs", "xfsprogs", "XFS volumes")
+mount_ntfs = FileSystemTypeDependency("ntfs", "ntfs-3g", "NTFS volumes")
 lvm = CommandDependency("lvm", "lvm2", "LVM volumes")
 vmfs_fuse = CommandDependency("vmfs-fuse", "vmfs-tools", "VMFS volumes")
-mount_jffs2 = CommandDependency("mount.jffs2", "mtd-tools", "JFFS2 volumes")
-mount_squashfs = CommandDependency("mount.squashfs", "squashfs-tools", "SquashFS volumes")
+mount_jffs2 = FileSystemTypeDependency("jffs2", "mtd-tools", "JFFS2 volumes")
+mount_squashfs = FileSystemTypeDependency("squashfs", "squashfs-tools", "SquashFS volumes")
 mdadm = CommandDependency("mdadm", "mdadm", "RAID volumes")
 cryptsetup = CommandDependency("cryptsetup", "cryptsetup", "LUKS containers")
 bdemount = CommandDependency("bdemount", "libbde-utils", "Bitlocker Drive Encryption volumes")
