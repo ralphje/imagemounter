@@ -1,16 +1,15 @@
-import unittest
-import unittest.mock as mock
+import pytest
 
 from imagemounter.exceptions import NoRootFoundError
 from imagemounter.parser import ImageParser
 from imagemounter.volume import Volume
 
 
-class ReconstructionTest(unittest.TestCase):
+class TestReconstruction:
     def test_no_volumes(self):
         parser = ImageParser()
         parser.add_disk("...")
-        with self.assertRaises(NoRootFoundError):
+        with pytest.raises(NoRootFoundError):
             parser.reconstruct()
 
     def test_no_root(self):
@@ -23,10 +22,10 @@ class ReconstructionTest(unittest.TestCase):
         v2.filesystem.mountpoint = 'xxx'
         v2.info['lastmountpoint'] = '/etc'
         disk.volumes.volumes = [v1, v2]
-        with self.assertRaises(NoRootFoundError):
+        with pytest.raises(NoRootFoundError):
             parser.reconstruct()
 
-    def test_simple(self):
+    def test_simple(self, mocker):
         parser = ImageParser()
         disk = parser.add_disk("...")
         v1 = Volume(disk)
@@ -36,11 +35,12 @@ class ReconstructionTest(unittest.TestCase):
         v2.filesystem.mountpoint = 'xxx'
         v2.info['lastmountpoint'] = '/etc'
         disk.volumes.volumes = [v1, v2]
-        with mock.patch.object(v2, "bindmount") as v2_bm:
-            parser.reconstruct()
-            v2_bm.assert_called_once_with("xxx/etc")
 
-    def test_multiple_roots(self):
+        v2_bm = mocker.patch.object(v2, "bindmount")
+        parser.reconstruct()
+        v2_bm.assert_called_once_with("xxx/etc")
+
+    def test_multiple_roots(self, mocker):
         parser = ImageParser()
         disk = parser.add_disk("...")
         v1 = Volume(disk)
@@ -56,9 +56,11 @@ class ReconstructionTest(unittest.TestCase):
         v3.filesystem.mountpoint = 'xxx'
         v3.info['lastmountpoint'] = '/etc'
         disk.volumes.volumes = [v1, v2, v3]
-        with mock.patch.object(v1, "bindmount") as v1_bm, mock.patch.object(v2, "bindmount") as v2_bm, \
-                mock.patch.object(v3, "bindmount") as v3_bm:
-            parser.reconstruct()
-            v1_bm.assert_not_called()
-            v2_bm.assert_not_called()
-            v3_bm.assert_called_with('xxx/etc')
+
+        v1_bm = mocker.patch.object(v1, "bindmount")
+        v2_bm = mocker.patch.object(v2, "bindmount")
+        v3_bm = mocker.patch.object(v3, "bindmount")
+        parser.reconstruct()
+        v1_bm.assert_not_called()
+        v2_bm.assert_not_called()
+        v3_bm.assert_called_with('xxx/etc')
