@@ -89,7 +89,7 @@ class Volume:
     @property
     def fstype(self):
         warnings.warn("fstype is deprecated in favor of filesystem", DeprecationWarning)
-        return self.filesystem
+        return str(self.filesystem)
 
     @property
     def mountpoint(self):

@@ -19,7 +19,7 @@ New features:
 * Changed the way file system types work. Large if-statements in the code have been replaced by class-based
   filesystem types. **Backwards incompatible**
   * The ``fstype`` attribute has been replaced with the ``filesystem`` attribute, but a backwards-compatible
-    name is still available. However, it is no longer a string, but a class instead.
+    attribute is still available.
   * The ``_paths`` attribute is no longer available, but replaced by attributes on the :cls:`FileSystem` classes
   * The class-based filesystems implement a form of heuristic to determine the filesystem type.
 
