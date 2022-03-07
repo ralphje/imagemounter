@@ -9,6 +9,10 @@ def supportfs(fs):
     return dependencies.FileSystemTypeDependency(fs).is_available
 
 
+def fullpath(fn):
+    return os.path.join(os.path.dirname(os.path.realpath(__file__)), fn)
+
+
 @pytest.mark.parametrize("type,filename", [
     pytest.param('cramfs', 'images/test.cramfs', marks=pytest.mark.skipif(not supportfs("cramfs"), reason="cramfs not supported")),
     pytest.param('ext', 'images/test.ext3', marks=pytest.mark.skipif(not supportfs("ext3"), reason="ext3 not supported")),
@@ -22,8 +26,7 @@ def supportfs(fs):
 ])
 def test_direct_mount(type, filename):
     volumes = []
-    filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), filename)
-    parser = ImageParser([filename], None, False)
+    parser = ImageParser([fullpath(filename)])
     for v in parser.init():
         if v.flag == "alloc":
             assert v.mountpoint is not None
@@ -33,13 +36,26 @@ def test_direct_mount(type, filename):
 
     assert len(volumes) == 1
     assert volumes[0].filesystem.type == type
-    
+
+
+@pytest.mark.skipif(not supportfs("ntfs"), reason="ntfs not supported")
+@pytest.mark.skipif(not dependencies.bdemount.is_available, reason="bdemount not available")
+def test_bde_mount():
+    parser = ImageParser([fullpath('images/bdetest.E01')], keys={"0": "p:test1234"})
+    for i, v in enumerate(parser.init()):
+        assert v.mountpoint is not None
+        assert v.flag == "alloc"
+        assert v.filesystem.type == "ntfs"
+        assert v.index == "0.0"
+        assert i == 0  # ensures we only have a single item in this iteration
+
+    parser.force_clean()
+
 
 def test_filesystem_mount():
     filename = 'images/test.mbr'
     volumes = []
-    filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), filename)
-    parser = ImageParser([filename], None, False)
+    parser = ImageParser([fullpath(filename)])
     for v in parser.init():
         if v.flag == "alloc" and v.index != "4":
             assert v.mountpoint is not None
