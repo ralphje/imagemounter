@@ -417,7 +417,7 @@ def main():
                 else:
                     failed = []
                     for disk in p.disks:
-                        failed.extend([x for x in disk.volumes if 'bindmounts' not in x._paths and x.mountpoint and x != root])
+                        failed.extend([x for x in disk.volumes if not x.bindmounts and x.mountpoint and x != root])
                     if failed:
                         print("[+] Parts of the filesystem are reconstructed in {0}.".format(col(root.mountpoint,
                                                                                                  "green",

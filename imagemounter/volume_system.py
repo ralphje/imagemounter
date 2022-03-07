@@ -346,7 +346,7 @@ class PartedVolumeDetector(VolumeDetector):
 
         num = 0
         for line in output.splitlines():
-            if line.startswith("Warning") or not line or ':' not in line or line.startswith(self.parent.get_raw_path()):
+            if line.startswith("Warning") or not line or ':' not in line or line.startswith(volume_system.parent.get_raw_path()):
                 continue
             line = line[:-1]  # remove last ;
             try:
@@ -421,7 +421,7 @@ class MmlsVolumeDetector(VolumeDetector):
                 try:
                     logger.warning("Error in retrieving volume info: mmls couldn't decide between GPT and DOS, "
                                    "choosing GPT for you. Use --vstype=dos to force DOS.", exc_info=True)
-                    cmd = ['mmls', '-t', 'gpt', self.parent.get_raw_path()]
+                    cmd = ['mmls', '-t', 'gpt', volume_system.parent.get_raw_path()]
                     output = _util.check_output_(cmd, stderr=subprocess.STDOUT)
                     volume_system.volume_source = 'multi'
                 except Exception as e:
@@ -482,11 +482,11 @@ class VssVolumeDetector(VolumeDetector):
     def detect(self, volume_system, vstype='detect'):
         """Detect volume shadow copy volumes in the specified path."""
 
-        path = volume_system.parent.get_raw_path()
+        mountpoint = volume_system.parent.filesystem.mountpoint
 
         try:
             volume_info = _util.check_output_(["vshadowinfo", "-o", str(volume_system.parent.offset),
-                                               volume_system.parent.parent.get_raw_path()])
+                                               volume_system.parent.get_raw_path()])
         except Exception as e:
             logger.exception("Failed obtaining info from the volume shadow copies.")
             raise SubsystemError(e)
@@ -499,7 +499,7 @@ class VssVolumeDetector(VolumeDetector):
                 current_store = volume_system._make_subvolume(
                     index=self._format_index(volume_system, idx), flag='alloc', offset=0
                 )
-                current_store._paths['vss_store'] = os.path.join(path, 'vss' + idx)
+                current_store._real_path = os.path.join(mountpoint, 'vss' + idx)
                 current_store.info['fsdescription'] = 'VSS Store'
             elif line.startswith("Volume size"):
                 match = re.match(r"Volume size.*?(\d+) bytes.*", line)
@@ -536,7 +536,7 @@ class LvmVolumeDetector(VolumeDetector):
                 cur_v.size = int(float(size.replace(',', '.')) * {'KiB': 1024, 'MiB': 1024 ** 2,
                                                                   'GiB': 1024 ** 3, 'TiB': 1024 ** 4}.get(unit, 1))
             if "LV Path" in line:
-                cur_v._paths['lv'] = line.replace("LV Path", "").strip()
+                cur_v._real_path = line.replace("LV Path", "").strip()
                 cur_v.offset = 0
 
         logger.info("{0} volumes found".format(len(volume_system)))

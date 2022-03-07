@@ -151,12 +151,12 @@ class FileSystem:
 
     @classmethod
     def detect(cls, source, description):
-        """Detects the type of a volume based on the provided information. It returns the plausibility for all
+        """Detects the type of volume based on the provided information. It returns the plausibility for all
         file system types as a dict. Although it is only responsible for returning its own plausibility, it is possible
         that one type of filesystem is more likely than another, e.g. when NTFS detects it is likely to be NTFS, it
         can also update the plausibility of exFAT to indicate it is less likely.
 
-        All scores a cumulative. When multiple sources are used, it is also cumulative. For instance, if run 1 is 25
+        All scores are cumulative. When multiple sources are used, it is also cumulative. For instance, if run 1 is 25
         certain, and run 2 is 25 certain as well, it will become 50 certain.
 
         :meth:`Volume.detect_fs_type` will return immediately if the score is higher than 50 and there is only 1
@@ -545,6 +545,7 @@ class LuksFileSystem(LoopbackFileSystemMixin, FileSystem):
 
         container = self.volume.volumes._make_single_subvolume(flag='alloc', offset=0, size=size)
         container.info['fsdescription'] = 'LUKS Volume'
+        container._real_path = '/dev/mapper/' + self.luks_name
 
         return container
 
@@ -557,6 +558,7 @@ class LuksFileSystem(LoopbackFileSystemMixin, FileSystem):
 
 class BdeFileSystem(MountpointFileSystemMixin, FileSystem):
     type = 'bde'
+    aliases = ['bitlocker']
 
     @classmethod
     def detect(cls, source, description):
@@ -605,6 +607,7 @@ class BdeFileSystem(MountpointFileSystemMixin, FileSystem):
 
         container = self.volume.volumes._make_single_subvolume(flag='alloc', offset=0, size=self.volume.size)
         container.info['fsdescription'] = 'BDE Volume'
+        container._real_path = self.mountpoint + "/bde1"
 
         return container
 
@@ -730,6 +733,7 @@ class RaidFileSystem(LoopbackFileSystemMixin, FileSystem):
             container = self.volume.volumes._make_single_subvolume(flag='alloc', offset=0, size=self.volume.size)
             container.info['fsdescription'] = 'RAID Volume'
             container.info['raid_status'] = raid_status
+            container._real_path = self.mdpath
             return container
 
     def unmount(self, allow_lazy=False):
@@ -834,7 +838,6 @@ class VolumeShadowCopyFileSystem(MountpointFileSystemMixin, FileSystem):
             self._clear_mountpoint()
             raise SubsystemError(e)
         else:
-            self.volume._paths['vss_store'] = self.mountpoint
             return list(self.volume.volumes.detect_volumes(vstype='vss', method='vss'))
 
     def unmount(self, allow_lazy=False):

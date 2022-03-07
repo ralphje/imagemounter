@@ -61,11 +61,8 @@ class Disk:
 
         self._disktype = defaultdict(dict)
 
-    def __unicode__(self):
-        return self._name
-
     def __str__(self):
-        return self.__unicode__()
+        return self._name
 
     def __getitem__(self, item):
         return self.volumes[item]

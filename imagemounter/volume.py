@@ -9,7 +9,7 @@ import warnings
 
 from imagemounter import _util, filesystems, FILE_SYSTEM_TYPES, VOLUME_SYSTEM_TYPES, dependencies
 from imagemounter.exceptions import SubsystemError, NotMountedError, ImageMounterError
-from imagemounter.filesystems import FileSystem
+from imagemounter.filesystems import FileSystem, CarveFileSystem
 from imagemounter.volume_system import VolumeSystem
 
 logger = logging.getLogger(__name__)
@@ -67,16 +67,14 @@ class Volume:
             self.key = ""
 
         self.info = {}
-        self._paths = {}
+        self.bindmounts = []
+        self._real_path = None
 
         self.was_mounted = False
         self.is_mounted = False
 
-    def __unicode__(self):
-        return '{0}:{1}'.format(self.index, self.info.get('fsdescription') or '-')
-
     def __str__(self):
-        return str(self.__unicode__())
+        return '{0}:{1}'.format(self.index, self.info.get('fsdescription') or '-')
 
     def __getitem__(self, item):
         return self.volumes[item]
@@ -95,12 +93,10 @@ class Volume:
 
     @property
     def mountpoint(self):
-        warnings.warn("you should now access the device is mounted on through volume.filesystem", DeprecationWarning)
         return getattr(self.filesystem, 'mountpoint', None)
 
     @property
     def loopback(self):
-        warnings.warn("you should now access the device is mounted on through volume.filesystem", DeprecationWarning)
         return getattr(self.filesystem, 'loopback', None)
 
     def _get_fstype_from_parser(self, fstype=None):
@@ -118,6 +114,7 @@ class Volume:
         if not fstype:
             self.filesystem = None
         elif isinstance(fstype, FileSystem):
+            fstype.volume = self
             self.filesystem = fstype
         elif fstype in VOLUME_SYSTEM_TYPES:
             self.volumes.vstype = fstype
@@ -234,49 +231,21 @@ class Volume:
             logger.warning("The python-magic module is not available, but another module named magic was found.")
         return None  # returning None is better here, since we do not care about the exception in determine_fs_type
 
-    def get_raw_path(self, include_self=False):
-        """Retrieves the base mount path of the volume. Typically equals to :func:`Disk.get_fs_path` but may also be the
-        path to a logical volume. This is used to determine the source path for a mount call.
+    def get_raw_path(self):
+        """Retrieves the base mount path of the volume. It best understood by seeing it as: where is the raw (dd) file
+        that this volume is reading from, i.e. what does the offset of this volume equal to?
 
-        The value returned is normally based on the parent's paths, e.g. if this volume is mounted to a more specific
-        path, only its children return the more specific path, this volume itself will keep returning the same path.
-        This makes for consistent use of the offset attribute. If you do not need this behaviour, you can override this
-        with the include_self argument.
-
-        This behavior, however, is not retained for paths that directly affect the volume itself, not the child volumes.
-        This includes VSS stores and LV volumes.
+        In the most easy way, it is just the path of the disk. However, if we need to mount a volume again, its
+        subvolumes will be mounted from somewhere else. This is controlled by :attr:`_real_path`, which is set by
+        the mounting method (either by :cls:`VolumeDetector` or by :cls:`FileSystem`).
         """
 
-        v = self
-        if not include_self:
-            # lv / vss_store are exceptions, as it covers the volume itself, not the child volume
-            if v._paths.get('lv'):
-                return v._paths['lv']
-            elif v._paths.get('vss_store'):
-                return v._paths['vss_store']
-            elif v.parent and v.parent != self.disk:
-                v = v.parent
-            else:
-                return self.disk.get_fs_path()
-
-        while True:
-            if v._paths.get('lv'):
-                return v._paths['lv']
-            elif v._paths.get('bde'):
-                return v._paths['bde'] + '/bde1'
-            elif v._paths.get('luks'):
-                return '/dev/mapper/' + v._paths['luks']
-            elif v._paths.get('md'):
-                return v._paths['md']
-            elif v._paths.get('vss_store'):
-                return v._paths['vss_store']
-
-            # Only if the volume has a parent that is not a disk, we try to check the parent for a location.
-            if v.parent and v.parent != self.disk:
-                v = v.parent
-            else:
-                break
-        return self.disk.get_fs_path()
+        if self._real_path is not None:
+            return self._real_path
+        elif self.parent and self.parent != self.disk:
+            return self.parent.get_raw_path()
+        else:
+            return self.disk.get_fs_path()
 
     def get_safe_label(self):
         """Returns a label that is safe to add to a path in the mountpoint for this volume."""
@@ -305,7 +274,7 @@ class Volume:
         :raises NoLoopbackAvailableError: if there is no loopback available (only when volume has no slot number)
         """
 
-        volume = self.volumes._make_subvolume(flag='alloc', offset=0, fstype='carve')
+        volume = self.volumes._make_subvolume(flag='alloc', offset=0, fstype=CarveFileSystem(None, freespace=freespace))
         volume.mount()
         return volume.filesystem.mountpoint
 
@@ -504,10 +473,7 @@ class Volume:
             raise NotMountedError(self)
         try:
             _util.check_call_(['mount', '--bind', self.mountpoint, mountpoint], stdout=subprocess.PIPE)
-            if 'bindmounts' in self._paths:
-                self._paths['bindmounts'].append(mountpoint)
-            else:
-                self._paths['bindmounts'] = [mountpoint]
+            self.bindmounts.append(mountpoint)
             return True
         except Exception as e:
             logger.exception("Error bind mounting {0}.".format(self))
@@ -648,10 +614,9 @@ class Volume:
         if self.is_mounted:
             logger.info("Unmounting volume %s", self)
 
-        if self._paths.get('bindmounts'):
-            for mp in self._paths['bindmounts']:
-                _util.clean_unmount(['umount'], mp, rmdir=False)
-            del self._paths['bindmounts']
+        for mp in self.bindmounts:
+            _util.clean_unmount(['umount'], mp, rmdir=False)
+        self.bindmounts = []
 
         self.filesystem.unmount(allow_lazy=allow_lazy)
 

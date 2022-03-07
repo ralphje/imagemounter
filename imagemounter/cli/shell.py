@@ -306,8 +306,6 @@ class ImageMounterShell(ArgumentParsedShell):
                         print(" - mountpoint      {value}".format(value=volume.mountpoint))
                     if volume.loopback:
                         print(" - loopback        {value}".format(value=volume.loopback))
-                    for k, v in volume._paths.items():
-                        print(" - {name:<15} {value}".format(name=k, value=v))
 
                 if volume.info:
                     print("\nAdditional information:")
