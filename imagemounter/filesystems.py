@@ -130,13 +130,12 @@ class LoopbackFileSystemMixin:
                 _util.check_call_(['losetup', '-d', self.loopback], wrap_error=True)
             except Exception:
                 pass  # TODO
+            else:
+                self.loopback = None
 
     def unmount(self, allow_lazy=False):
         super().unmount(allow_lazy=allow_lazy)
-
-        if self.loopback is not None:
-            _util.check_call_(['losetup', '-d', self.loopback], wrap_error=True)
-            self.loopback = None
+        self._free_loopback()
 
 
 class FileSystem:
@@ -619,12 +618,11 @@ class BdeFileSystem(MountpointFileSystemMixin, FileSystem):
 
 class LvmFileSystem(LoopbackFileSystemMixin, FileSystem):
     type = 'lvm'
-    aliases = ['0x8e']
+    aliases = ['0x8e', 'lvm2']
     guids = ['E6D6D379-F507-44C2-A23C-238F2A3DF928', '79D3D6E6-07F5-C244-A23C-238F2A3DF928']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         self.vgname = None
 
     @dependencies.require(dependencies.lvm)
@@ -650,11 +648,11 @@ class LvmFileSystem(LoopbackFileSystemMixin, FileSystem):
                         self.vgname = vg
 
             if not self.vgname:
-                logger.warning("Volume is not a volume group. (Searching for %s)", self.volume.loopback)
+                logger.warning("Volume is not a volume group. (Searching for %s)", self.loopback)
                 raise IncorrectFilesystemError()
 
             # Enable lvm volumes
-            _util.check_call_(["lvm", "vgchange", "-a", "y", self.volume.info['volume_group']], stdout=subprocess.PIPE)
+            _util.check_call_(["lvm", "vgchange", "-a", "y", self.vgname], stdout=subprocess.PIPE)
         except Exception:
             self._free_loopback()
             self.vgname = None
@@ -670,6 +668,8 @@ class LvmFileSystem(LoopbackFileSystemMixin, FileSystem):
         if self.vgname:
             _util.check_call_(["lvm", 'vgchange', '-a', 'n', self.vgname], wrap_error=True, stdout=subprocess.PIPE)
             self.vgname = None
+
+        super().unmount(allow_lazy=allow_lazy)
 
 
 class VhdFileSystemType(FileSystem):

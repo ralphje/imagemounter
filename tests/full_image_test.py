@@ -52,6 +52,23 @@ def test_bde_mount():
     parser.force_clean()
 
 
+@pytest.mark.skipif(not dependencies.lvm.is_available, reason="lvm not available")
+def test_lvm_mount():
+    parser = ImageParser([fullpath('images/lvm.raw')])
+
+    volumes = []
+    for v in parser.init():
+        volumes.append(v)
+
+    assert len(volumes) == 2
+    assert volumes[0].mountpoint is not None
+    assert volumes[0].flag == "alloc"
+    assert volumes[0].filesystem.type == "ext"
+    assert volumes[0].index == "0.0"
+
+    parser.force_clean()
+
+
 def test_filesystem_mount():
     filename = 'images/test.mbr'
     volumes = []
