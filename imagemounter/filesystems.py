@@ -110,10 +110,14 @@ class LoopbackFileSystemMixin:
 
         # noinspection PyBroadException
         try:
-            cmd = ['losetup', '-o', str(self.volume.offset), '--sizelimit', str(self.volume.size),
-                   self.loopback, self.volume.get_raw_path()]
+            cmd = ['losetup']
             if not self.volume.disk.read_write:
-                cmd.insert(1, '-r')
+                cmd += ['-r']
+            cmd += ['-o', str(self.volume.offset)]
+            if self.volume.size:
+                cmd += ['--sizelimit', str(self.volume.size)]
+            cmd += [self.loopback, self.volume.get_raw_path()]
+
             _util.check_call_(cmd, stdout=subprocess.PIPE)
         except Exception:
             logger.exception("Loopback device could not be mounted.")
