@@ -33,6 +33,7 @@ New features:
   * carve and volume shadow copies are now also subvolumes.
 
 * Add support for VBox disk images (vdi) (contributed by ruzzle)
+* Add support for VHD volumes (contributed by Jarmo van Lenthe)
 
 Bugfixes:
 

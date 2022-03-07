@@ -11,7 +11,8 @@ import time
 
 from imagemounter import _util, VOLUME_SYSTEM_TYPES, dependencies
 from imagemounter.exceptions import UnsupportedFilesystemError, IncorrectFilesystemError, ArgumentError, \
-    KeyInvalidError, ImageMounterError, SubsystemError, NoLoopbackAvailableError, NoMountpointAvailableError
+    KeyInvalidError, ImageMounterError, SubsystemError, NoLoopbackAvailableError, NoMountpointAvailableError, \
+    NoNetworkBlockAvailableError
 
 logger = logging.getLogger(__name__)
 
@@ -665,6 +666,59 @@ class LvmFileSystem(LoopbackFileSystemMixin, FileSystem):
         if self.vgname:
             _util.check_call_(["lvm", 'vgchange', '-a', 'n', self.vgname], wrap_error=True, stdout=subprocess.PIPE)
             self.vgname = None
+
+
+class VhdFileSystemType(FileSystem):
+    type = 'vhd'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.nbd = None
+
+    def _find_nbd(self):
+        """Finds a free Network Block Device (nbd, from qemu-nbd) that can be used. The nbd is stored in :attr:`nbd`. If
+        *use_nbd* is True, the nbd will also be used directly.
+
+        :returns: the nbd address
+        :raises NoNetworkBlockAvailableError: if no nbd could be found
+        """
+
+        # noinspection PyBroadException
+        try:
+            _util.check_call_(['modprobe', 'nbd', 'max_part=63'])  # Load nbd driver
+            self.nbd = _util.get_free_nbd_device()  # Get free nbd device
+
+        except NoNetworkBlockAvailableError:
+            logger.warning("No free network block device found.", exc_info=True)
+            raise
+
+    @dependencies.require(dependencies.qemu_nbd)
+    def mount(self):
+        """Performs mount actions on a VHD. Scans for volumes and fills :attr:`volumes` with the logical volumes."""
+
+        self._find_nbd()
+
+        try:
+            cmd = ['qemu-nbd', '-c', self.nbd, self.volume.get_raw_path()]
+            if not self.volume.disk.read_write:
+                cmd.insert(1, '--read-only')
+            _util.check_call_(cmd, stdout=subprocess.PIPE)
+        except Exception:
+            logger.exception("Network Block Device could not be mounted.")
+            raise NoNetworkBlockAvailableError()
+
+        time.sleep(0.2)
+
+        for _ in self.volume.volumes.detect_volumes('nbd', 'nbd'):
+            pass
+
+    def unmount(self, allow_lazy=False):
+        if self.nbd:
+            _util.check_call_(['qemu-nbd', '-d', self.nbd], wrap_error=True, stdout=subprocess.PIPE)
+            self.nbd = None
+
+        super().unmount(allow_lazy=allow_lazy)
 
 
 class RaidFileSystem(LoopbackFileSystemMixin, FileSystem):
