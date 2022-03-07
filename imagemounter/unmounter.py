@@ -5,7 +5,7 @@ import tempfile
 from imagemounter import _util
 
 
-class Unmounter(object):
+class Unmounter:
     """Allows easy unmounting of left-overs of ImageParser calls."""
 
     def __init__(self, casename=None, pretty=False, mountdir=None, allow_greedy=True, *args, **kwargs):

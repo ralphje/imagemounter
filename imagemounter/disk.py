@@ -15,7 +15,7 @@ from imagemounter.volume_system import VolumeSystem
 logger = logging.getLogger(__name__)
 
 
-class Disk(object):
+class Disk:
     """Representation of a disk, image file or anything else that can be considered a disk. """
 
     # noinspection PyUnusedLocal

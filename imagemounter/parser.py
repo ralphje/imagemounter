@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 # noinspection PyShadowingNames
-class ImageParser(object):
+class ImageParser:
     """Root object of the :mod:`imagemounter` Python interface. This class should be sufficient allowing access to the
     underlying functions of this module.
 

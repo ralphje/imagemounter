@@ -15,7 +15,7 @@ from imagemounter.volume_system import VolumeSystem
 logger = logging.getLogger(__name__)
 
 
-class Volume(object):
+class Volume:
     """Information about a volume. Note that every detected volume gets their own Volume object, though it may or may
     not be mounted. This can be seen through the :attr:`mountpoint` attribute -- if it is not set, perhaps the
     :attr:`exception` attribute is set with an exception.

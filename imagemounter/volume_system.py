@@ -13,7 +13,7 @@ from imagemounter.exceptions import ArgumentError, SubsystemError, ModuleNotFoun
 logger = logging.getLogger(__name__)
 
 
-class VolumeSystem(object):
+class VolumeSystem:
     """A VolumeSystem is a collection of volumes. Every :class:`Disk` contains exactly one VolumeSystem. Each
     system contains several :class:`Volumes`, which, in turn, may contain additional volume systems.
     """
@@ -177,7 +177,7 @@ class VolumeSystem(object):
                 volume.info['label'] = data['label']
 
 
-class VolumeDetector(object):
+class VolumeDetector:
     type = None
     special = False
 
