@@ -95,6 +95,10 @@ class Volume:
     def mountpoint(self):
         return getattr(self.filesystem, 'mountpoint', None)
 
+    @mountpoint.setter
+    def mountpoint(self, new_mountpoint):
+        self.filesystem.mountpoint = new_mountpoint
+
     @property
     def loopback(self):
         return getattr(self.filesystem, 'loopback', None)
