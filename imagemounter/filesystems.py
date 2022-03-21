@@ -637,17 +637,15 @@ class LvmFileSystem(LoopbackFileSystemMixin, FileSystem):
 
         # find free loopback device
         # No need to find loopback device if using nbd device
-        if "nbd" not in self.volume.get_raw_path():
+        if "/dev/nbd" not in self.volume.get_raw_path():
             self._find_loopback()
-        else:
-            self.loopback = ""
         time.sleep(0.2)
 
         try:
             # Scan for new lvm volumes
             result = _util.check_output_(["lvm", "pvscan"])
             for line in result.splitlines():
-                if (self.loopback != "" and self.loopback in line) or self.volume.get_raw_path() in line:
+                if (self.loopback is not None and self.loopback in line) or self.volume.get_raw_path() in line:
                     for vg in re.findall(r'VG (\S+)', line):
                         self.vgname = vg
 
