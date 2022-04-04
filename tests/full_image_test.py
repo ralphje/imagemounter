@@ -40,8 +40,10 @@ def test_direct_mount(type, filename):
 
 @pytest.mark.skipif(not supportfs("ntfs"), reason="ntfs not supported")
 @pytest.mark.skipif(not dependencies.bdemount.is_available, reason="bdemount not available")
-def test_bde_mount():
-    parser = ImageParser([fullpath('images/bdetest.E01')], keys={"0": "p:test1234"})
+# identifier should be B8992A09-3AE9-47E3-8FD0-4A5B8389B0A4
+@pytest.mark.parametrize("key", ["p:test1234", "r:391798-523787-614746-034969-107921-412302-401654-479457"])
+def test_bde_mount(key):
+    parser = ImageParser([fullpath('images/bdetest.E01')], keys={"0": key})
     for i, v in enumerate(parser.init()):
         assert v.mountpoint is not None
         assert v.flag == "alloc"
