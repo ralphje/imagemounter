@@ -533,7 +533,7 @@ class LvmVolumeDetector(VolumeDetector):
                 cur_v.info['label'] = line.replace("LV Name", "").strip()
             if "LV Size" in line:
                 size, unit = line.replace("LV Size", "").strip().split(" ", 1)
-                cur_v.size = int(float(size.replace(',', '.')) * {'KiB': 1024, 'MiB': 1024 ** 2,
+                cur_v.size = int(float(re.sub(r'[^0-9.]', "", size.replace(',', '.'))) * {'KiB': 1024, 'MiB': 1024 ** 2,
                                                                   'GiB': 1024 ** 3, 'TiB': 1024 ** 4}.get(unit, 1))
             if "LV Path" in line:
                 cur_v._real_path = line.replace("LV Path", "").strip()
