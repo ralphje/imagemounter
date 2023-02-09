@@ -262,6 +262,7 @@ mount_xfs = FileSystemTypeDependency("xfs", "xfsprogs", "XFS volumes")
 mount_ntfs = FileSystemTypeDependency("ntfs", "ntfs-3g", "NTFS volumes")
 lvm = CommandDependency("lvm", "lvm2", "LVM volumes")
 vmfs_fuse = CommandDependency("vmfs-fuse", "vmfs-tools", "VMFS volumes")
+apfs_fuse = CommandDependency("apfs-fuse", why="APFS volumes")
 mount_jffs2 = FileSystemTypeDependency("jffs2", "mtd-tools", "JFFS2 volumes")
 mount_squashfs = FileSystemTypeDependency("squashfs", "squashfs-tools", "SquashFS volumes")
 mdadm = CommandDependency("mdadm", "mdadm", "RAID volumes")
@@ -284,7 +285,7 @@ detect_volume_types = DependencySection(name="Detecting volume types",
 
 mount_volumes = DependencySection(name="Mounting volumes",
                                   description="install when needed",
-                                  deps=[mount_xfs, mount_ntfs, lvm, vmfs_fuse, mount_jffs2,
+                                  deps=[mount_xfs, mount_ntfs, lvm, vmfs_fuse, apfs_fuse, mount_jffs2,
                                         mount_squashfs, mdadm, cryptsetup, bdemount, vshadowmount, photorec])
 
 ALL_SECTIONS = [
