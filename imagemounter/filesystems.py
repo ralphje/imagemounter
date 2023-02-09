@@ -424,6 +424,21 @@ class VmfsFileSystem(LoopbackFileSystemMixin, MountFileSystem):
             raise
 
 
+class ApfsFileSystem(LoopbackFileSystemMixin, MountFileSystem):
+    type = 'apfs'
+
+    @dependencies.require(dependencies.apfs_fuse)
+    def mount(self):
+        self._make_mountpoint()
+        self._find_loopback()
+        try:
+            _util.check_call_(['apfs-fuse', self.loopback, self.mountpoint], stdout=subprocess.PIPE)
+        except Exception:
+            self._free_loopback()
+            self._clear_mountpoint()
+            raise
+
+
 class Jffs2FileSystem(MountFileSystem):
     type = 'jffs2'
 
